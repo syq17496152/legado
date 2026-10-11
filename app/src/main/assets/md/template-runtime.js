@@ -68,6 +68,17 @@
   var MATERIAL_TIMEOUT_MS = 1500;
 
   /**
+   * 元素/动画预算（4.19 / NFR-08 / AD-33）：作者畸形 DOM 不得把渲染拖死。
+   *
+   * 口径（**只报告、不改行为**）：超限时在自证里标 `budget=over`，由宿主/真机 L2 判读；
+   * 运行时不擅自删节点或停动画——那会改变作者作品且难以归因（症状会变成"模板莫名少了一块"）。
+   * 门禁落点有两处：①内置模板在 `ReaderBuiltinTemplateCatalogTest` 按资产静态计数（提交期拦截）；
+   * ②用户导入模板只能靠这里的运行期自证 + 真机 L2（导入期静态计数做不到：CSS 可能动态放宽）。
+   */
+  var MAX_ELEMENTS = 3000;
+  var MAX_ANIMATIONS = 120;
+
+  /**
    * 当前生效的页面结构（`opening` 首页 / `continuation` 续页 / `scroll` 滚动）——
    * **状态机**，唯一写入点是 [applyPageShell]（见其 KDoc 的理由）。
    *
@@ -584,7 +595,11 @@
       ',writing=' + state.writing +
       ',imgs=' + state.imgCount + ',decoded=' + state.decodedCount +
       // 字段槽位自证（4.15 C2）：`page`/`time` 这类派生字段失效时页面看起来是正常的（只有页码/时间恒空）
-      ',fields=' + populatedFields();
+      ',fields=' + populatedFields() +
+      // 预算自证（4.19 / NFR-08）：元素数与**当前真的在跑**的动画数 —— 重装饰模板卡顿的
+      // 第一手数字，缺了它"P99 超标"只能反推、无法归因到元素/动画规模
+      ',elems=' + elementCounts().elements + ',anims=' + elementCounts().animations +
+      ',budget=' + budgetState();
   }
 
   /**
@@ -607,6 +622,38 @@
     }
     out.sort();
     return out.join('|');
+  }
+
+  /**
+   * 元素数与**实际运行中的动画数**（4.19 budget 自证）。
+   *
+   * 动画数取 `document.getAnimations()`（Chromium 84+ 的权威口径：只含**当前真的在跑**的动画，
+   * 不像数 `animation-name` 那样把"声明了但元素不在当前页"的也算进来）；旧内核无该 API ⇒ 返回 -1。
+   */
+  function elementCounts() {
+    var root = document.getElementById('reader-template-root');
+    var scope = root || document.body;
+    var elements = -1;
+    try {
+      elements = scope.querySelectorAll('*').length;
+    } catch (error) {
+      elements = -1;
+    }
+    var animations = -1;
+    try {
+      animations = (typeof document.getAnimations === 'function') ? document.getAnimations().length : -1;
+    } catch (error) {
+      animations = -1;
+    }
+    return { elements: elements, animations: animations };
+  }
+
+  /** 预算判据（只报告）：任一超限即 `over`。取不到计数（-1）不算超限，避免旧内核误报。 */
+  function budgetState() {
+    var counts = elementCounts();
+    if (counts.elements > MAX_ELEMENTS) return 'over';
+    if (counts.animations > MAX_ANIMATIONS) return 'over';
+    return 'ok';
   }
 
   function handleMessage(event) {

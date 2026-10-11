@@ -25,6 +25,16 @@ object ReaderTemplateHostDocument {
     /** 沙箱 iframe 的挂载容器 id。 */
     const val ContainerId = "legado-template-container"
 
+    /**
+     * **首分页异步骨架** 的 id（4.19 / AD-33）。
+     *
+     * 为什么需要：沙箱建帧 → 注入正文 → 分页结算有几百毫秒的窗口（实测首屏 ≈300ms，
+     * 重模板更长）。这段时间里宿主文档是**空白**的（比"旧页面"更糟：用户看到闪白）。
+     * 骨架提供"正在排版"的确定观感，且在首个 `rendered` 回调时**由 Kotlin 主动移除**
+     * （不做 CSS 淡出：淡出会在"已可见但仍在动"的窗口里与分页重排叠加，反而制造抖动）。
+     */
+    const val SkeletonId = "legado-template-skeleton"
+
     /** 宿主文档里暴露给 `init` 的回调全局名（函数体由 [bridgePostScript] 定义）。 */
     const val BridgePostGlobal = "__legadoTemplatePost"
 
@@ -42,8 +52,24 @@ object ReaderTemplateHostDocument {
         // （宽度 478 正常、高度 0）⇒ iframe 高 0 ⇒ 沙箱视口 0 ⇒ 页框算成负数 ⇒ "预览空白且页数恒 1"。
         // `100vh` 直接取宿主视口高，不依赖任何祖先高度是否"确定"（2026-10-10 真机铁证）。
         append("#").append(ContainerId)
-            .append("{position:absolute;left:0;top:0;width:100%;height:100vh}</style>")
+            .append("{position:absolute;left:0;top:0;width:100%;height:100vh}")
+        // 骨架样式：只用**灰度块 + 透明度**表达"正在排版"，不含任何动效
+        // （带动效的骨架会与"分页重排"叠加成抖动，且违反 reduce-motion 克制原则）
+        append("#").append(SkeletonId)
+            .append("{position:absolute;left:0;top:0;width:100%;height:100vh;box-sizing:border-box;")
+            .append("padding:12% 8%;background:transparent;color:inherit;opacity:.32}")
+        append("#").append(SkeletonId).append(" i")
+            .append("{display:block;height:12px;margin:0 0 14px;border-radius:6px;background:currentColor;opacity:.35}")
+        append("#").append(SkeletonId).append(" i:nth-child(2)")
+            .append("{width:72%}")
+        append("#").append(SkeletonId).append(" i:nth-child(3)")
+            .append("{width:88%}")
+        append("#").append(SkeletonId).append(" i:nth-child(4)")
+            .append("{width:64%}")
+        append("</style>")
         append("</head><body>")
+        // 骨架在**容器之前**：沙箱帧一旦渲染即覆盖它，不必等移除命令到达
+        append("<div id=\"").append(SkeletonId).append("\"><i></i><i></i><i></i><i></i></div>")
         append("<div id=\"").append(ContainerId).append("\"></div>")
         appendScript(hostJs)
         appendScript(bridgePostScript())
@@ -95,6 +121,17 @@ object ReaderTemplateHostDocument {
     }
 
     fun destroyScript(): String = "window.ReaderTemplateHost.destroy();"
+
+    /**
+     * 显隐首分页骨架（4.19）。宿主在首个 `rendered` 回调后置 `false`；失败回落 canvas 时也置 `false`
+     * （否则骨架会留在屏幕上冒充"内容正在加载"）。
+     */
+    fun skeletonScript(visible: Boolean): String {
+        val display = if (visible) "block" else "none"
+        val state = if (visible) "on" else "off"
+        return "(function(){var s=document.getElementById('$SkeletonId');" +
+            "if(!s)return 'no-skeleton';s.style.display='$display';return 'skeleton-$state';})()"
+    }
 
     /** 沙箱文档是否已在容器内（宿主文档侧事实，用于诊断与就绪判定）。 */
     fun sandboxProbeScript(): String =

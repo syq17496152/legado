@@ -102,6 +102,8 @@ class TemplateRenderBackend(
     private var pageIndex: Int = 0
     private var expectedToken: String = ""
     private var reportedFirstPage: Boolean = false
+    /** 翻页瞬间是否已由宿主冻结动效（4.19）；`onStable` 消费并复位。 */
+    private var motionFrozenForTurn: Boolean = false
     private var richReported: Boolean = false
     private var currentNeedsMermaid: Boolean = false
     private var currentNeedsMath: Boolean = false
@@ -148,6 +150,15 @@ class TemplateRenderBackend(
         val clamped = target.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
         runOnUI {
             val view = webView ?: return@runOnUI
+            // 装饰冻结（4.19 / AD-33）：翻页瞬间停动效（装饰不重绘 ⇒ 不与分页重排抢主线程），
+            // 结算完成由 `onStable` 恢复。**恢复必须尊重用户设置**（专注模式/reduce-motion 下不恢复）。
+            if (reportedFirstPage) {
+                motionFrozenForTurn = true
+                view.evaluateJavascript(
+                    ReaderTemplateHostDocument.postScript("set-motion", """{"paused":true}"""),
+                    null
+                )
+            }
             view.evaluateJavascript(
                 ReaderTemplateHostDocument.postScript(
                     "goto-page",
@@ -300,6 +311,7 @@ class TemplateRenderBackend(
                 AppLog.TAG_READER_TEMPLATE,
                 "host ready timeout: chapter=${currentChapter?.chapterIndex}"
             )
+            hideSkeleton()
             host?.onError(token, RenderFailure.TIMEOUT)
             return
         }
@@ -379,6 +391,14 @@ class TemplateRenderBackend(
         }
     }
 
+    /**
+     * 移除首分页骨架（4.19）。**失败路径也必须调**：骨架是同位置的兄弟节点，
+     * 留着会挡住回落后的 canvas 正文（症状：模板降级成功但屏幕上一片灰条）。
+     */
+    private fun hideSkeleton() {
+        webView?.evaluateJavascript(ReaderTemplateHostDocument.skeletonScript(false), null)
+    }
+
     private fun scheduleReadyTimeout() {
         val token = RenderToken(generation)
         handler.postDelayed({
@@ -388,6 +408,7 @@ class TemplateRenderBackend(
                 AppLog.TAG_READER_TEMPLATE,
                 "sandbox stable timeout: chapter=${currentChapter?.chapterIndex}"
             )
+            hideSkeleton()
             host?.onError(token, RenderFailure.TIMEOUT)
         }, ReadyTimeoutMillis)
     }
@@ -519,7 +540,20 @@ class TemplateRenderBackend(
         )
         if (!reportedFirstPage) {
             reportedFirstPage = true
+            // 首分页骨架（4.19）：首个 `rendered` 即移除 —— 此刻沙箱已画出内容，
+            // 骨架留着会挡住正文（它是同位置的兄弟节点）
+            webView?.evaluateJavascript(ReaderTemplateHostDocument.skeletonScript(false), null)
             host?.onRendered(token, chapterIndex, pageCount)
+        }
+        // 翻页冻结的动效在结算后恢复；**用户设置为"停"时不得恢复**（否则把专注模式/reduce-motion 踩掉）
+        if (motionFrozenForTurn) {
+            motionFrozenForTurn = false
+            if (valuesProvider().decorationMotion && webView != null) {
+                webView?.evaluateJavascript(
+                    ReaderTemplateHostDocument.postScript("set-motion", """{"paused":false}"""),
+                    null
+                )
+            }
         }
         host?.onReMeasured(token, chapterIndex, pageCount)
     }
@@ -575,6 +609,7 @@ class TemplateRenderBackend(
                 AppLog.TAG_READER_TEMPLATE,
                 "template failure ⇒ fallback canvas: $code"
             )
+            hideSkeleton()
             host?.onError(token, RenderFailure.ENGINE_UNAVAILABLE)
         }
     }
