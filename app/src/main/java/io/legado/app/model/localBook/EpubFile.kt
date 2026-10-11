@@ -11,7 +11,6 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.FileUtils
-import io.legado.app.utils.HtmlFormatter
 import io.legado.app.utils.encodeURI
 import io.legado.app.utils.isXml
 import io.legado.app.utils.printOnDebug
@@ -24,7 +23,6 @@ import me.ag2s.epublib.epub.EpubReader
 import me.ag2s.epublib.util.zip.AndroidZipFile
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import org.jsoup.nodes.TextNode
 import org.jsoup.parser.Parser
 import org.jsoup.select.Elements
 import java.io.File
@@ -186,47 +184,8 @@ class EpubFile(var book: Book) {
                 break
             }
         }
-        //title标签中的内容不需要显示在正文中，去除
-        elements.select("title").remove()
-        elements.select("[style*=display:none]").remove()
-        elements.select("img[src=\"cover.jpeg\"]").forEachIndexed { i, it ->
-            if (i > 0) it.remove()
-        }
-        elements.select("img").forEach {
-            if (it.attributesSize() <= 1) {
-                return@forEach
-            }
-            val src = it.attr("src")
-            it.clearAttributes()
-            it.attr("src", src)
-        }
-        val tag = Book.rubyTag
-        if (book.getDelTag(tag)) {
-            // 移除注音并将 ruby 节点替换为纯文本, 与前后文本节点合并避免多余空格 (对齐 legado-E PR#451)
-            elements.select("ruby").forEach { ruby ->
-                ruby.select("rp, rt").remove()
-                val textNode = TextNode(ruby.text())
-                ruby.replaceWith(textNode)
-                val prev = textNode.previousSibling()
-                val next = textNode.nextSibling()
-                when {
-                    prev is TextNode -> {
-                        prev.text(prev.text() + textNode.text())
-                        textNode.remove()
-                        if (next is TextNode) {
-                            prev.text(prev.text() + next.text())
-                            next.remove()
-                        }
-                    }
-                    next is TextNode -> {
-                        textNode.text(textNode.text() + next.text())
-                        next.remove()
-                    }
-                }
-            }
-        }
-        val html = elements.outerHtml()
-        return HtmlFormatter.formatKeepImg(html)
+        // 正文归一（含 title/script/style 剔除、破图剔除与注音处理）收口到单一可测实现
+        return EpubTextContentFormatter.format(elements, book.getDelTag(Book.rubyTag))
     }
 
     private fun getBody(res: Resource, startFragmentId: String?, endFragmentId: String?): Element {
