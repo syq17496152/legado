@@ -131,6 +131,7 @@ import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.epubcore.facade.EpubCoreProvider
 import io.legado.app.help.book.isMarkdown
 import io.legado.app.help.md.MdRichRenderInjector
+import io.legado.app.model.CacheBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.reader.render.ChapterRef
 import io.legado.app.model.reader.render.ReaderRenderBackend
@@ -2504,8 +2505,20 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 拿不到正文 —— 这正是"在线缓存书开启模板后看不到任何变化"的另一半根因（archive 同位置走
      * `BookHelp.getContent` / `CacheBook.downloadAwait`）。
      */
-    private fun richTextRawContent(book: Book, chapter: BookChapter): String? =
-        if (book.isLocal) LocalBook.getContent(book, chapter) else BookHelp.getContent(book, chapter)
+    private suspend fun richTextRawContent(book: Book, chapter: BookChapter): String? {
+        if (book.isLocal) return LocalBook.getContent(book, chapter)
+        // 在线：先读**内容缓存**；未缓存则**按需下载**（与 archive 同口径 —— 它在同一位置就是
+        // `BookHelp.getContent(...) ?: CacheBook.getOrCreate(source, book).downloadAwait(chapter)`）。
+        // 冷启时该章尚未下载，只读缓存必然为空 ⇒ 模板面拿不到正文而回落 canvas
+        // （真机实证：在线书开模板时模板面未被驱动、htmlLen 样本为空）。
+        BookHelp.getContent(book, chapter)?.let { return it }
+        val source = appDb.bookSourceDao.getBookSource(book.origin) ?: return null
+        return runCatching {
+            CacheBook.getOrCreate(source, book).downloadAwait(chapter)
+        }.onFailure {
+            AppLog.putDebug("在线章节按需下载失败（模板面回落 canvas）：${it.localizedMessage}")
+        }.getOrNull()
+    }
 
     /** 非 `<usehtml>` 的文本类内容是否允许归一化后进富渲染/模板面（md 自带 `<usehtml>`，无需放开）。 */
     private fun richTextAllowsPlainText(): Boolean = ReadBook.book?.isMarkdown == false
