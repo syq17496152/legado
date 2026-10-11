@@ -10,6 +10,7 @@ import io.legado.app.model.localBook.epubcore.cache.EpubCoreDiskCache
 import io.legado.app.model.localBook.epubcore.direct.EpubDirectSession
 import io.legado.app.model.localBook.epubcore.direct.EpubReaderContentMode
 import io.legado.app.model.localBook.epubcore.font.EpubFontCatalog
+import io.legado.app.model.localBook.epubcore.font.EpubFontDeobfuscatingArchive
 import io.legado.app.model.localBook.epubcore.font.EpubTypefaceResolver
 import io.legado.app.model.localBook.epubcore.image.EpubImageResolver
 import io.legado.app.model.localBook.epubcore.layout.EpubCoreLayoutConfig
@@ -782,7 +783,7 @@ class EpubCoreFacade private constructor(
                 val pkg = EpubPackageParser().parse(archive)
                 val toc = EpubTocParser().parse(archive, pkg)
                 EpubCoreFacade(
-                    archive = archive,
+                    archive = EpubFontDeobfuscatingArchive.wrap(archive, pkg.metadata.identifier), // 依赖全书标识，须在包解析后包装
                     bookUrl = bookUrl,
                     bookSignature = MD5Utils.md5Encode16("${file.absolutePath}|${file.length()}|${file.lastModified()}|epubCoreSchema=2"),
                     bookCacheDir = bookCacheDir,
