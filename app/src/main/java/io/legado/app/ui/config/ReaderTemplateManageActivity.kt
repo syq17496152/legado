@@ -34,6 +34,7 @@ import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
+import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.readText
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
@@ -206,7 +207,8 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
                             onEdit = ::openTemplateEditor,
                             onMoreActions = ::templateActions,
                             onAddClick = ::showAddActions,
-                            onRestoreDefaults = ::confirmRestoreDefaults
+                            onRestoreDefaults = ::confirmRestoreDefaults,
+                            onOpenGuide = ::showAuthorGuide
                         )
                     }
                 }
@@ -268,6 +270,28 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
         ReaderTemplateManager.applyFollowTheme()
         toastOnUi(R.string.success)
         loadCatalog()
+    }
+
+    /**
+     * 应用内「作者指南」（4.13）：读随包 Markdown 并用 Markwon 渲染。
+     *
+     * 不新造帮助页：复用既有 [TextDialog] 的 MD 模式（Markwon 已在依赖内，符合"不新造轮子"）。
+     * 读资产放 IO 线程；缺失时给出可见提示而非静默无反应（帮助入口点了没反应最容易被认为是坏了）。
+     */
+    private fun showAuthorGuide() {
+        lifecycleScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    assets.open(GuideAssetPath).bufferedReader().use { it.readText() }
+                }.getOrNull().orEmpty()
+            }
+            if (text.isBlank()) {
+                AppLog.put("Reader template author guide missing: $GuideAssetPath")
+                toastOnUi("作者指南缺失")
+                return@launch
+            }
+            showDialogFragment(TextDialog("模板作者指南", text, TextDialog.Mode.MD))
+        }
     }
 
     private fun showAddActions() {
@@ -505,5 +529,15 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
                     listOf(FIRST_PAGE, OTHER_PAGE, CSS, JAVASCRIPT)
                 }
         }
+    }
+
+    companion object {
+        /**
+         * 应用内「作者指南」的资产路径（4.13）。
+         *
+         * 单源常量：配对测试按**同一路径**校验资产内容（结构约定/字段槽位/合规红线是否仍在），
+         * 否则「把指南挪走或删空」不会让任何测试变红（帮助文档静默消失）。
+         */
+        const val GuideAssetPath = "md/template-author-guide.md"
     }
 }

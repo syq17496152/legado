@@ -51,7 +51,8 @@ internal fun ReaderTemplateManageScreen(
     onEdit: (ReaderTemplateManager.Entry) -> Unit,
     onMoreActions: (ReaderTemplateManager.Entry) -> List<AppManagementMenuAction>,
     onAddClick: () -> Unit,
-    onRestoreDefaults: () -> Unit
+    onRestoreDefaults: () -> Unit,
+    onOpenGuide: () -> Unit
 ) {
     val applyText = stringResource(R.string.theme_apply)
     val appliedText = stringResource(R.string.theme_applied_state)
@@ -74,7 +75,8 @@ internal fun ReaderTemplateManageScreen(
                     palette = palette,
                     onToggleTemplates = onToggleTemplates,
                     onApplyFollowTheme = onApplyFollowTheme,
-                    onRestoreDefaults = onRestoreDefaults
+                    onRestoreDefaults = onRestoreDefaults,
+                    onOpenGuide = onOpenGuide
                 )
             }
         }
@@ -107,7 +109,8 @@ private fun CurrentTemplateCard(
     palette: AppManagementPalette,
     onToggleTemplates: () -> Unit,
     onApplyFollowTheme: () -> Unit,
-    onRestoreDefaults: () -> Unit
+    onRestoreDefaults: () -> Unit,
+    onOpenGuide: () -> Unit
 ) {
     val followTheme = appliedId.isBlank()
     val effectiveName = entries.firstOrNull { it.id == effectiveId }?.name
@@ -185,6 +188,12 @@ private fun CurrentTemplateCard(
                 text = "恢复默认",
                 palette = palette.miuix,
                 onClick = onRestoreDefaults
+            )
+            // 4.13：应用内「作者指南」（结构约定/字段槽位/样式基线/素材合规/流程与排错速查）
+            AppPackageManageActionButton(
+                text = "作者指南",
+                palette = palette.miuix,
+                onClick = onOpenGuide
             )
         }
     }
