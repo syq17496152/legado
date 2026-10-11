@@ -57,9 +57,10 @@ import com.github.liuyueyi.quick.transfer.constants.TransType
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim
+import io.legado.app.ui.config.ReaderTemplateManageActivity
+import io.legado.app.utils.startActivity
 import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.isMarkdown
-import io.legado.app.help.book.isOnLineTxt
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReaderFontWeight
@@ -136,8 +137,27 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (ReaderTemplateManager.templatesEnabled()) {
-                    TemplateDecorationSection(style = style, typographyLocked = typographyLocked)
+                // 入口显性化（S2 / 用户反馈「不知道这个功能入口在哪」）：**只要当前内容在模板作用域内就显示**，
+                // 不再要求"模板已启用"——原实现把入口放进"启用后才有"的区块 ⇒ 未启用的用户**永远看不到入口**
+                // （鸡生蛋：找不到开关 ⇒ 用不到功能）。出版 EPUB / 漫画 / 图片 / 视频 / 音频 / PDF 不在作用域
+                // ⇒ 不显示（不产生"点了没反应"的误导入口）。
+                if (templateInScope()) {
+                    // LocalContext 必须在 @Composable 作用域读取（不能放进非 composable 的回调里）
+                    val context = LocalContext.current
+                    TemplateDecorationSection(
+                        style = style,
+                        typographyLocked = typographyLocked,
+                        enabled = ReaderTemplateManager.templatesEnabled(),
+                        onEnableChanged = { enable ->
+                            ReaderTemplateManager.setTemplatesEnabled(enable)
+                            reloadAfterTemplatePreferenceChanged()
+                        },
+                        onOpenManager = {
+                            // 先收起弹层：否则底部弹层会盖在管理页上（用户以为"没反应"）
+                            dismiss()
+                            context.startActivity<ReaderTemplateManageActivity>()
+                        }
+                    )
                 }
                 TextMetricSection(style = style, typographyLocked = typographyLocked)
                 AnimAndToolsSection(style = style, typographyLocked = typographyLocked)
@@ -147,13 +167,21 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     }
 
     /**
-     * 页面模板区（4.8d / AD-33 / TPL-17②③）：装饰强度 + 专注模式 + **与原生排版的优先级说明**。
+     * 页面模板区（4.8d / AD-33 / TPL-17②③ + 入口显性化）：**总开关 + 管理页入口** + 装饰强度/专注模式
+     * + 与原生排版的优先级说明。
      *
-     * 只在模板总开关开启时出现（关闭 ⇒ 该项完全不存在，无残留，与 4.9 关闭语义一致）。
-     * 内容不在模板作用域时**只显示说明**、不给出无意义的开关（N1：入口能在但点了没反应）。
+     * **只要内容在模板作用域内就显示**（在线正文 / 本地 txt / 本地 md）；出版 EPUB / 漫画 / 图片 /
+     * 视频 / 音频 / PDF 在调用点已被 `templateInScope()` 拦掉（避免"入口能在但点了没反应"）。
+     * 未启用时给出「启用页面模板」开关 + 「阅读页模板…」直达入口 —— 用户无需再去设置里翻找。
      */
     @Composable
-    private fun TemplateDecorationSection(style: AppDialogStyle, typographyLocked: Boolean) {
+    private fun TemplateDecorationSection(
+        style: AppDialogStyle,
+        typographyLocked: Boolean,
+        enabled: Boolean,
+        onEnableChanged: (Boolean) -> Unit,
+        onOpenManager: () -> Unit
+    ) {
         var level by rememberSaveable { mutableIntStateOf(ReaderTemplateManager.decorationLevel()) }
         var focus by rememberSaveable { mutableStateOf(ReaderTemplateManager.focusMode()) }
         val reduceMotion = remember { systemReduceMotion() }
@@ -168,13 +196,28 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                 text = if (typographyLocked) {
                     "模板已接管正文排版：字号 / 字体 / 行距 / 字重 / 边距由模板决定，下列对应项已置灰；关闭页面模板即恢复。"
                 } else {
-                    "该格式不支持页面模板（仅作用于在线正文 / 本地 txt / 本地 md），装饰设置在此内容上不生效。"
+                    "启用后正文按模板排版；仅作用于本地 txt / 本地 md（出版 EPUB 与在线正文暂不支持）。"
                 },
                 color = style.secondaryText,
                 fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 modifier = Modifier.padding(top = 4.dp)
             )
-            if (!typographyLocked) return@ReaderSectionCard
+            ReaderSwitchRow(
+                title = "启用页面模板",
+                checked = enabled,
+                style = style,
+                summary = "让正文套用所选模板的外观"
+            ) { onEnableChanged(it) }
+            Text(
+                text = "阅读页模板…（选择 / 复制 / 编辑 / 导入导出）",
+                color = style.secondaryText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenManager() }
+                    .padding(top = 6.dp)
+            )
+            if (!enabled) return@ReaderSectionCard
             ReaderSegmentedOptions(
                 options = decorationOptions(),
                 selectedValue = level.toString(),
@@ -226,8 +269,22 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     /** 模板是否接管当前正文排版（作用域判定与 `ReaderTemplateAvailabilityPolicy.TEXT_LIKE` 同口径）。 */
     private fun templateTakesOverTypography(): Boolean {
         if (!ReaderTemplateManager.templatesEnabled()) return false
+        return templateInScope()
+    }
+
+    /**
+     * 当前内容是否在**模板作用域**内（本地 txt / 本地 md）——**与总开关无关**。
+     *
+     * 用于"入口显性化"：入口区按此显示（未启用也能看到开关与直达入口），
+     * 而"是否接管排版"另按 [templateTakesOverTypography]（含开关）判定。
+     *
+     * **口径必须与阅读页 `isTextRichMode()` 逐字一致**（否则出现"弹层说已接管、正文其实没换"的
+     * 静默欺骗）。**在线正文暂不在作用域内**：模板面的内容源是 `LocalBook.getContent`，对在线书会走
+     * `TextFile` 读本地文件失败 ⇒ 拿不到正文（放开需先补"在线章节内容源"接缝，见 ReadBookActivity 注释）。
+     */
+    private fun templateInScope(): Boolean {
         val book = ReadBook.book ?: return false
-        return book.isOnLineTxt || book.isLocalTxt || book.isMarkdown
+        return book.isLocalTxt || book.isMarkdown
     }
 
     /** 系统"减少动效"（与 ReadBookActivity 同一判据；取不到按未开启处理）。 */

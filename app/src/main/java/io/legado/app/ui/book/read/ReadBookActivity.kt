@@ -775,6 +775,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         // 动效生命周期（4.15 C6）：回到前台恢复装饰动效（离页时已停）
         templateBackend?.setMotionPaused(false)
+        // 「设置完立刻看到变化」：从模板管理页/主题设置返回时按契约键比对，变化即重载当前章
+        refreshReadSurfaceIfContractChanged()
     }
 
     /**
@@ -2464,15 +2466,33 @@ class ReadBookActivity : BaseReadBookActivity(),
     private val textRichAssets by lazy { AssetTextReader(this) }
 
     /**
-     * 是否走文本富渲染面。
+     * 是否走文本富渲染面 / 阅读页模板面。
      *
-     * 一期只放开**本地 Markdown**（`AppConfig.mdRichRender` 默认 true）：md 是我方新增格式，
-     * 无"旧行为被改"的回归面；在线正文的灰度（同一开关）留待阶段 3 后续子步。
+     * - **本地 Markdown**：`AppConfig.mdRichRender`（默认 true）。md 是我方新增格式，无"旧行为被改"的回归面。
+     * - **本地 txt**：随「阅读页模板」总开关一并开放（`templatesEnabled()`；**默认关 ⇒ 零回归**）。
+     *
+     * **为什么必须放开（用户反馈驱动）**：设计文档 AD-15/§1.3 要求模板作用于**文本类内容
+     * （在线正文 / txt / md）**；此前只放开 md，加上内容探测只认 `<usehtml>`（md 独有形态），
+     * 导致用户在 **本地 txt** 上开启模板后**看不到任何变化**（"设置完没效果 / 不好用"）。
+     * 出版 EPUB 不适用（此处直接排除；模板入口也不显示）；**在线正文**因内容源未接（见下）暂不放开。
      */
     private fun isTextRichMode(): Boolean {
         val book = ReadBook.book ?: return false
-        return !book.isEpub && book.isMarkdown && AppConfig.mdRichRender
+        if (book.isEpub) return false
+        return if (book.isMarkdown) {
+            AppConfig.mdRichRender
+        } else {
+            // **本地 txt**：章节内容走 `LocalBook.getContent` → `TextFile`（本地文件，可读）⇒ 可进模板面。
+            // **在线正文（isOnLineTxt）暂不放开**：本面的内容源是 `LocalBook.getContent`，对在线书会落到
+            // `TextFile` → 读本地文件失败 → 拿不到正文（只会渲染出错误文案）。放开需先补"在线章节内容源"
+            // 接缝（设计任务 3.1「在线正文并入统一管线」/ 5.1 灰度），属下一步；在此之前**不得**把在线书
+            // 放进此面，也不得在样式弹层里对在线书置灰原生排版（否则用户既调不了排版、又看不到模板）。
+            book.isLocalTxt && ReaderTemplateManager.templatesEnabled()
+        }
     }
+
+    /** 非 `<usehtml>` 的文本类内容是否允许归一化后进富渲染/模板面（md 自带 `<usehtml>`，无需放开）。 */
+    private fun richTextAllowsPlainText(): Boolean = ReadBook.book?.isMarkdown == false
 
     /** 三个渲染面（canvas / EPUB WebView / 文本富渲染 WebView）互斥可见。 */
     private fun updateRenderSurface() = binding.run {
@@ -2628,7 +2648,12 @@ class ReadBookActivity : BaseReadBookActivity(),
             val chapter = withContext(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, index) }
             val prepared = chapter?.let {
                 withContext(IO) {
-                    runCatching { TextRichContentProbe.prepare(LocalBook.getContent(book, it)) }.getOrNull()
+                    runCatching {
+                        TextRichContentProbe.prepare(
+                            LocalBook.getContent(book, it),
+                            allowPlainText = richTextAllowsPlainText()
+                        )
+                    }.getOrNull()
                 }
             }
             if (chapter == null || prepared == null) {
@@ -2723,6 +2748,9 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var templateRestorePending = false
     private var templateLoading = false
 
+    /** 阅读面契约键（模板总开关 + 选中模板 + 日夜）最近一次已应用的值；用于返回前台时判定是否需重载。 */
+    private var lastReadSurfaceKey: String? = null
+
     /**
      * 解析当前书该用哪套模板（含内容本身）。
      *
@@ -2736,10 +2764,14 @@ class ReadBookActivity : BaseReadBookActivity(),
             templateResolved = null
             return null
         }
-        val key = "${book.bookUrl}|${AppConfig.isNightTheme}"
+        val night = AppConfig.isNightTheme
+        // 契约键必须含「选中模板 + 日夜」：任一变化都要换模板 ⇒ 用户改完设置（换模板/切日夜）
+        // 回到阅读页立刻命中新键，**立即换模板**（这就是"设置后立马看到变化"）。
+        // 此前键只有 `bookUrl|night` ⇒ 换选中模板时键不变、复用旧解析结果 ⇒ 看起来"设置没生效"。
+        val key = "${book.bookUrl}|$night|${ReaderTemplateManager.effectiveId(night).orEmpty()}"
         if (templateResolvedKey == key) return templateResolved
         val resolved = withContext(IO) {
-            runCatching { ReaderTemplateManager.effectiveTemplate(AppConfig.isNightTheme) }.getOrNull()
+            runCatching { ReaderTemplateManager.effectiveTemplate(night) }.getOrNull()
         }
         templateResolvedKey = key
         templateResolved = resolved
@@ -2830,6 +2862,32 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     /**
+     * 「设置完立刻看到变化」：模板管理页 / 主题设置是**另一个页面**，返回阅读页时若
+     * 「模板总开关 / 选中模板 / 日夜」契约键发生变化 ⇒ **强制重建渲染面并重载当前章**。
+     *
+     * 必须**同时清掉"面已加载"的状态**：`loadTemplateContentAwait`/`loadTextRichContentAwait`
+     * 有"同章且后端在场即跳过"的防重入闸（避免重复 render 推进代际令牌、作废在途轮询）；
+     * 不先关面就会被闸住 ⇒ 界面仍是旧模板（用户观感就是"设置没生效"）。
+     */
+    private fun refreshReadSurfaceIfContractChanged() {
+        val book = ReadBook.book ?: return
+        val night = AppConfig.isNightTheme
+        val key = "${book.bookUrl}|$night|${ReaderTemplateManager.templatesEnabled()}|" +
+                ReaderTemplateManager.effectiveId(night).orEmpty()
+        val firstRecord = lastReadSurfaceKey == null
+        if (lastReadSurfaceKey == key) return
+        lastReadSurfaceKey = key
+        // 首次记录（进入阅读页）不触发重载：此时内容会首次加载、本就按新契约走
+        if (firstRecord) return
+        templateResolvedKey = null
+        templateResolved = null
+        if (templateActive) switchTemplate(false)
+        if (textRichActive) switchTextRich(false)
+        textRichPreparedIndex = -1
+        upContent(resetPageOffset = false)
+    }
+
+    /**
      * 载入并渲染模板章节。
      *
      * 正文仍取"归一化文本渲染文档"（`<usehtml>` 内层正文 + 富渲染标注），
@@ -2860,7 +2918,12 @@ class ReadBookActivity : BaseReadBookActivity(),
             val chapter = withContext(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, index) }
             val prepared = chapter?.let {
                 withContext(IO) {
-                    runCatching { TextRichContentProbe.prepare(LocalBook.getContent(book, it)) }.getOrNull()
+                    runCatching {
+                        TextRichContentProbe.prepare(
+                            LocalBook.getContent(book, it),
+                            allowPlainText = richTextAllowsPlainText()
+                        )
+                    }.getOrNull()
                 }
             }
             if (chapter == null || prepared == null) {

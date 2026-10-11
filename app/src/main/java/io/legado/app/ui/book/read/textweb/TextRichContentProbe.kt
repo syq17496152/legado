@@ -34,15 +34,59 @@ object TextRichContentProbe {
         return inner.ifBlank { null }
     }
 
-    /** 一步到位：抽取 + 探测；不可用返回 null。 */
-    fun prepare(raw: String?): RichContent? {
-        val html = extractUseHtmlInner(raw) ?: return null
-        return RichContent(
-            html = html,
-            hasMermaid = detectMermaid(html),
-            hasMath = detectMath(html)
-        )
+    /**
+     * 一步到位：抽取 + 探测；不可用返回 null。
+     *
+     * @param allowPlainText 是否允许**非 `<usehtml>` 的文本类内容**（本地 txt 纯文本 / 在线正文 HTML）
+     *   归一化后使用。
+     *
+     * **为什么需要（本轮用户反馈驱动的修正）**：`<usehtml>` 是 **md 独有**的包裹形态（`MdFile`
+     * 是唯一显式产出它的格式）；而本地 txt 的章节内容是无标签纯文本、在线正文是 HTML 片段，
+     * **都不带 `<usehtml>`** ⇒ 原实现（只认 `<usehtml>`）使其一律返回 null、回落 canvas ⇒
+     * **用户在 txt / 在线缓存书上开启「阅读页模板」后看不到任何变化**（"设置完没效果"）。
+     * 归一化只做最保守的事：**能判定为 HTML 片段就原样使用**，否则按空行切段、文本转义后包 `<p>`；
+     * **不清洗、不改写文本内容**，避免引入与 canvas 不一致的渲染差异。
+     *
+     * 默认 `false` ⇒ 保持既有语义（仅 md 走富渲染面）；非 md 的放开由调用方按「阅读页模板总开关」
+     * 决定（默认关 ⇒ 零回归）。
+     */
+    fun prepare(raw: String?, allowPlainText: Boolean = false): RichContent? {
+        extractUseHtmlInner(raw)?.let { inner ->
+            return RichContent(inner, detectMermaid(inner), detectMath(inner))
+        }
+        if (!allowPlainText) return null
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        val html = if (HtmlTagRegex.containsMatchIn(text)) text else toParagraphHtml(text)
+        return RichContent(html, detectMermaid(html), detectMath(html))
     }
+
+    /**
+     * 纯文本 → 段落 HTML：按**空行**切段，段内换行折叠为空格（交由 HTML 自然折行，避免 `<br>` 打乱行高）；
+     * 文本内容按 HTML 转义（与 md 路线的"安全模式：默认转义 raw HTML"口径一致）。
+     */
+    private fun toParagraphHtml(text: String): String =
+        text.split(BlankLineRegex)
+            .map { it.trim().replace(InlineNewlineRegex, " ") }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n") { "<p>" + escapeHtml(it) + "</p>" }
+
+    private fun escapeHtml(value: String): String = value
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+
+    /** 判定"已是 HTML 片段"（用于区分在线正文 HTML 与 txt 纯文本）；只认常见块级/行内标签。 */
+    private val HtmlTagRegex = Regex(
+        "<(p|div|br|img|span|h[1-6]|ul|ol|li|table|tr|td|th|pre|code|blockquote|em|strong|a|hr|figure)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** 段落分隔（一个换行 + 若干空白 + 再一个换行）。 */
+    private val BlankLineRegex = Regex("\\n\\s*\\n")
+
+    /** 段内换行（折叠为空格）。 */
+    private val InlineNewlineRegex = Regex("\\s*\\n\\s*")
 
     /**
      * mermaid 块判定：`class="mermaid"`（可含其它类，单双引号均可）。
