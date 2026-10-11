@@ -514,12 +514,26 @@ class EpubCoreFacade private constructor(
         }
     }
 
-    private fun closeBackgroundLayoutSessions() {
+    /** 关闭全部背景布局会话；返回实际释放的会话数（供内存压力释放留痕）。 */
+    private fun closeBackgroundLayoutSessions(): Int {
         synchronized(webLayoutSessionLock) {
-            if (backgroundWebLayoutSessions.isEmpty()) return
+            if (backgroundWebLayoutSessions.isEmpty()) return 0
+            val count = backgroundWebLayoutSessions.size
             backgroundWebLayoutSessions.values.forEach { it.close() }
             backgroundWebLayoutSessions.clear()
+            return count
         }
+    }
+
+    /**
+     * 系统内存压力释放（S10）：关闭**背景**布局会话 + 清字体/图片内存缓存；**保留前台会话**。
+     * 与 [cancelBackgroundLayouts]（"取消但保活"、供 page-budget 重排复用）语义不同：本方法是**真释放**。
+     */
+    fun releaseForMemoryPressure(): Int {
+        val released = closeBackgroundLayoutSessions()
+        imageResolver.clear()
+        typefaceResolver?.clear()
+        return released
     }
 
     private fun buildChapters(): List<BookChapter> {

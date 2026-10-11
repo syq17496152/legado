@@ -133,6 +133,27 @@ object EpubCoreProvider {
         current.facade.cancelForegroundLayout()
     }
 
+    /**
+     * 系统内存压力（S10）：释放阅读面**可重建**资源（背景布局会话的离屏 WebView + 字体/图片缓存）。
+     *
+     * 判据由 [EpubCoreMemoryTrimPolicy] 给（可 JVM 测）；仅在确有持有（[holder] 非空）时执行，
+     * 且**不动前台会话**（正在显示的页不能被拆，否则用户看到空白页）。
+     *
+     * @return 是否真的执行了释放（false = 无压力信号/无持有）
+     */
+    @Synchronized
+    fun onMemoryPressure(level: Int): Boolean {
+        if (!EpubCoreMemoryTrimPolicy.shouldRelease(level)) return false
+        val current = holder ?: return false
+        val released = current.facade.releaseForMemoryPressure()
+        AppLog.putDebugWithTag(
+            AppLog.TAG_MEMORY_PRESSURE,
+            "EPUB 阅读面内存释放：背景布局会话=$released, level=$level",
+            level = AppLog.Level.INFO
+        )
+        return true
+    }
+
     @Synchronized
     fun clear() {
         holder?.close()

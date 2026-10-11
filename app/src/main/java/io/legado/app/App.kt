@@ -60,6 +60,7 @@ import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.ImageProvider
+import io.legado.app.model.localBook.epubcore.facade.EpubCoreProvider
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.postEvent
@@ -334,6 +335,8 @@ class App : Application() {
     private fun trimAppMemory(level: Int) {
         kotlin.runCatching {
             WebViewPool.trimMemory()
+            // S10：阅读面（EPUB core 离屏布局会话的 WebView 是最大内存头）纳入同一压力治理
+            EpubCoreProvider.onMemoryPressure(level)
             CacheManager.trimMemory(level)
             ImageProvider.trimMemory(level)
             CoverImageView.trimMemory(level)
