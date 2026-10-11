@@ -59,8 +59,11 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim
 import io.legado.app.ui.config.ReaderTemplateManageActivity
 import io.legado.app.utils.startActivity
-import io.legado.app.help.book.isLocalTxt
-import io.legado.app.help.book.isMarkdown
+import io.legado.app.help.book.isAudio
+import io.legado.app.help.book.isEpub
+import io.legado.app.help.book.isImage
+import io.legado.app.help.book.isPdf
+import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReaderFontWeight
@@ -196,7 +199,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                 text = if (typographyLocked) {
                     "模板已接管正文排版：字号 / 字体 / 行距 / 字重 / 边距由模板决定，下列对应项已置灰；关闭页面模板即恢复。"
                 } else {
-                    "启用后正文按模板排版；仅作用于本地 txt / 本地 md（出版 EPUB 与在线正文暂不支持）。"
+                    "启用后正文按模板排版；作用于文本类内容（在线正文 / 本地 txt / 本地 md），出版 EPUB 不适用。"
                 },
                 color = style.secondaryText,
                 fontSize = MaterialTheme.typography.bodySmall.fontSize,
@@ -273,18 +276,18 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     }
 
     /**
-     * 当前内容是否在**模板作用域**内（本地 txt / 本地 md）——**与总开关无关**。
+     * 当前内容是否在**模板作用域**内（在线正文 / 本地 txt / 本地 md / UMD / MOBI）——**与总开关无关**。
      *
      * 用于"入口显性化"：入口区按此显示（未启用也能看到开关与直达入口），
      * 而"是否接管排版"另按 [templateTakesOverTypography]（含开关）判定。
      *
-     * **口径必须与阅读页 `isTextRichMode()` 逐字一致**（否则出现"弹层说已接管、正文其实没换"的
-     * 静默欺骗）。**在线正文暂不在作用域内**：模板面的内容源是 `LocalBook.getContent`，对在线书会走
-     * `TextFile` 读本地文件失败 ⇒ 拿不到正文（放开需先补"在线章节内容源"接缝，见 ReadBookActivity 注释）。
+     * **口径必须与阅读页 `isTextRichMode()` 逐字一致**（否则出现"弹层说已接管、正文其实没换"的静默欺骗），
+     * 两者同源于 `ReaderTemplateAvailabilityPolicy.ContentKind.TEXT_LIKE`：**非 EPUB、非音视频/图片/PDF**。
      */
     private fun templateInScope(): Boolean {
         val book = ReadBook.book ?: return false
-        return book.isLocalTxt || book.isMarkdown
+        if (book.isEpub || book.isAudio || book.isVideo || book.isImage || book.isPdf) return false
+        return true
     }
 
     /** 系统"减少动效"（与 ReadBookActivity 同一判据；取不到按未开启处理）。 */

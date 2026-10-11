@@ -89,6 +89,9 @@ import io.legado.app.help.book.library.LibraryCloudSync
 import io.legado.app.help.book.library.LibraryContainerManager
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isEpub
+import io.legado.app.help.book.isImage
+import io.legado.app.help.book.isPdf
+import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.isMobi
@@ -2469,27 +2472,40 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 是否走文本富渲染面 / 阅读页模板面。
      *
      * - **本地 Markdown**：`AppConfig.mdRichRender`（默认 true）。md 是我方新增格式，无"旧行为被改"的回归面。
-     * - **本地 txt**：随「阅读页模板」总开关一并开放（`templatesEnabled()`；**默认关 ⇒ 零回归**）。
+     * - **其它文本类（本地 txt / 在线正文 / UMD / MOBI）**：随「阅读页模板」总开关一并开放
+     *   （`templatesEnabled()`；**默认关 ⇒ 零回归**）。
      *
      * **为什么必须放开（用户反馈驱动）**：设计文档 AD-15/§1.3 要求模板作用于**文本类内容
-     * （在线正文 / txt / md）**；此前只放开 md，加上内容探测只认 `<usehtml>`（md 独有形态），
-     * 导致用户在 **本地 txt** 上开启模板后**看不到任何变化**（"设置完没效果 / 不好用"）。
-     * 出版 EPUB 不适用（此处直接排除；模板入口也不显示）；**在线正文**因内容源未接（见下）暂不放开。
+     * （在线正文 / txt / md）**，archive v15 亦同口径（非 EPUB 的普通正文）；此前只放开 md，
+     * 加上内容探测只认 `<usehtml>`（md 独有形态）与内容源只读本地文件 ⇒ 用户在 **本地 txt /
+     * 在线缓存书**上开启模板后**看不到任何变化**（"设置完没效果 / 不好用"）。
+     * 出版 EPUB 不适用（此处直接排除；模板入口也不显示）；音视频 / 图片 / PDF 亦排除（无正文可排）。
      */
     private fun isTextRichMode(): Boolean {
         val book = ReadBook.book ?: return false
-        if (book.isEpub) return false
-        return if (book.isMarkdown) {
-            AppConfig.mdRichRender
-        } else {
-            // **本地 txt**：章节内容走 `LocalBook.getContent` → `TextFile`（本地文件，可读）⇒ 可进模板面。
-            // **在线正文（isOnLineTxt）暂不放开**：本面的内容源是 `LocalBook.getContent`，对在线书会落到
-            // `TextFile` → 读本地文件失败 → 拿不到正文（只会渲染出错误文案）。放开需先补"在线章节内容源"
-            // 接缝（设计任务 3.1「在线正文并入统一管线」/ 5.1 灰度），属下一步；在此之前**不得**把在线书
-            // 放进此面，也不得在样式弹层里对在线书置灰原生排版（否则用户既调不了排版、又看不到模板）。
-            book.isLocalTxt && ReaderTemplateManager.templatesEnabled()
-        }
+        // 适用格式（与 archive v15「阅读页模板」的 `isOrdinaryText` 同口径）：**非 EPUB、非音视频/图片/PDF**。
+        // - EPUB：走自身内置排版（archive 亦以 `book?.isEpub == false` 直接排除，模板对其不适用）；
+        // - 音视频 / 图片 / PDF：无正文可排。
+        if (book.isEpub || book.isAudio || book.isVideo || book.isImage || book.isPdf) return false
+        if (book.isMarkdown) return AppConfig.mdRichRender
+        // 其它文本类（本地 txt / **在线正文** / UMD / MOBI）随「阅读页模板」总开关一并开放
+        // （默认关 ⇒ 零回归）。正文来源见 [richTextRawContent]。
+        return ReaderTemplateManager.templatesEnabled()
     }
+
+    /**
+     * 模板/富渲染面的**正文来源**（与 archive 同位置口径一致）。
+     *
+     * - **本地**（md / txt / UMD / MOBI）：`LocalBook.getContent`（md 由此产出 `<usehtml>` 归一化 HTML
+     *   + 同目录图片内联）；
+     * - **非本地**（在线正文）：`BookHelp.getContent` 读**已下载的章节内容缓存**。
+     *
+     * ⚠️ 此前两处统一用 `LocalBook.getContent`：在线书会落到 `TextFile` 去读**本地文件** ⇒ 失败、
+     * 拿不到正文 —— 这正是"在线缓存书开启模板后看不到任何变化"的另一半根因（archive 同位置走
+     * `BookHelp.getContent` / `CacheBook.downloadAwait`）。
+     */
+    private fun richTextRawContent(book: Book, chapter: BookChapter): String? =
+        if (book.isLocal) LocalBook.getContent(book, chapter) else BookHelp.getContent(book, chapter)
 
     /** 非 `<usehtml>` 的文本类内容是否允许归一化后进富渲染/模板面（md 自带 `<usehtml>`，无需放开）。 */
     private fun richTextAllowsPlainText(): Boolean = ReadBook.book?.isMarkdown == false
@@ -2650,7 +2666,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 withContext(IO) {
                     runCatching {
                         TextRichContentProbe.prepare(
-                            LocalBook.getContent(book, it),
+                            richTextRawContent(book, it),
                             allowPlainText = richTextAllowsPlainText()
                         )
                     }.getOrNull()
@@ -2920,7 +2936,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 withContext(IO) {
                     runCatching {
                         TextRichContentProbe.prepare(
-                            LocalBook.getContent(book, it),
+                            richTextRawContent(book, it),
                             allowPlainText = richTextAllowsPlainText()
                         )
                     }.getOrNull()
