@@ -5,6 +5,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.md.MdChapterizer
 import io.legado.app.help.md.MdDocumentBuilder
+import io.legado.app.help.md.MdRelativeImageInliner
 import io.legado.app.utils.EncodingDetect
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.StringUtils
@@ -20,6 +21,8 @@ import java.nio.charset.Charset
  *   `url` 用 md5 生成稳定标识（与 [TextFile] 同范式）；
  * - **内容**：`getContent` 返回**归一化章节 HTML**，并用既有 `<usehtml>` 约定包裹 ⇒
  *   直接落入「文本渲染模式」（canvas HTML 快路径可渲染；WebView 富渲染后端由阶段 3.1 接线）；
+ * - **相对图片内联（S3①）**：`![x](./a.png)` 由 [MdRelativeImageInliner] 在构建期换成 `data:` URI
+ *   （三种承载面都拿不到文档目录作解析基准，不内联必然裂图）；
  * - **不打包 EPUB3**（AD-04 v1.1）⇒ 不经 `EpubCoreProvider`。
  *
  * 线程/并发：与其它 LocalBook 解析器一致，由 companion 的 `@Synchronized` 串行化。
@@ -51,7 +54,8 @@ class MdFile(private var book: Book) {
 
         @Synchronized
         override fun getImage(book: Book, href: String): InputStream? {
-            // md 无内嵌资源（图片按 md 相对路径由 WebView 加载，阶段 3.11 再议）
+            // md 无内嵌资源：图片只有"与文档同目录的相对引用"一种形态，且已在
+            // `getContent` 里由 MdRelativeImageInliner 内联成 data: URI（S3①）⇒ 本通道无消费者。
             return null
         }
 
@@ -86,6 +90,19 @@ class MdFile(private var book: Book) {
 
     /** 构建产物缓存：章区间键 → 归一化 HTML（同一会话内避免重复转换）。 */
     private val builtCache = HashMap<String, MdDocumentBuilder.Built>()
+
+    /**
+     * 相对路径图片内联器（S3①）：**按书实例缓存**（首次使用时才建），
+     * 同一本书的缓存与总量预算跨章生效。书被换掉（[companion.getMFile] 重建实例）即随之重建。
+     */
+    private var imageResolver: MdDocumentBuilder.ImageDestinationResolver? = null
+
+    private fun imageResolver(): MdDocumentBuilder.ImageDestinationResolver {
+        imageResolver?.let { return it }
+        val created = MdRelativeImageInliner.forBook(book)
+        imageResolver = created
+        return created
+    }
 
     private fun text(): String {
         source?.let { return it }
@@ -140,7 +157,8 @@ class MdFile(private var book: Book) {
         if (start == end && chapter.isVolume) return null
         val sectionMarkdown = doc.substring(start, end)
         val built = builtCache.getOrPut("$start-$end") {
-            runCatching { MdDocumentBuilder.build(sectionMarkdown) }
+            // 相对图片内联（S3①）：承载面拿不到文档目录 ⇒ `./a.png` 必然裂图，故在 AST 层换成 data: URI
+            runCatching { MdDocumentBuilder.build(sectionMarkdown, MdDocumentBuilder.Options(), imageResolver()) }
                 .onFailure {
                     AppLog.put("Markdown 章节渲染失败\n${it.localizedMessage}", it)
                 }

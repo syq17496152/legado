@@ -6,6 +6,7 @@ import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.node.AbstractVisitor
 import org.commonmark.node.FencedCodeBlock
+import org.commonmark.node.Image
 import org.commonmark.node.Link
 import org.commonmark.node.Node
 import org.commonmark.node.Text
@@ -29,7 +30,9 @@ import org.commonmark.renderer.text.TextContentRenderer
  * - **富渲染标注**：`hasMermaid`/`hasMath` 在**构建期**由 AST 判定（不靠运行期嗅探），
  *   供 `BackendSelectionPolicy` 直接消费（AD-30 要求"构建期标注"）；
  * - **围栏块 mermaid 保形**：` ```mermaid ` 经渲染成为 `<pre class="mermaid">`（mermaid.run 的入参形态），
- *   代码体保持 HTML 转义（mermaid 读 `textContent`，转义后即原文）。
+ *   代码体保持 HTML 转义（mermaid 读 `textContent`，转义后即原文）；
+ * - **相对图片内联（S3①）**：可选 [ImageDestinationResolver] 在 AST 层改写 `img` 目标
+ *   （把 `./a.png` 换成 `data:` URI）⇒ 承载面拿不到文档目录也不会裂图；不传即完全保持旧行为。
  */
 object MdDocumentBuilder {
 
@@ -38,6 +41,16 @@ object MdDocumentBuilder {
 
     /** 超限错误（显式、不截断）。 */
     class MdChapterTooLargeException(message: String) : NoStackTraceException(message)
+
+    /**
+     * 图片目标改写器（S3① 相对路径图片内联的唯一 seam）。
+     *
+     * 传参形态保持**纯函数**：本层不碰文件系统，只把"相对 `src`"交给实现方（[MdRelativeImageInliner]）
+     * 换回可直接渲染的目标串（如 `data:` URI）；返回 null ⇒ 保持原引用不改写。
+     */
+    fun interface ImageDestinationResolver {
+        fun resolve(src: String): String?
+    }
 
     data class Options(
         /** 允许内嵌 raw HTML（默认关；放开后进入 DOM，需用户显式开启）。 */
@@ -78,7 +91,12 @@ object MdDocumentBuilder {
     private val BLOCK_MATH = Regex("""\$\$[\s\S]+?\$\$""")
     private val INLINE_MATH = Regex("""(?<![\w$\\])\$(?!\s)([^$\n]+?)(?<!\s)\$(?!\w)""")
 
-    fun build(markdown: String, options: Options = Options()): Built {
+    fun build(
+        markdown: String,
+        options: Options = Options(),
+        /** 相对图片内联（`MdFile` 传入；null ⇒ 不改写任何图片引用）。 */
+        imageResolver: ImageDestinationResolver? = null
+    ): Built {
         if (markdown.length > MaxChapterChars) {
             throw MdChapterTooLargeException(
                 "本章 Markdown 过大（${markdown.length} > $MaxChapterChars 字符），请拆分为更小的章节"
@@ -86,6 +104,9 @@ object MdDocumentBuilder {
         }
         val document = Parser.builder().extensions(extensions).build().parse(markdown)
         if (options.autolink) linkifyBareUrls(document)
+        // 图片目标改写必须在渲染之前（在 AST 上改 destination，不做 HTML 事后正则替换 ⇒
+        // 不会误伤属性/正文里恰好同形的字符串）
+        if (imageResolver != null) inlineRelativeImages(document, imageResolver)
         val hasMermaid = hasMermaidBlock(document)
         val html = renderHtml(document, options, hasMermaid)
         val plainText = TextContentRenderer.builder()
@@ -147,6 +168,24 @@ object MdDocumentBuilder {
             }
         })
         return found
+    }
+
+    /**
+     * 在 AST 上改写图片目标（S3①）。
+     *
+     * 只跳过空目标；**是否值得内联由 [ImageDestinationResolver] 自己判定**（单点决策 —— 判定规则
+     * 在 [MdImageRefPolicy]，不在这里再写一份，避免两套口径打架）。改写失败（抛异常）按"不改写"处理：
+     * 图片裂一张也不该让整章渲染失败。
+     */
+    private fun inlineRelativeImages(document: Node, resolver: ImageDestinationResolver) {
+        document.accept(object : AbstractVisitor() {
+            override fun visit(image: Image) {
+                val destination = image.destination
+                if (destination.isNullOrBlank()) return
+                val resolved = runCatching { resolver.resolve(destination) }.getOrNull()
+                if (!resolved.isNullOrBlank()) image.destination = resolved
+            }
+        })
     }
 
     /**
