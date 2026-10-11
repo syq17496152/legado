@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -141,24 +142,39 @@ class FileAssociationActivity :
                 onDismissAction = { finish() }
             )
         }
-        intent.data?.let { data ->
-            if (data.isContentScheme() && data.canRead()) {
-                viewModel.dispatchIntent(data)
-            } else {
-                PermissionsCompat.Builder()
-                    .addPermissions(*Permissions.Group.STORAGE)
-                    .rationale(R.string.tip_perm_request_storage)
-                    .onGranted {
-                        viewModel.dispatchIntent(data)
-                    }.onDenied {
-                        toastOnUi(getString(R.string.tip_perm_request_storage_failed))
-                        handler.postDelayed(2000) {
-                            finish()
-                        }
-                    }.request()
-            }
-        } ?: finish()
+        val incoming = incomingFileUri()
+        if (incoming == null) {
+            finish()
+        } else if (incoming.isContentScheme() && incoming.canRead()) {
+            viewModel.dispatchIntent(incoming)
+        } else {
+            PermissionsCompat.Builder()
+                .addPermissions(*Permissions.Group.STORAGE)
+                .rationale(R.string.tip_perm_request_storage)
+                .onGranted {
+                    viewModel.dispatchIntent(incoming)
+                }.onDenied {
+                    toastOnUi(getString(R.string.tip_perm_request_storage_failed))
+                    handler.postDelayed(2000) {
+                        finish()
+                    }
+                }.request()
+        }
     }
+
+    /**
+     * 解析入口文件（spec MD-01「三入口」）：**分享（ACTION_SEND）的文件句柄在 `EXTRA_STREAM`**，
+     * VIEW 及其它入口在 `intent.data`。分享 .md 时 MIME 可能是 md 也可能是 octet-stream
+     * （旧式文件管理器），但句柄一律走 `EXTRA_STREAM` —— 只看 `data` 会让分享入口静默不导入。
+     */
+    @Suppress("DEPRECATION")
+    private fun incomingFileUri(): Uri? =
+        when (AssociationIntentPolicy.entryOf(intent.action)) {
+            AssociationIntentPolicy.Entry.SHARED_STREAM ->
+                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+
+            AssociationIntentPolicy.Entry.DATA_URI -> intent.data
+        }
 
     /** F351：壳自有路径的完成/失败反馈（结果卡原位呈现，替代裸 toast；2s 后随既有自动 finish 收场） */
     private var resultState by mutableStateOf<AssociationResult?>(null)

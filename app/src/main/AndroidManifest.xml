@@ -720,6 +720,20 @@
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
+            <!-- 分享（ACTION_SEND）导入书籍 / md（spec MD-01「三入口」之「分享」）
+                 注：SEND 过滤**只按 MIME 匹配**（pathPattern 对 SEND 无效，因为携带文件的
+                 URI 在 EXTRA_STREAM 里，过滤器看不到）⇒ md 必须显式列 MIME；另收
+                 application/octet-stream 覆盖"MimeTypeMap 未收录 md"的旧式文件管理器。
+                 不支持的类型的处置沿用既有 notSupportedLiveData（确认对话框），不静默吞掉。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <!-- Markdown -->
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+                <!-- 旧式发送方（MimeTypeMap 未收录 md / 未知类型） -->
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
         </activity>
 
         <service
