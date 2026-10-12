@@ -1,8 +1,6 @@
 package io.legado.app.model.localBook.epubcore.web
 
 import android.graphics.RectF
-import android.net.Uri
-import io.legado.app.model.localBook.epubcore.archive.EpubPath
 import io.legado.app.model.localBook.epubcore.layout.EpubCorePage
 import io.legado.app.model.localBook.epubcore.layout.EpubImageFragment
 import io.legado.app.model.localBook.epubcore.layout.EpubMeasuredGlyph
@@ -111,20 +109,8 @@ class EpubWebLayoutAdapter {
         }
     }
 
-    private fun resolveHref(chapterHref: String, href: String): String {
-        val raw = href.trim()
-        if (raw.startsWith("data:", ignoreCase = true)) return raw
-        epubLocalPath(raw)?.let { return it }
-        val cleanHref = stripResourceDecorations(raw)
-        if (cleanHref.isBlank()) {
-            return EpubPath.normalize(stripResourceDecorations(chapterHref))
-        }
-        if (cleanHref.startsWith('/')) {
-            return EpubPath.normalize(Uri.decode(cleanHref.trimStart('/')))
-        }
-        if (hasExternalScheme(cleanHref)) return cleanHref
-        return EpubPath.resolve(stripResourceDecorations(chapterHref), cleanHref)
-    }
+    private fun resolveHref(chapterHref: String, href: String): String =
+        EpubResourceHref.resolve(chapterHref, href)
 
     private fun EpubWebBoxFragment.toBackground(chapterHref: String): EpubBackground {
         val href = backgroundImageHref
@@ -136,27 +122,6 @@ class EpubWebLayoutAdapter {
             size = backgroundSize.toBackgroundSize(),
             position = backgroundPosition.toBackgroundPosition()
         )
-    }
-
-    private fun epubLocalPath(href: String): String? {
-        val candidate = if (href.startsWith("//")) "https:$href" else href
-        val uri = runCatching { Uri.parse(candidate) }.getOrNull() ?: return null
-        if (!uri.host.equals("epub.local", ignoreCase = true)) return null
-        val path = uri.encodedPath
-            ?.takeIf { it.isNotBlank() }
-            ?.trimStart('/')
-            ?: return null
-        return EpubPath.normalize(Uri.decode(path))
-    }
-
-    private fun stripResourceDecorations(href: String): String {
-        return href.substringBefore('#').substringBefore('?')
-    }
-
-    private fun hasExternalScheme(href: String): Boolean {
-        val schemeEnd = href.indexOf(':')
-        if (schemeEnd <= 0) return false
-        return href.take(schemeEnd).all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }
     }
 
     private fun String?.toBackgroundRepeat(): EpubBackgroundRepeat {
