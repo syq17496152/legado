@@ -263,6 +263,27 @@ android {
     }
 }
 
+// S9「tiny 档」（epub-md-rich-rendering · AD-27 / NFR-06 · 审计 P-03）：
+// 默认 = **完整档**（含 mermaid 资产 ≈2.45MB）；`-PmdTiny=true` ⇒ 排除该资产，产出 **tiny 档**。
+// 运行时对"资产缺失"已优雅降级（`MdRichRenderInjector` 按需注入：读到空即跳过 mermaid，
+// 由单测「资产缺失时按需跳过且不抛异常」钉住）⇒ tiny 档只是不渲染 mermaid，其余能力不变。
+// 为什么用属性而不是 productFlavor：本仓 `productFlavors` 仅 `app`（打包/发布链路均钉在它上），
+// 新增 flavor 会牵动交付规范；属性方式对**默认构建零影响**，仅服务于 tiny 交付与双档体积对比。
+def mdTiny = project.hasProperty('mdTiny') && project.property('mdTiny').toString().toBoolean()
+if (mdTiny) {
+    // 路径必须与 `MdRichRenderInjector.MermaidAsset` **同源**（写岔会排除一个没人用的路径：
+    // 体积不降却没有任何测试变红）⇒ 由 `MdTinyArtifactPolicyTest` 钉住两侧一致。
+    // ⚠️ 机制选择（2026-10-13 实测）：`sourceSets.main.assets.filter.exclude` 在 AGP 8 下**不参与
+    // 资产合并** —— `filter.excludes` 已登记且无报错，但产物 APK 内**仍含该文件**（体积零变化），
+    // 属"静默失效"。改用 aapt2 的 `ignoreAssetsPatterns`（直接作用于**打包阶段**，按资源名匹配）。
+    android {
+        androidResources {
+            // `ignoreAssetsPatterns` 是 `List<String>`，只能 `.add(...)`（`+=` 会被判 read-only）
+            ignoreAssetsPatterns.add('mermaid.min.js')
+        }
+    }
+}
+
 // Compose 已启用（F-P0-1 调试工具集需要），原全局排除配置已移除
 // configurations.all {
 //     exclude group: 'androidx.compose.compiler', module: 'compiler'
