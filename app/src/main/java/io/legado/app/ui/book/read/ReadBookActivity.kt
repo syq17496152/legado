@@ -2381,6 +2381,14 @@ class ReadBookActivity : BaseReadBookActivity(),
                 )
                 return@launch
             } else {
+                // 2026-10-12 真机铁证：关闭「页面模板」（或内容不在作用域）后走 canvas 分支时，
+                // 必须**显式退役 WebView 面**。否则残留 `templateActive` / `templateBackend` /
+                // `textRichPreparedIndex` 会让"重新开启"命中 [loadTemplateContentAwait] 的同章早退闸
+                // （`templateActive && textRichPreparedIndex == index && templateBackend != null`）
+                // ⇒ 面不重渲染（用户可感知症状：「关掉再打开没反应」）。真机实测：面板内 关→开 后
+                // `ReaderTemplate` 标签渲染日志 0 条，canvas 还渲染进了不可见的 readView。
+                if (templateActive) switchTemplate(false)
+                if (textRichActive) switchTextRich(false)
                 switchEpubCore(false)
                 binding.readView.upContent(relativePosition, resetPageOffset)
             }
@@ -2427,6 +2435,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             )
             return@withContext
         } else {
+            // 同 [upContent]：走 canvas 前显式退役 WebView 面，避免模板残留导致"重开无反应"
+            if (templateActive) switchTemplate(false)
+            if (textRichActive) switchTextRich(false)
             switchEpubCore(false)
             binding.readView.upContent(relativePosition, resetPageOffset)
         }
