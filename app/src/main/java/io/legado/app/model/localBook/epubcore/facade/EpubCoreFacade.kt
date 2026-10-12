@@ -245,7 +245,9 @@ class EpubCoreFacade private constructor(
             visited += "${current.name}:${currentFailure.name}"
             pages = when (current) {
                 EpubRenderFallbackPolicy.Stage.WEB_LAYOUT -> emptyList()
-                EpubRenderFallbackPolicy.Stage.CANVAS_PAGE -> emptyList()
+                EpubRenderFallbackPolicy.Stage.CANVAS_PAGE -> EpubFallbackPageFactory.canvasPages(
+                    resolvedChapter.index, href, resolvedChapter.title, html.orEmpty(), config
+                )
                 EpubRenderFallbackPolicy.Stage.TEXT -> html
                     ?.let { EpubFallbackPageFactory.textPages(resolvedChapter.index, href, extractPlainText(it), config) }
                     .orEmpty()
