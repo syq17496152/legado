@@ -3224,6 +3224,7 @@ Selected text or question:
     <string name="dlna_setting_prefetch_window">预取窗口</string>
     <string name="dlna_setting_prefetch_concurrency">预取并发</string>
     <string name="dlna_setting_disk_cache_mb">磁盘缓存</string>
+    <string name="content_write_blocked_no_space">存储空间不足，本章内容未能保存到缓存</string>
     <string name="dlna_setting_prefer_smooth">流畅优先（多码率时选最低码率）</string>
     <string name="dlna_setting_off">关闭</string>
     <string name="dlna_setting_unit_mb">MB</string>

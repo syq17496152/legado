@@ -283,6 +283,14 @@ object BookHelp {
         content: String
     ) {
         if (content.isEmpty()) return
+        // 稳定性边界（AD-28⑥ / NFR-07①）：磁盘将满 ⇒ **禁写并提示**（动作层见 ContentCacheWriteBoundary）。
+        // 用户发起的正文编辑若因此被跳过，必须让用户知道"这次没落盘"。
+        if (ContentCacheWriteBoundary.blockWriteIfNoSpace(
+                downloadDir.usableSpace, content.length, bookChapter.index
+            )
+        ) {
+            return
+        }
         //保存文本 (临时文件+原子改名, 中断不产生半写文件)
         val file = FileUtils.createFileIfNotExist(
             downloadDir,
@@ -296,6 +304,11 @@ object BookHelp {
             if (!tmpFile.renameTo(file)) {
                 file.writeText(content)
             }
+        } catch (e: IOException) {
+            // 写前判据与真实写入之间有窗口（并发写/瞬时占满/目录只读）⇒ 撞上磁盘满或无权限时同样提示；
+            // 异常**按原样上抛**（不改既有调用方的错误语义，`saveContent` 原有 catch 仍会记录）
+            ContentCacheWriteBoundary.onWriteFailure(e, bookChapter.index)
+            throw e
         } finally {
             tmpFile.delete()
         }
