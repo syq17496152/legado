@@ -2603,6 +2603,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             templateBackend?.dispose()
             templateBackend = null
             templateRestorePending = false
+            templatePendingRestoreRatio = null
             binding.textRichReadView.removeAllViews()
         }
         updateRenderSurface()
@@ -2652,6 +2653,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             override fun onReMeasured(token: RenderToken, chapterIndex: Int, pageCount: Int) {
+                applyPendingTextRichRestore(chapterIndex, pageCount)
                 upSeekBarProgress()
             }
 
@@ -2772,13 +2774,11 @@ class ReadBookActivity : BaseReadBookActivity(),
             textRichChapterRef = ChapterRef(index, chapter.url, chapter.title)
             textRichChapterStart = chapter.start
             textRichChapterEnd = chapter.end
-            textRichRestorePending = !resetPageOffset
+            // 与模板面同口径：**始终**由 `durChapterPos` 折算恢复位置（`resetPageOffset` 只表示
+            // "不复用内存页偏移"，不等于忽略已落盘进度；此前冷启 `scrollToTop()` ⇒ 进度退回页首）
+            textRichRestorePending = true
             switchTextRich(true)
             val backend = ensureTextRichBackend()
-            if (resetPageOffset) {
-                textRichRestorePending = false
-                textRichBackend?.scrollToTop()
-            }
             backend.render(textRichChapterRef!!, null, textRichRenderConfig())
             if (relativePosition == 0) upSeekBarProgress()
             loadStates = false
@@ -2789,12 +2789,18 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun onTextRichRendered(chapterIndex: Int, pageCount: Int) {
-        val backend = textRichBackend ?: return
-        if (textRichRestorePending) {
-            textRichRestorePending = false
-            restoreTextRichPosition(backend, chapterIndex, pageCount)
-        }
+        applyPendingTextRichRestore(chapterIndex, pageCount)
         upSeekBarProgress()
+    }
+
+    /**
+     * 应用「待恢复的文本富渲染位置」——与 [applyTemplatePendingRestore] 同口径：
+     * **页数 <= 1 时不消费**（首次结算页数可能尚未定型 ⇒ `(ratio * 1)` 恒 0 会把进度退回页首）。
+     */
+    private fun applyPendingTextRichRestore(chapterIndex: Int, pageCount: Int) {
+        if (!textRichRestorePending || pageCount <= 1) return
+        textRichRestorePending = false
+        textRichBackend?.let { restoreTextRichPosition(it, chapterIndex, pageCount) }
     }
 
     /**
@@ -2843,6 +2849,9 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var templateResolved: EpubReaderTemplate? = null
     private var templateResolvedKey: String? = null
     private var templateRestorePending = false
+
+    /** 待恢复的章内比例（页数未定型时不消费；换章/关模板即作废）。 */
+    private var templatePendingRestoreRatio: Float? = null
     private var templateLoading = false
 
     /** 阅读面契约键（模板总开关 + 选中模板 + 日夜）最近一次已应用的值；用于返回前台时判定是否需重载。 */
@@ -2953,6 +2962,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             override fun onReMeasured(token: RenderToken, chapterIndex: Int, pageCount: Int) {
+                applyTemplatePendingRestore(pageCount)
                 upSeekBarProgress()
             }
 
@@ -3084,16 +3094,18 @@ class ReadBookActivity : BaseReadBookActivity(),
             textRichChapterRef = ChapterRef(index, chapter.url, chapter.title)
             textRichChapterStart = chapter.start
             textRichChapterEnd = chapter.end
-            templateRestorePending = !resetPageOffset
+            // 恢复口径：**始终**由 `durChapterPos`（落盘进度）折算章内比例。
+            // ⚠️ 冷启时 `upContent()` 的默认参数是 `resetPageOffset = true`（见 ReadBook.Callback），
+            // 但那**只**表示"不复用内存里的页偏移"，**不等于**"忽略已保存的阅读进度"；此前按该标记
+            // 直接 `gotoPage(0)` ⇒ 每次冷启都回到章首页（用户真机报「进度直接没有了，每次从头开始」）。
+            templateRestorePending = true
+            // 换章 ⇒ 作废上一章的比例（由 durChapterPos 重算）
+            templatePendingRestoreRatio = null
             switchTemplate(true)
             // S11：模板面开局（书级后端 DIRECT_WEB）⇒ 后续失败经治理层**整书**降级；
             // 同书重复调用保持书级粘性（不会把已降级的书又拉回模板面）。
             renderGovernor.startBook(book.bookUrl, BackendSelectionPolicy.Backend.DIRECT_WEB)
             val backend = ensureTemplateBackend()
-            if (resetPageOffset) {
-                templateRestorePending = false
-                backend.gotoPage(0)
-            }
             val ref = textRichChapterRef
                 ?: run {
                     switchTemplate(false)
@@ -3115,14 +3127,33 @@ class ReadBookActivity : BaseReadBookActivity(),
             templateRestorePending = false
             val start = textRichChapterStart
             val end = textRichChapterEnd
-            if (start != null && end != null && end > start && pageCount > 0) {
-                val ratio = ((ReadBook.durChapterPos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
-                backend.gotoPage((ratio * pageCount).toInt().coerceIn(0, pageCount - 1))
+            templatePendingRestoreRatio = if (start != null && end != null && end > start) {
+                ((ReadBook.durChapterPos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
             } else {
-                backend.gotoPage(0)
+                0f
             }
         }
+        applyTemplatePendingRestore(pageCount)
         upSeekBarProgress()
+    }
+
+    /**
+     * 应用「待恢复的章内比例」。
+     *
+     * ⚠️ **页数 <= 1 时不消费**（2026-10-12 真机铁证）：首次 `stable` 的页数可能尚未定型（=1），
+     * 此时 `(ratio * 1).toInt()` 恒为 0 ⇒ 进度被**退回首页**（用户症状："每次进去都是从头开始看"）。
+     * 保留待恢复比例，等后续结算/重测（`onReMeasured`）给出真实页数再落位。
+     */
+    private fun applyTemplatePendingRestore(pageCount: Int) {
+        val ratio = templatePendingRestoreRatio ?: return
+        if (pageCount <= 1) return
+        templatePendingRestoreRatio = null
+        val target = (ratio * pageCount).toInt().coerceIn(0, pageCount - 1)
+        AppLog.putDebugWithTag(
+            AppLog.TAG_READER_TEMPLATE,
+            "restore: pageCount=$pageCount, target=$target"
+        )
+        templateBackend?.gotoPage(target)
     }
 
     /** 位置保存：同上（章内相对比例 ⇒ 字符偏移，不做像素级假换算）。 */
@@ -3144,6 +3175,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         val ref = textRichChapterRef ?: return
         saveTemplatePosition()
         templateRestorePending = true
+        // 比例在 `onTemplateRendered` 由刚落盘的 durChapterPos 重算 ⇒ 先作废旧值
+        templatePendingRestoreRatio = null
         lifecycleScope.launch {
             templateResolvedKey = null
             ensureTemplateAwait()

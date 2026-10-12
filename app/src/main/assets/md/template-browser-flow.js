@@ -266,12 +266,21 @@
       lastPageHeight = visible;
     }
     reportPageFrame(slot, visible);
+    // 页数口径与既有实现保持**逐字一致**（`ceil(内容高/页高)`）——口径一变，真机上的
+    // 既有页数断言会整体漂移，无法与历史证据对照
+    var totalPages = Math.min(MAX_PAGES, Math.max(1, Math.ceil((slot.scrollHeight || visible) / visible)));
+    var maxOffset = maxBodyOffset(slot, root);
+    // 宿主指令给的**页号即结果**，不得再从"夹取后的像素偏移"反解：末页多为**部分页**，
+    // `target * visible` 会超过 maxOffset 被夹到 maxOffset，`floor(offset/visible)` 因此退回**前一页**
+    // （真机铁证 2026-10-12：2 页章节点"下一页"恒停在 `page=0/2`，症状与用户报的"只能翻两页"完全一致）
+    var authoritativeIndex = -1;
     if (bodyOffsetAuthoritative) {
       // 宿主 `goto` 已给出权威**页号** ⇒ 用**最终页高**折算偏移并只写不读地落到滚动位置：
       // 换壳（重挂 `innerHTML`）之后布局尚未 reflow，此刻读 `root/slot.scrollHeight` 会拿到
       // 未生效的旧值（真机实测把 667 反解成 0 ⇒ 页面被拉回首屏、页码恒 1/1）。
       bodyOffsetAuthoritative = false;
       if (authoritativePage >= 0) {
+        authoritativeIndex = clampIndex(authoritativePage, totalPages);
         bodyOffset = clampBodyOffset(authoritativePage * visible, slot, root);
         authoritativePage = -1;
       }
@@ -283,12 +292,24 @@
       applyBodyOffset(slot, root);
       bodyOffset = clampBodyOffset(bodyOffset, slot, root);
     }
-    // 页数口径与既有实现保持**逐字一致**（`ceil(内容高/页高)`）——口径一变，真机上的
-    // 既有页数断言会整体漂移，无法与历史证据对照
-    var totalPages = Math.min(MAX_PAGES, Math.max(1, Math.ceil((slot.scrollHeight || visible) / visible)));
-    // ⚠️ 页码由**正文偏移**推出（不是读 `scrollTop`）：`scrollTop` 含页眉补偿（换壳后整体平移），
-    // 直接读它会把"换壳"误判成"翻了很多页"（症状：一换结构页码就跳到末页）
-    return { pageIndex: clampIndex(bodyOffset / visible, totalPages), pageCount: totalPages };
+    return {
+      pageIndex: authoritativeIndex >= 0
+        ? authoritativeIndex
+        : indexFromOffset(bodyOffset, visible, totalPages, maxOffset),
+      pageCount: totalPages
+    };
+  }
+
+  /**
+   * 由正文偏移推页码，**贴底即末页**。
+   *
+   * ⚠️ 为什么不能只 `floor(offset / visible)`（2026-10-12 真机铁证）：末页通常是**部分页**，
+   * `offset` 最大只能到 `maxOffset = 内容高 − 页高 < (末页号) × 页高` ⇒ floor 恒退回**前一页**
+   * ⇒ 宿主 `edge().atBottom` 永远为 false、翻不到章末（症状＝"只能翻两页/翻不动"）。
+   */
+  function indexFromOffset(offset, visible, totalPages, maxOffset) {
+    if (totalPages > 1 && maxOffset > 0 && offset >= maxOffset - 1) return totalPages - 1;
+    return clampIndex(offset / visible, totalPages);
   }
 
   /**
