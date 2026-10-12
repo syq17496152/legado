@@ -27,6 +27,12 @@
   /** 页数上限（有界：作者畸形 DOM 不得让宿主陷入超长分页）。 */
   var MAX_PAGES = 5000;
 
+  /** 页框高校正的容差（px）：根壳底与视口底的偏差在此内即视为"贴底"，不再校正。 */
+  var FRAME_CORRECT_TOL = 2;
+
+  /** 页框高校正的最大迭代数（占位→页框是 1:1 关系 ⇒ 一次即收敛；留一次用于子像素抖动）。 */
+  var FRAME_CORRECT_MAX = 2;
+
   var root = null;
   var config = null;
 
@@ -54,6 +60,17 @@
    * 由 `goto` 置位、`settle` 消费并复位 ⇒ **宿主指令是权威**，只有"用户手指拖动"那次才需要反解。
    */
   var bodyOffsetAuthoritative = false;
+
+  /**
+   * 宿主 `goto` 给出的**权威页号**（-1 = 无）。
+   *
+   * ⚠️ 为什么存页号而不是像素偏移（2026-10-12 真机铁证）：`goto` 那一刻算出的像素偏移用的是
+   * "当时已知的页高"，而紧接着的 `settle` 会按占位算出**页高并做一次贴底校正**（见
+   * [correctFrameHeight]）⇒ 若沿用 `goto` 的像素偏移，校正前后页高不一致会把正文停在**半页**处
+   * （真机实测：目标第 2 页、页高 748，校正到 728 后 `bodyOffset/visible` 落到 1.027 之外的档位）。
+   * 存页号 ⇒ 由 `settle` 用**最终页高**折算偏移，两处口径必然一致。
+   */
+  var authoritativePage = -1;
 
   /**
    * 流程层记录的"当前结构"（`opening` / `continuation`）。
@@ -234,18 +251,30 @@
     // 只缓存 `chromeHeight`（正文注入前的固定占位）——它**必须**在注入前量，才是正确的占位口径。
     var visible = visibleHeight();
     lastPageHeight = visible;
-    reportPageFrame(slot, visible);
-    if (!(visible > MIN_PAGE_HEIGHT)) return { pageIndex: 0, pageCount: 1 };
+    if (!(visible > MIN_PAGE_HEIGHT)) {
+      reportPageFrame(slot, visible);
+      return { pageIndex: 0, pageCount: 1 };
+    }
     // 冻结前先把"当前正文偏移"从冻结页框的滚动位置里反解出来（跨结构可比量，见 [bodyOffset]）。
     // 冻结页框之外（例如刚换壳、尚未冻结）`scrollTop` 恒 0 ⇒ 反解得 0，随后由 `applyBodyOffset` 定位。
     if ((slot.scrollHeight || 0) > visible + 1) {
       freezeSlot(slot, visible);
+      // ⚠️ 贴底校正（2026-10-12 真机铁证）：占位是**注入前估算**（模板装饰多为 vh 单位 SVG，
+      // 注入后最终布局可能与估算差一截）⇒ 冻结后必须用**布局事实**（根壳底 vs 视口底）再校一次，
+      // 否则页框超高会把页脚压出视口（用户可直接上下扒拉）；同时把校正结果写回按壳占位缓存。
+      visible = correctFrameHeight(slot, visible);
+      lastPageHeight = visible;
     }
+    reportPageFrame(slot, visible);
     if (bodyOffsetAuthoritative) {
-      // 宿主 `goto` 已给出权威偏移 ⇒ 直接定位，**不做任何**基于 `scrollHeight` 的读写：
+      // 宿主 `goto` 已给出权威**页号** ⇒ 用**最终页高**折算偏移并只写不读地落到滚动位置：
       // 换壳（重挂 `innerHTML`）之后布局尚未 reflow，此刻读 `root/slot.scrollHeight` 会拿到
       // 未生效的旧值（真机实测把 667 反解成 0 ⇒ 页面被拉回首屏、页码恒 1/1）。
       bodyOffsetAuthoritative = false;
+      if (authoritativePage >= 0) {
+        bodyOffset = clampBodyOffset(authoritativePage * visible, slot, root);
+        authoritativePage = -1;
+      }
       slot.scrollTop = bodyOffset;
     } else {
       // 非宿主驱动（用户在页内拖动）⇒ 从滚动位置**反解**正文偏移（跨结构可比量）
@@ -319,6 +348,47 @@
     slot.style.overflow = 'hidden';
   }
 
+  /**
+   * 页框高**贴底校正**：把"按占位估算的页框"用冻结后的布局事实再校一次。
+   *
+   * 判据（可证伪）：**根壳底 == 视口底**（`root.getBoundingClientRect().bottom` vs `currentViewportHeight()`）。
+   * 为什么不能只信占位估算：占位在**正文注入之前**量取（口径要求，见 [chromeForShell]），而模板装饰
+   * 多用 `vh` 单位与 `<svg>`（如 neon-night `.rn-art{height:8.6vh}` / `.rn-edge` / `.rn-footmark`）
+   * ⇒ 注入/换壳后最终布局与估算可能不一致。**真机铁证（2026-10-12）**：估算页框 748，冻结后根壳底 874
+   * > 视口 854 ⇒ 页脚被压出视口 20px，用户可直接上下扒拉（且自证串 `rb=874/sb=787` 与该结论一致）。
+   *
+   * ⚠️ **只收缩、不放大**（2026-10-12 真机复核）：部分模板的根壳高由 CSS 钳定（实测 `root` 恒 844、
+   * 根壳底恒 = 视口底）⇒ "欠填"时放大页框既无收益（根壳底不变）又会在换壳瞬态上误触发 ⇒ 单向校正更稳。
+   *
+   * 占位↔页框是 **1:1** 关系（页框 = 视口 − 占位）⇒ 一次迭代即收敛；迭代上界 [FRAME_CORRECT_MAX]
+   * 防作者畸形 DOM 引发抖动/死循环；校正结果写回按壳占位缓存 ⇒ 同一壳后续结算零额外读。
+   *
+   * @returns 校正后的页框高（未冻结 / 无 `root` / 读数异常 / 未溢出 ⇒ 原样返回）
+   */
+  function correctFrameHeight(slot, height) {
+    if (!root || !slot || !slotIsFrozen(slot)) return height;
+    var corrected = height;
+    for (var i = 0; i < FRAME_CORRECT_MAX; i++) {
+      var overflow = 0;
+      try {
+        overflow = root.getBoundingClientRect().bottom - currentViewportHeight();
+      } catch (error) {
+        return corrected;
+      }
+      if (!isFinite(overflow) || overflow <= FRAME_CORRECT_TOL) break;
+      var next = corrected - overflow;
+      if (!(next > MIN_PAGE_HEIGHT) || next === corrected) break;
+      corrected = next;
+      freezeSlot(slot, corrected);
+    }
+    if (corrected === height) return height;
+    // 写回按壳占位：`chrome = 视口 − 页框`（与 [visibleHeight] 同口径），后续结算直接命中
+    var vp = currentViewportHeight();
+    if (vp > 0) chromeByShell[shellName() || 'none'] = Math.max(0, vp - corrected);
+    shellChromeNow = Math.max(0, vp - corrected);
+    return corrected;
+  }
+
   function settleScroll() {
     var viewport = document.querySelector('[data-reader-scroll-viewport]');
     var scrollable = viewport || document.scrollingElement || document.documentElement;
@@ -329,6 +399,7 @@
     // 依赖内容高度，紧接 `goto` 的那次结算同样可能读到未 reflow 的旧值（同 C1 换壳的成因）
     if (bodyOffsetAuthoritative) {
       bodyOffsetAuthoritative = false;
+      authoritativePage = -1;   // 滚动面走**偏移**口径（不是页号），此处只清标记
       scrollable.scrollTop = bodyOffset;
     }
     var scrollTop = scrollable.scrollTop || 0;
@@ -380,6 +451,7 @@
     // 会带到新章节的首页，症状是新章开篇失去封面页）
     bodyOffset = 0;
     pageCount = 1;
+    authoritativePage = -1;             // 换章 ⇒ 清空上一章的权威页号（防串章）
     resetChromeCache();                 // 换章 ⇒ 按壳占位缓存作废（结构可能整体变化）
     // 结构状态以运行为准（runtime 的 `renderShell` 已在 initialize 之前把首页结构挂上）
     flowShell = shellName();
@@ -430,6 +502,7 @@
     pageCount = result.pageCount;
     // 兜底复位：分栏路径不消费该标记（它直接写 `scrollLeft`）⇒ 不留悬空状态给下一次结算
     bodyOffsetAuthoritative = false;
+    authoritativePage = -1;
     var costMs = ((window.performance && performance.now) ? performance.now() : Date.now()) - startedAt;
     if (window.ReaderTemplateRuntime) {
       // 结算自证（C1）：结构（首页/续页）与正文偏移随 stable 一并留痕 ——
@@ -464,6 +537,8 @@
     // 权威标记必须在**任何**滚动改动之前置位：换壳（`switchShellForPage`）内部也会接力偏移，
     // 若标记晚置，换壳那一步的反解仍会用未 reflow 的布局（见 [bodyOffsetAuthoritative]）
     bodyOffsetAuthoritative = true;
+    // 权威量是**页号**（不是此刻算出的像素）：由 `settle` 按最终页高折算，见 [authoritativePage]
+    authoritativePage = target;
     try {
       var container = null;
       var axis = 'y';
@@ -481,14 +556,18 @@
         }
       }
       if (container) {
-        var visible = (axis === 'x' ? container.clientWidth : container.clientHeight) || 1;
+        // ⚠️ 步长必须与 `settle` 的页高**同源**（2026-10-12 真机铁证）：纵移若读
+        // `container.clientHeight`，可能拿到与结算页高不一致的值（实测 656.67 vs 结算 748）
+        // ⇒ `bodyOffset` 偏小、`pageIndex` 恒 0 ⇒ 宿主永远判不到"章末"，卡在第 2 页翻不动。
+        // 分栏（x）仍按容器宽（横移口径本就以列为单位）。
+        var visible = (axis === 'x'
+          ? container.clientWidth
+          : (lastPageHeight > 0 ? lastPageHeight : container.clientHeight)) || 1;
         if (axis === 'x') {
           container.scrollLeft = target * visible;
         } else {
           // 纵移 + 自研回退：按**与结构无关的正文偏移**定位（换壳后页眉高不同，
           // 沿用 `target * visible` 会把正文停在错位处 —— 见 [bodyOffset]）
-          // 一律记成**权威偏移**（与结构无关），由随后 `settle` 只写不读地落到滚动位置：
-          // 换壳后页眉高不同，`target * visible` 直接写 `scrollTop` 会错位（见 [bodyOffset]）
           bodyOffset = target * visible;
           if (slotIsFrozen(container)) {
             container.scrollTop = bodyOffset;

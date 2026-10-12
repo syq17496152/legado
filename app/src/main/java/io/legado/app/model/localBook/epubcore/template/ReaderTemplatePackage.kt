@@ -205,6 +205,16 @@ internal object ReaderTemplatePackage {
 
     // === 内部 ===
 
+    /**
+     * 只解出包内条目（**不校验清单、不落盘**）：供导入兼容层按**内容**判别包形态。
+     *
+     * ⚠️ 为什么需要（2026-10-12 用户实测「导入主题竟然只支持 json」）：archive 导出的模板包是 ZIP，
+     * 包内**只有** `readerTemplate.json`（无 `package.json`）⇒ 只认我方包形态就导不进来。
+     * 复用同一份 [readZip]（条目名归一化 + 单条/总量上限）⇒ 不另造一套解包口径。异常转 failure。
+     */
+    fun readEntries(bytes: ByteArray): Result<Map<String, ByteArray>> =
+        runCatching { readZip(bytes) }
+
     /** 归一化包内条目名；非法（绝对路径/点段/反斜杠/编码）返回 null。 */
     private fun normalizeEntryName(raw: String): String? {
         val name = raw.replace('\\', '/').trim().removePrefix("./")

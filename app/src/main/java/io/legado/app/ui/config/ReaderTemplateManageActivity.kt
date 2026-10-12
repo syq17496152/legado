@@ -35,7 +35,6 @@ import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.utils.readText
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
@@ -94,7 +93,11 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
         lifecycleScope.launch {
             val outcome = try {
                 withContext(Dispatchers.IO) {
-                    ReaderTemplateManager.importJson(uri.readText(this@ReaderTemplateManageActivity))
+                    // ⚠️ 必须按**字节**读（不能 readText）：ZIP 是二进制，按文本读必然乱码 ⇒
+                    // 表现就是"导入只支持 json"（archive 导出的模板包恰是 ZIP）。形态判别在导入层按内容做。
+                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw IllegalStateException("无法读取所选文件")
+                    ReaderTemplateManager.importFile(bytes)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -297,7 +300,7 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
     private fun showAddActions() {
         val builtins = entriesState.value.filter { it.source == ReaderTemplateManager.Source.BUILTIN }
         val labels = buildList {
-            add("导入模板 JSON")
+            add("导入模板（JSON / ZIP 包）")
             if (builtins.isNotEmpty()) add("从内置模板复制…")
         }
         showDialogFragment(
@@ -309,8 +312,9 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
                 if (index == 0) {
                     importTemplate.launch {
                         mode = HandleFileContract.FILE
-                        title = "导入模板 JSON"
-                        allowExtensions = arrayOf("json")
+                        title = "导入模板（JSON / ZIP 包）"
+                        // ZIP 放行：archive 导出的模板包就是 ZIP（此前只放行 json ⇒ 用户导不进来）
+                        allowExtensions = arrayOf("json", "zip")
                     }
                 } else {
                     pickBuiltinToCopy(builtins)

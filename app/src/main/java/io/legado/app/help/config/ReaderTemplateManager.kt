@@ -248,6 +248,16 @@ object ReaderTemplateManager {
         return ImportOutcome(result.template?.id, result.report.map { it.toIssue() })
     }
 
+    /**
+     * 导入**任意来源**模板文件（JSON 或 ZIP 包，含 archive 导出的 zip）并入库。
+     *
+     * ZIP 形态判别在数据层按**内容**（ZIP 魔数）完成 ⇒ 调用方只管把所选文件的字节交进来。
+     */
+    fun importFile(bytes: ByteArray): ImportOutcome {
+        val result = repository.importAny(bytes)
+        return ImportOutcome(result.template?.id, result.report.map { it.toIssue() })
+    }
+
     /** 导出模板 JSON（内置与用户模板皆可导出）。 */
     fun exportJson(id: String): String? =
         loadCatalog().entries.firstOrNull { it.id == id }?.template?.toJson()

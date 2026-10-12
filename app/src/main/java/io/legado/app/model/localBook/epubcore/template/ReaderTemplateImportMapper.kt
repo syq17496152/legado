@@ -189,7 +189,85 @@ internal object ReaderTemplateImportMapper {
         return template.copy(schemaVersion = TargetSchemaVersion)
     }
 
+    /**
+     * 导入**任意来源**的模板文件（C5 的完整落地）：①单文件 JSON；②ZIP 包（archive 导出包 / 我方模板包）。
+     *
+     * ⚠️ 真机缺口（2026-10-12 用户实测「导入主题竟然只支持 json？？不应该是 archive 导出的 zip 么」）：
+     * 导入入口此前把所选文件**当 UTF-8 文本**读，ZIP 二进制必然读成乱码 ⇒ 实际只能导 JSON。
+     * archive 导出的正是 ZIP（包内单文件 `readerTemplate.json`，素材内联，无 `package.json`，
+     * 见 `archive-theme-compat-test.md` §一）⇒ 必须在**内容层**判别形态，不要求用户自己解压。
+     *
+     * 判别口径：按 **ZIP 魔数 `PK`**（不看扩展名/MIME —— 部分文件提供方给 `application/octet-stream`）。
+     */
+    fun importAny(bytes: ByteArray, remapBuiltinIds: Boolean = true): ImportResult {
+        if (bytes.isEmpty()) {
+            return ImportResult(null, listOf(ReportEntry(Level.ERROR, "empty-file", "文件为空，无法导入")))
+        }
+        if (!isZip(bytes)) {
+            return importTemplateJson(decodeText(bytes), remapBuiltinIds)
+        }
+        val entries = ReaderTemplatePackage.readEntries(bytes).getOrElse { error ->
+            return ImportResult(
+                null,
+                listOf(ReportEntry(Level.ERROR, "bad-zip", "模板包解压失败：${error.localizedMessage}"))
+            )
+        }
+        val templateText = pickTemplateEntryText(entries)
+            ?: return ImportResult(
+                null,
+                listOf(
+                    ReportEntry(
+                        Level.ERROR,
+                        "no-template-in-zip",
+                        "模板包内未找到 ${ReaderTemplatePackage.TemplateEntryName}（不是模板包？）"
+                    )
+                )
+            )
+        return importTemplateJson(templateText, remapBuiltinIds).withNote(externalAssetNote(entries))
+    }
+
     // === 内部 ===
+
+    /** ZIP 魔数：`PK\x03\x04` / 空包 `PK\x05\x06` / 跨卷 `PK\x07\x08` 皆以 `PK` 起头。 */
+    private fun isZip(bytes: ByteArray): Boolean =
+        bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
+
+    /** 文本解码（去 UTF-8 BOM；非法字节用替换字符而非抛错 —— 由随后的 JSON 解析给明确报错）。 */
+    private fun decodeText(bytes: ByteArray): String =
+        String(bytes, Charsets.UTF_8).removePrefix("\uFEFF")
+
+    /**
+     * 从包内取模板 JSON 文本。
+     *
+     * 顺序：①包根 `readerTemplate.json`（archive 导出包与我方包的默认路径）；②清单 `template`
+     * 声明的路径（我方包可自定义路径，清单本身不可信 ⇒ 路径仍由 [ReaderTemplatePackage] 归一化校验后查表）。
+     */
+    private fun pickTemplateEntryText(entries: Map<String, ByteArray>): String? {
+        entries[ReaderTemplatePackage.TemplateEntryName]?.let { return it.toString(Charsets.UTF_8) }
+        val manifestText = entries[ReaderTemplatePackage.ManifestName]?.toString(Charsets.UTF_8) ?: return null
+        val path = ReaderTemplatePackage.parseManifest(manifestText).getOrNull()?.templatePath ?: return null
+        return entries[path]?.toString(Charsets.UTF_8)
+    }
+
+    /**
+     * 外部素材提示：包清单声明了素材（非内联）时**明说**"本次只导入了模板，素材未入库"。
+     *
+     * 为什么必须报：模板 CSS/HTML 可能引用 `asset://别名` ⇒ 静默丢素材会让用户看到"模板导入成功但样式缺失"，
+     * 无法归因（本项目铁证⑦③：可感知的边界处理必须留痕）。archive 导出包素材全内联 ⇒ 一般不触发。
+     */
+    private fun externalAssetNote(entries: Map<String, ByteArray>): ReportEntry? {
+        val manifestText = entries[ReaderTemplatePackage.ManifestName]?.toString(Charsets.UTF_8) ?: return null
+        val count = ReaderTemplatePackage.parseManifest(manifestText).getOrNull()?.resources?.size ?: 0
+        if (count <= 0) return null
+        return ReportEntry(
+            Level.WARNING,
+            "external-assets-skipped",
+            "模板包声明了 $count 项外部素材，本次仅导入模板本体（若正文样式缺失，请改用素材内联的模板）"
+        )
+    }
+
+    private fun ImportResult.withNote(note: ReportEntry?): ImportResult =
+        if (note == null) this else copy(report = report + note)
 
     private fun requiredFieldErrors(json: JsonObject): ReportEntry? {
         val type = json.get("type")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()

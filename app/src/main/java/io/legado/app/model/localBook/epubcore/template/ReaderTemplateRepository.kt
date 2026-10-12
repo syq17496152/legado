@@ -106,6 +106,28 @@ internal class ReaderTemplateRepository(
     /** 导出单模板 JSON（用于分享/备份）。 */
     fun exportJson(id: String): String? = get(id)?.toJson()
 
+    /**
+     * 导入**任意来源**模板文件并入库：单文件 JSON 或 ZIP 包（含 archive 导出包）。
+     *
+     * 与 [importJson] 同一条落库路径（形态判别在 [ReaderTemplateImportMapper.importAny] 内完成），
+     * 避免出现"ZIP 走另一套入库口径"的分裂。
+     */
+    fun importAny(bytes: ByteArray): ReaderTemplateImportMapper.ImportResult {
+        val result = ReaderTemplateImportMapper.importAny(bytes)
+        val template = result.template ?: return result
+        if (!save(template)) {
+            return ReaderTemplateImportMapper.ImportResult(
+                template = null,
+                report = result.report + ReaderTemplateImportMapper.ReportEntry(
+                    ReaderTemplateImportMapper.Level.ERROR,
+                    "save-failed",
+                    "模板入库失败：${lastError.orEmpty()}"
+                )
+            )
+        }
+        return result
+    }
+
     /** 清空用户模板（内置模板来自 assets，不受影响）。 */
     fun clearUserTemplates(): Int {
         val count = list().size
