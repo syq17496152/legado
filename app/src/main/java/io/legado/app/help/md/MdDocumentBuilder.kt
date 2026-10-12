@@ -5,6 +5,8 @@ import org.commonmark.Extension
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.node.AbstractVisitor
+import org.commonmark.node.Block
+import org.commonmark.node.Document
 import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.Image
 import org.commonmark.node.Link
@@ -27,6 +29,9 @@ import org.commonmark.renderer.text.TextContentRenderer
  *   不进入 DOM（防导入不可信 md 时的注入面）；用户可在 3.x 阶段用「允许内嵌 HTML」开关显式放开；
  * - **单章上限 [MaxChapterChars]（2Mi，P-12）**：超限**抛显式错误**而非静默截断（
  *   `uptream` 对照：archive/NG 对 md 无此约束，截断会让用户以为"文件就是这样"）；
+ * - **单章块数上限 [MaxChapterBlocks]（20k，AD-15/§1.3「有界文档 2Mi/20k blocks」）**：
+ *   字符上界**不足以**约束渲染代价 —— 2Mi 字符可写成十几万个列表项/引用块（如 `- \n- \n…`），
+ *   字符数达标但 **DOM 节点数**爆炸 ⇒ 排版/分页被拖垮、承载面内存飙升。两条上界**都要**，均抛显式错误；
  * - **富渲染标注**：`hasMermaid`/`hasMath` 在**构建期**由 AST 判定（不靠运行期嗅探），
  *   供 `BackendSelectionPolicy` 直接消费（AD-30 要求"构建期标注"）；
  * - **围栏块 mermaid 保形**：` ```mermaid ` 经渲染成为 `<pre class="mermaid">`（mermaid.run 的入参形态），
@@ -39,8 +44,19 @@ object MdDocumentBuilder {
     /** 单章上限 2Mi（P-12：口径为**单章**，非整本）。 */
     const val MaxChapterChars = 2 * 1024 * 1024
 
+    /**
+     * 单章**块数**上限 20k（AD-15/§1.3「有界文档 2Mi/20k blocks」）。
+     *
+     * 与 [MaxChapterChars] 是**两条独立上界**：字符数管输入体量，块数管**渲染节点规模**
+     * （2Mi 字符能写出十几万个块 ⇒ 仅靠字符上界挡不住 DOM 爆炸）。
+     */
+    const val MaxChapterBlocks = 20_000
+
     /** 超限错误（显式、不截断）。 */
     class MdChapterTooLargeException(message: String) : NoStackTraceException(message)
+
+    /** 块数超限错误（显式、不截断）。 */
+    class MdChapterTooManyBlocksException(message: String) : NoStackTraceException(message)
 
     /**
      * 图片目标改写器（S3① 相对路径图片内联的唯一 seam）。
@@ -107,6 +123,14 @@ object MdDocumentBuilder {
         // 图片目标改写必须在渲染之前（在 AST 上改 destination，不做 HTML 事后正则替换 ⇒
         // 不会误伤属性/正文里恰好同形的字符串）
         if (imageResolver != null) inlineRelativeImages(document, imageResolver)
+        // 块数上界（AD-15/§1.3「有界文档 2Mi/20k blocks」）：必须在**改写之后**统计（autolink 会新增节点）、
+        // 在**渲染之前**拦截（越界就别渲染，不白付排版与内存代价）。
+        val blocks = countBlocks(document)
+        if (blocks > MaxChapterBlocks) {
+            throw MdChapterTooManyBlocksException(
+                "本章 Markdown 块数过多（$blocks > $MaxChapterBlocks），请拆分为更小的章节"
+            )
+        }
         val hasMermaid = hasMermaidBlock(document)
         val html = renderHtml(document, options, hasMermaid)
         val plainText = TextContentRenderer.builder()
@@ -120,6 +144,23 @@ object MdDocumentBuilder {
             hasMermaid = hasMermaid,
             hasMath = hasMath(document)
         )
+    }
+
+    /**
+     * 统计块级节点数（**不含根 [Document]**）。
+     *
+     * 手写树遍历而不用 `AbstractVisitor`：这里只要"数块"，按 `Block` 基类直接判断更稳
+     * （不依赖访问器对各类节点的分派实现细节）；递归深度 = markdown 嵌套深度（很浅，安全）。
+     */
+    private fun countBlocks(root: Node): Int {
+        var count = 0
+        var child = root.firstChild
+        while (child != null) {
+            if (child is Block) count++
+            count += countBlocks(child)
+            child = child.next
+        }
+        return count
     }
 
     private fun renderHtml(document: Node, options: Options, hasMermaid: Boolean): String {
