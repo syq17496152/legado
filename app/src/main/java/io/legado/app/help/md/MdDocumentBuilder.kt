@@ -1,5 +1,6 @@
 package io.legado.app.help.md
 
+import io.legado.app.constant.ReaderDocumentLimits
 import io.legado.app.exception.NoStackTraceException
 import org.commonmark.Extension
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -41,16 +42,22 @@ import org.commonmark.renderer.text.TextContentRenderer
  */
 object MdDocumentBuilder {
 
-    /** 单章上限 2Mi（P-12：口径为**单章**，非整本）。 */
-    const val MaxChapterChars = 2 * 1024 * 1024
+    /**
+     * 单章上限 2Mi（P-12：口径为**单章**，非整本）。
+     *
+     * ⚠️ 自 2026-10-13 起取 [`ReaderDocumentLimits.MaxSourceChars`]：与统一文档模型
+     * （`TextReaderDocument`）及富渲染探测（`TextRichContentProbe`）**同源** —— 三处各写死字面量时
+     * 会出现"同一章一端通过、另一端抛出"的静默分裂（详见该常量对象 KDoc）。
+     */
+    const val MaxChapterChars = ReaderDocumentLimits.MaxSourceChars
 
     /**
      * 单章**块数**上限 20k（AD-15/§1.3「有界文档 2Mi/20k blocks」）。
      *
      * 与 [MaxChapterChars] 是**两条独立上界**：字符数管输入体量，块数管**渲染节点规模**
-     * （2Mi 字符能写出十几万个块 ⇒ 仅靠字符上界挡不住 DOM 爆炸）。
+     * （2Mi 字符能写出十几万个块 ⇒ 仅靠字符上界挡不住 DOM 爆炸）。同源见 [`ReaderDocumentLimits.MaxBlocks`]。
      */
-    const val MaxChapterBlocks = 20_000
+    const val MaxChapterBlocks = ReaderDocumentLimits.MaxBlocks
 
     /** 超限错误（显式、不截断）。 */
     class MdChapterTooLargeException(message: String) : NoStackTraceException(message)

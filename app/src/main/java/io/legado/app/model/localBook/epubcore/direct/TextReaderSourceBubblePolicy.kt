@@ -1,5 +1,6 @@
 package io.legado.app.model.localBook.epubcore.direct
 
+import io.legado.app.constant.ReaderDocumentLimits
 import io.legado.app.help.ImageSourceOptions
 import io.legado.app.help.ParsedImageSource
 import okio.ByteString.Companion.decodeBase64
@@ -15,7 +16,8 @@ import java.util.Locale
  * A null result leaves the source image on its normal loading path.
  */
 internal object TextReaderSourceBubblePolicy {
-    private const val MAX_SOURCE_CHARS = 2 * 1024 * 1024
+    // 单一来源（2026-10-13，任务 3.1）：与统一文档模型 / md 构建 / 富渲染探测同源
+    private const val MAX_SOURCE_CHARS = ReaderDocumentLimits.MaxSourceChars
     private const val MAX_LABEL_CHARS = 24
     private val displayKeys = listOf("displayText", "num", "\$num", "\${num}", "{{num}}", "count", "text", "label")
     private val colorKeys = listOf("displayColor", "color", "\$color", "\${color}", "{{color}}")

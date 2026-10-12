@@ -1,5 +1,6 @@
 package io.legado.app.model.localBook.epubcore.direct
 
+import io.legado.app.constant.ReaderDocumentLimits
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
@@ -9,8 +10,11 @@ import org.jsoup.select.NodeVisitor
 
 /** Canonical ordinary-book text shared by the visible document and read aloud. */
 object TextReaderDocument {
-    const val MAX_SOURCE_CHARS = 2 * 1024 * 1024
-    const val MAX_BLOCKS = 20_000
+    // ⚠️ 有界文档上界取**单一来源** `ReaderDocumentLimits`（2026-10-13 统一，任务 3.1）：
+    // 与 md 构建（`MdDocumentBuilder`）/ 富渲染探测（`TextRichContentProbe`）同源，
+    // 否则同一章会"一端通过、另一端抛出"（详见该常量对象 KDoc）。
+    const val MAX_SOURCE_CHARS = ReaderDocumentLimits.MaxSourceChars
+    const val MAX_BLOCKS = ReaderDocumentLimits.MaxBlocks
     data class InlineImage(val offset: Int, val image: TextReaderImage)
     data class Block(val text: String = "", val image: TextReaderImage? = null,
                      val inlineImages: List<InlineImage> = emptyList())
