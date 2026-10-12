@@ -19,6 +19,7 @@ import androidx.webkit.WebViewFeature
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import io.legado.app.constant.AppLog
+import io.legado.app.help.config.ReaderMetrics
 import io.legado.app.help.md.MdRichRenderInjector
 import io.legado.app.help.md.ReaderTemplateSandboxDocument
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
@@ -602,6 +603,8 @@ class TemplateRenderBackend(
                 }
                 if (type != null && !richReported) {
                     richReported = true
+                    // S4 产品指标：富渲染失败率分母（请求注入即计入）
+                    ReaderMetrics.app.richRenderRequested()
                     webView?.evaluateJavascript(ReaderTemplateHostDocument.postScript(type), null)
                 }
                 AppLog.putDebugWithTag(
@@ -623,10 +626,14 @@ class TemplateRenderBackend(
                 remeasure(RenderToken(generation))
             }
 
-            state == StateInjectUnavailable -> AppLog.putDebugWithTag(
-                AppLog.TAG_READER_TEMPLATE,
-                "rich unavailable (runtime not injected): chapter=${currentChapter?.chapterIndex}"
-            )
+            state == StateInjectUnavailable -> {
+                // S4 产品指标：富渲染失败率分子（运行时缺失 ⇒ 未成功渲染）
+                ReaderMetrics.app.richRenderFailed()
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_READER_TEMPLATE,
+                    "rich unavailable (runtime not injected): chapter=${currentChapter?.chapterIndex}"
+                )
+            }
 
             else -> AppLog.putDebugWithTag(AppLog.TAG_READER_TEMPLATE, "render state: $state")
         }

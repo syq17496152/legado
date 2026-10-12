@@ -99,6 +99,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReaderMetrics
 import io.legado.app.help.config.ReaderTemplateManager
 import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.help.config.ReadBookConfig
@@ -2344,6 +2345,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         resetPageOffset: Boolean,
         success: (() -> Unit)?
     ) {
+        // S4 产品指标：内容首次加载即记一次"打开"。⚠️ 不能挂在 `onResume` 的契约键函数上——
+        // 首帧 onResume 时 `ReadBook.book` 可能尚未就绪 ⇒ 该函数早退、此后不再有 onResume ⇒ **恒漏计**
+        // （本轮真机实测：bookOpen 0→0，而同批 templateOpen 正常 +1）。
+        reportBookOpenedOnce()
         lifecycleScope.launch {
             if (isTextRichMode()) {
                 // 阶段 4.14：启用页面模板时走模板沙箱面（同一 WebView 承载位），否则走文本富渲染面
@@ -2588,6 +2593,12 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (active) {
             if (textRichActive) switchTextRich(false)
             binding.readView.cancelSelect(true)
+            // S4 产品指标：模板面**真正被用上**（同书只记一次，供"模板启用率"分子）
+            val bookKey = ReadBook.book?.bookUrl
+            if (bookKey != null && metricsTemplateBookKey != bookKey) {
+                metricsTemplateBookKey = bookKey
+                ReaderMetrics.app.templateSurfaceUsed()
+            }
         } else {
             templateBackend?.dispose()
             templateBackend = null
@@ -2831,6 +2842,20 @@ class ReadBookActivity : BaseReadBookActivity(),
     /** 阅读面契约键（模板总开关 + 选中模板 + 日夜）最近一次已应用的值；用于返回前台时判定是否需重载。 */
     private var lastReadSurfaceKey: String? = null
 
+    /** S4：模板启用率的**去重键**（同一本书只记一次"用上模板面"）。 */
+    private var metricsTemplateBookKey: String? = null
+
+    /** S4：md 使用率的**去重键**（同一本书只记一次"打开"）。 */
+    private var metricsBookKey: String? = null
+
+    /** S4：记一次"打开"（同书去重；内容首次加载时调用，见 [upContent] 内的铁证注释）。 */
+    private fun reportBookOpenedOnce() {
+        val book = ReadBook.book ?: return
+        if (metricsBookKey == book.bookUrl) return
+        metricsBookKey = book.bookUrl
+        ReaderMetrics.app.bookOpened(isMarkdown = book.isMarkdown)
+    }
+
     /**
      * 解析当前书该用哪套模板（含内容本身）。
      *
@@ -2944,6 +2969,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                     "template render error: $failure, degraded=${outcome?.degraded}, " +
                             "backend=${outcome?.backend}"
                 )
+                // S4 产品指标：只在**真的发生降级**时计数（被熔断拒绝的不重复计 ⇒ 与"降级不反复"同口径）
+                if (outcome?.degraded == true) ReaderMetrics.app.templateDegraded()
                 switchTemplate(false)
                 binding.readView.upContent(0, true)
             }
@@ -5970,6 +5997,15 @@ class ReadBookActivity : BaseReadBookActivity(),
         switchTextRich(false)
         switchTemplate(false)
         renderGovernor.dispose()
+        // S4 产品指标：离页时输出一次**只读摘要**（仅计数与比率，不含书名/链接/正文等任何业务数据）
+        runCatching {
+            val m = ReaderMetrics.app.snapshot()
+            AppLog.putDebug(
+                "阅读指标摘要：打开=${m.bookOpens}, md=${m.mdOpens}, 模板=${m.templateOpens}, " +
+                        "降级=${m.templateDegrades}, 富渲染请求=${m.richAttempts}, 富渲染失败=${m.richFailures}, " +
+                        "md率=${"%.2f".format(m.mdUsageRate)}, 模板率=${"%.2f".format(m.templateUsageRate)}"
+            )
+        }
         super.onDestroy()
         epubCoreRequestSeq++
         epubCoreLoadJob?.cancel()
