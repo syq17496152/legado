@@ -77,7 +77,77 @@
    * 时已量好、且与结构无关，据此推出的页高是稳定的。
    */
   function visibleHeight() {
-    return (currentViewportHeight() || viewportHeight) - chromeHeight + slotEmptyHeight;
+    var vp = currentViewportHeight() || viewportHeight;
+    var slot = bodySlots() ? bodySlots()[0] : null;
+    if (root && slot) {
+      // ⚠️ 占位必须**按当前壳**取：首页壳与续页壳结构不同（首页常有 hero/封面大块，续页没有）
+      // ⇒ 沿用"注入前按首页测的那一份"会让续页**多扣一次首页专属装饰**：页框变小、页脚上移、
+      // 页脚与视口底之间留出大片空白（用户实测：「阅读页底部这么大空白」，两张对照截图：首页到底、
+      // 第 2 页起留白）。故按壳缓存并随壳切换重算，见 [chromeForShell]。
+      // ⚠️ 此处**不加** `slotEmptyHeight`：[chromeForShell] 逐子元素累加时**已排除正文槽**，
+      // 槽的 border-box 高就等于页框高；再叠加槽空高会让页框多出这一截、把页脚压到视口底之下
+      // （首页同样错位）。`slotEmptyHeight` 只服务于"整体高"旧口径（`chromeHeight`），两口径不可混用。
+      return vp - chromeForShell(shellName(), slot);
+    }
+    return vp - chromeHeight + slotEmptyHeight;
+  }
+
+  /**
+   * 当前壳的"非正文占位"高（页眉 + 装饰带 + 页脚等）。
+   *
+   * 口径：**布局事实** = 模板根壳与正文槽的 `getBoundingClientRect` 之差 ——
+   * 上占位 = 槽 `rect.top` − 根壳 `rect.top`；下占位 = 根壳 `rect.bottom` − 槽 `rect.bottom`。
+   *
+   * ⚠️ 为什么不用"逐子元素累加"（2026-10-12 真机铁证）：① `offsetHeight` 是 `HTMLElement` 专有，
+   * 对 **SVG 装饰带**恒为 `undefined`；② 子元素 margin / 伪元素 / 折叠边距都不在 `rect.height` 里
+   * ⇒ 累加恒偏小（实测偏小 59px：占位 241 竟小于正文槽顶 244，页框反被撑高、页脚压出视口）。
+   * rect 之差由浏览器算好，HTML/SVG/边距一并覆盖。按 `shell` 名缓存 ⇒ 同一壳只测一次
+   * （读布局属性会强制同步布局，不在翻页热路径反复读）。
+   */
+  var chromeByShell = {};
+
+  /** 最近一次结算实际生效的占位（诊断自证用；见 [reportPageFrame]）。 */
+  var shellChromeNow = 0;
+
+  /** 最近一次占位量取的 rect 事实（诊断自证用；"占位不对"时能一眼看出是上/下哪一段错）。 */
+  var shellRectDebug = '';
+  function chromeForShell(shell, slot) {
+    if (!root || !slot) return chromeHeight;
+    var key = shell || 'none';
+    if (chromeByShell[key] !== undefined) {
+      shellChromeNow = chromeByShell[key];
+      return shellChromeNow;
+    }
+    // 此刻正文槽**尚未冻结**（调用点在 freezeSlot 之前）⇒ 根壳内"槽以外"的占位与槽自身高无关。
+    // ⚠️ 上占位必须取**槽的视口顶** `sr.top`（不是 `sr.top - rr.top`）：根壳自身离视口顶还有一段
+    // 偏移（实测 10px，来自沙箱宿主文档）——只算"根壳内"的相对量会漏掉它，页框总高多 10px ⇒
+    // 页脚下沿被挤出视口（真机实测：内容底 864 > 视口 854）。目标口径 = **内容底边贴视口底**。
+    var total = chromeHeight;
+    var rr = null;
+    var sr = null;
+    try {
+      rr = root.getBoundingClientRect();
+      sr = slot.getBoundingClientRect();
+    } catch (error) {
+      rr = null;
+      sr = null;
+    }
+    if (rr && sr) {
+      var top = sr.top;
+      var bottom = rr.bottom - sr.bottom;
+      total = top + bottom;
+      shellRectDebug = 'rt' + Math.round(rr.top) + ',rb' + Math.round(rr.bottom) +
+        ',st' + Math.round(sr.top) + ',sb' + Math.round(sr.bottom) +
+        ',sy' + Math.round(window.scrollY || 0);
+    }
+    chromeByShell[key] = total;
+    shellChromeNow = total;
+    return total;
+  }
+
+  /** 换章/重开时清空按壳的占位缓存（结构可能整体变化）。 */
+  function resetChromeCache() {
+    chromeByShell = {};
   }
 
   /**
@@ -201,18 +271,35 @@
   function reportPageFrame(slot, pageHeight) {
     if (!window.ReaderTemplateRuntime) return;
     var rect = null;
+    var rootRect = null;
     try {
       rect = slot.getBoundingClientRect();
+      rootRect = root ? root.getBoundingClientRect() : null;
     } catch (error) {
       rect = null;
+      rootRect = null;
     }
     window.ReaderTemplateRuntime.send('renderState', {
       state: 'page-frame,h=' + Math.round(pageHeight) +
         ',client=' + Math.round(slot.clientHeight || 0) +
         ',scroll=' + Math.round(slot.scrollHeight || 0) +
-        ',vp=' + Math.round(viewportHeight) + ',chrome=' + Math.round(chromeHeight) +
+        // `vp` 必须**实时读**（结算那一刻的真实视口）：`initialize` 抓的 `viewportHeight` 在沙箱
+        // 帧尚未布局完时会退化成 0 ⇒ 用它做"页框底是否贴视口底"的判据会**假通过**（空真）。
+        ',vp=' + Math.round(currentViewportHeight() || viewportHeight) +
+        ',vpInit=' + Math.round(viewportHeight) +
+        ',chrome=' + Math.round(chromeHeight) +
+        // 按壳占位与壳名（本次修复的自证）：`chrome` 与实际生效占位不一致才能看出
+        // "续页仍按首页占位扣减"（症状＝页脚上移、页脚后留白），也才能与 `shell` 对照定位
+        ',chromeNow=' + Math.round(shellChromeNow) + ',shell=' + shellName() +
+        // 占位量取的 rect 事实（`crf`：根壳/槽的视口 rect 与滚动位）：「占位不对」时一眼看出是哪一段错
+        ',crf=' + shellRectDebug +
         ',empty=' + Math.round(slotEmptyHeight) +
         ',top=' + (rect ? Math.round(rect.top) : -1) +
+        // 内容底边自证：根壳底（`rb`）与正文槽底（`sb`）⇒ 加下占位（`rb − sb`）即**内容底边**；
+        // 它是判定"是否贴满视口/是否溢出"的**独立**布局事实（不依赖页框高公式本身，故可证伪）
+        ',rb=' + (rootRect ? Math.round(rootRect.bottom) : -1) +
+        ',sb=' + (rect ? Math.round(rect.bottom) : -1) +
+        ',sy=' + Math.round(window.scrollY || 0) +
         // 结构无关定位（C1）的自证：root 高（页眉+正文+页脚）与正文偏移 —— 缺了它
         // "换壳后正文错位/页码跳飞"只能靠肉眼比对，无法定位是哪一项量错了
         ',root=' + Math.round((root && root.scrollHeight) || 0) +
@@ -293,6 +380,7 @@
     // 会带到新章节的首页，症状是新章开篇失去封面页）
     bodyOffset = 0;
     pageCount = 1;
+    resetChromeCache();                 // 换章 ⇒ 按壳占位缓存作废（结构可能整体变化）
     // 结构状态以运行为准（runtime 的 `renderShell` 已在 initialize 之前把首页结构挂上）
     flowShell = shellName();
     root = document.getElementById('reader-template-root');
