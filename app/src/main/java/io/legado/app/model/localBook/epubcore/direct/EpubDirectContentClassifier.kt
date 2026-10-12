@@ -383,8 +383,17 @@ internal object EpubDirectContentClassifier {
         "(?:-webkit-)?column-(?:count|width|gap|fill)\\s*:",
         RegexOption.IGNORE_CASE
     )
+    /**
+     * 出版方**竖排**声明才构成「语义排版」信号。
+     *
+     * `horizontal-tb`（含 EPUB 极常见的 `-epub-writing-mode: horizontal-tb`）是默认横排、不构成出版方排版，
+     * 若据此判定 PUBLISHER_STYLED ⇒ 该章跳过阅读器归一化 ⇒ 正文退回 UA 默认字号（16px）、
+     * 阅读器字号/行高/左右安全区全部失效（铁证 2026-10-13：`req font=37.5` 而下发到 WebView 的
+     * 计算字号只有 16px）。判据与 [EpubReaderContentModePolicy] 的 `startsWith("vertical")` 口径对齐。
+     */
     private val PUBLISHER_WRITING_MODE = EpubRegex.compile(
-        "(?:-webkit-)?writing-mode\\s*:",
+        "(?:^|[;{\\s])(?:-(?:webkit|epub)-)?writing-mode\\s*:\\s*" +
+            "(?:vertical(?:-[a-z]+)?|sideways(?:-[a-z]+)?|tb-(?:rl|lr))",
         RegexOption.IGNORE_CASE
     )
     private val PUBLISHER_BACKGROUND_IMAGE = EpubRegex.compile(

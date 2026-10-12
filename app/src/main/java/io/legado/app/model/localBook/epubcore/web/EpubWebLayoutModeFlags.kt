@@ -44,11 +44,16 @@ internal object EpubWebLayoutCssBuilder {
         request: EpubWebLayoutRequest,
         flags: EpubWebLayoutModeFlags = EpubWebLayoutModeFlagsFactory.from(request)
     ): String {
-        val readerFontFace = if (flags.applyReaderFont) {
+        // `@font-face` 只在**确有字体文件 URL**时产出。
+        // 铁证 2026-10-13：`applyReaderFont` 只要求 `readerFontFamily != null`，而用户**未选自定义字体**时
+        // 字体名是系统族（sans-serif/serif/monospace）、`readerFontUrl` 为 null ⇒ 旧实现对 URL 用 `!!`
+        // 直接抛 NPE，被 `wrapHtml` 的 `runCatching` 吞掉 ⇒ 整个 Web 布局失败并降级到纯文本（出版方样式全丢）。
+        val readerFontUrl = request.readerFontUrl?.takeIf { it.isNotBlank() }
+        val readerFontFace = if (flags.applyReaderFont && readerFontUrl != null) {
             """
             @font-face {
               font-family: ${request.readerFontFamily!!.cssString()};
-              src: url('${request.readerFontUrl!!.cssUrl()}');
+              src: url('${readerFontUrl.cssUrl()}');
             }
             """.trimIndent()
         } else {
