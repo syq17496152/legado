@@ -2737,18 +2737,24 @@ class ReadBookActivity : BaseReadBookActivity(),
         textRichLoading = true
         try {
             val chapter = withContext(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, index) }
+            var rawLen = 0
             val prepared = chapter?.let {
                 withContext(IO) {
+                    val raw = richTextRawContent(book, it)
+                    rawLen = raw?.length ?: 0
                     runCatching {
                         TextRichContentProbe.prepare(
-                            richTextRawContent(book, it),
+                            raw,
                             allowPlainText = richTextAllowsPlainText()
                         )
                     }.getOrNull()
                 }
             }
             if (chapter == null || prepared == null) {
-                AppLog.putDebug("text rich prepare unavailable: chapter=${chapter != null}, prepared=${prepared != null}（回落 canvas）")
+                AppLog.putDebug(
+                    "text rich prepare unavailable: chapter=${chapter != null}, prepared=${prepared != null}, " +
+                            "rawLen=$rawLen（回落 canvas；有界文档超限 2Mi 字符 / 20k 块亦在此拒）"
+                )
                 switchTextRich(false)
                 binding.readView.upContent(relativePosition, resetPageOffset)
                 if (relativePosition == 0) upSeekBarProgress()
@@ -3045,11 +3051,14 @@ class ReadBookActivity : BaseReadBookActivity(),
         templateLoading = true
         try {
             val chapter = withContext(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, index) }
+            var rawLen = 0
             val prepared = chapter?.let {
                 withContext(IO) {
+                    val raw = richTextRawContent(book, it)
+                    rawLen = raw?.length ?: 0
                     runCatching {
                         TextRichContentProbe.prepare(
-                            richTextRawContent(book, it),
+                            raw,
                             allowPlainText = richTextAllowsPlainText()
                         )
                     }.getOrNull()
@@ -3058,7 +3067,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (chapter == null || prepared == null) {
                 AppLog.putDebugWithTag(
                     AppLog.TAG_READER_TEMPLATE,
-                    "prepare unavailable (chapter=${chapter != null}, prepared=${prepared != null}) ⇒ 回落文本富渲染"
+                    "prepare unavailable (chapter=${chapter != null}, prepared=${prepared != null}, " +
+                            "rawLen=$rawLen) ⇒ 回落文本富渲染；有界文档超限 2Mi 字符 / 20k 块亦在此拒"
                 )
                 switchTemplate(false)
                 loadTextRichContentAwait(relativePosition, resetPageOffset, success)

@@ -1,5 +1,8 @@
 package io.legado.app.ui.book.read.textweb
 
+import io.legado.app.help.md.MdDocumentBuilder
+import org.jsoup.Jsoup
+
 /**
  * 文本富渲染内容探测（epub-md-rich-rendering 阶段 3.1/3.2 接线配套）。
  *
@@ -49,17 +52,41 @@ object TextRichContentProbe {
      *
      * 默认 `false` ⇒ 保持既有语义（仅 md 走富渲染面）；非 md 的放开由调用方按「阅读页模板总开关」
      * 决定（默认关 ⇒ 零回归）。
+     *
+     * **有界文档（AD-15 / §1.3「单章 2Mi UTF-16 / 20,000 blocks」）**：超限一律返回 null ⇒
+     * 调用方按既有语义**回落 canvas 基础排版**（软切，不是报错、更不是静默截断）。口径与 md 侧
+     * **同源复用** [MdDocumentBuilder.MaxChapterChars]/[MdDocumentBuilder.MaxChapterBlocks]，
+     * 避免"在线正文/txt 一套上限、md 另一套上限"的两套口径分裂。
      */
     fun prepare(raw: String?, allowPlainText: Boolean = false): RichContent? {
-        extractUseHtmlInner(raw)?.let { inner ->
-            return RichContent(inner, detectMermaid(inner), detectMath(inner))
-        }
-        if (!allowPlainText) return null
         val text = raw?.trim().orEmpty()
         if (text.isEmpty()) return null
-        val html = if (HtmlTagRegex.containsMatchIn(text)) text else toParagraphHtml(text)
+        // 字符上界：输入体量超限即"不承载"（避免把超大文档交给 WebView 承载面）
+        if (text.length > MdDocumentBuilder.MaxChapterChars) return null
+        val inner = extractUseHtmlInner(raw)
+        val html = when {
+            inner != null -> inner
+            !allowPlainText -> return null
+            // 能判定为 HTML 片段就原样使用，否则按空行切段、文本转义后包 <p>
+            HtmlTagRegex.containsMatchIn(text) -> text
+            else -> toParagraphHtml(text)
+        }
+        // 块数上界：字符数达标但节点数爆炸（十几万个极短段落/引用块）同样会拖垮排版与分页 ⇒ 一并拦
+        if (countBlocks(html) > MdDocumentBuilder.MaxChapterBlocks) return null
         return RichContent(html, detectMermaid(html), detectMath(html))
     }
+
+    /**
+     * 统计 HTML 块级节点数（DOM 元素计数）。
+     *
+     * 用 jsoup 解析后计数（纯 Java ⇒ JVM 可测）：比"正则数标签名"更接近真实 DOM 规模，
+     * 也避免"仅按标签名判断"这类既往失守在计数层重演。**解析结果只用于计数**，不回流到输出
+     * （不把 jsoup 的规范化改写带进正文）。
+     *
+     * 解析异常时返回 0（**宽松放行**）：计数失败不该把正常章节误判为不可渲染。
+     */
+    private fun countBlocks(html: String): Int =
+        runCatching { Jsoup.parseBodyFragment(html).body().allElements.size }.getOrDefault(0)
 
     /**
      * 纯文本 → 段落 HTML：按**空行**切段，段内换行折叠为空格（交由 HTML 自然折行，避免 `<br>` 打乱行高）；
