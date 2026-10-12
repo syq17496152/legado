@@ -48,8 +48,14 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
     val backupHelpVersionIsLast: Boolean
         get() = isLastVersion(1, "backupHelpVersion", "firstBackup")
 
+    /** 阅读页菜单帮助是否已看过。
+     *
+     * ⚠️ 版本必须随**帮助内容更新**同步 +1：`isLastVersion` 只在版本变化时才重弹一次
+     * ⇒ 不升版本的话，老用户（含"找不到阅读页模板入口"的那批）**永远不会再看到**新增的入口说明。
+     * v2（2026-10-12）：新增「阅读页模板（主题）」章节（入口路径/适用范围/导入 ZIP/立即生效）。
+     */
     val readMenuHelpVersionIsLast: Boolean
-        get() = isLastVersion(1, "readMenuHelpVersion", "firstReadMenu")
+        get() = isLastVersion(2, "readMenuHelpVersion", "firstReadMenu")
 
     val bookSourcesHelpVersionIsLast: Boolean
         get() = isLastVersion(1, "bookSourceHelpVersion", "firstOpenBookSources")
