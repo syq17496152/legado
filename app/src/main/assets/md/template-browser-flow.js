@@ -73,6 +73,16 @@
   var authoritativePage = -1;
 
   /**
+   * 宿主 `gotoRatio` 给出的**权威内容比例**（-1 = 无；0..1）。
+   *
+   * ⚠️ 为什么要有它（2026-10-12 真机铁证，顾问复核后判定必须根治）：模板面是**双壳**结构
+   * （首页壳帧高 510 / 续页壳 729）⇒ 两壳页数不同（实测 17 / 12），而"内容比例 → 页号"只拿得到
+   * 当前壳的页数 ⇒ 恢复会偏 ≤2 页（保存 10/12 恢复成 12/12，用户可感知"进度不对"）。
+   * 按内容比例定位 = `bodyOffset = ratio × (内容高 − 页高)`，**与壳无关** ⇒ 恢复精确。
+   */
+  var authoritativeRatio = -1;
+
+  /**
    * 流程层记录的"当前结构"（`opening` / `continuation`）。
    *
    * 为什么不直接问运行时：运行时的 `pageShell` 是**权威状态**，但流程层需要它自己的副本，
@@ -188,10 +198,24 @@
    */
   function readBodyOffset(slot, rootEl) {
     if (!slot) return 0;
-    var chrome = ((rootEl && rootEl.scrollHeight) || 0) - (slot.scrollHeight || 0);
-    if (!(chrome >= 0) || !isFinite(chrome)) chrome = bodyOffset;
-    var value = (slot.scrollTop || 0) - chrome;
+    var value = (slot.scrollTop || 0) - pageChrome(slot, rootEl);
     return clampBodyOffset(value, slot, rootEl);
+  }
+
+  /**
+   * 页眉补偿量（"正文偏移 ↔ `scrollTop`"的换算项）。
+   *
+   * ⚠️ **冻结页框必须为 0**（2026-10-12 真机铁证）：冻结后槽自身 `overflow:hidden` + 固定高，
+   * 槽内滚动就是"页内定位" ⇒ `scrollTop` **本身**即正文偏移；此时
+   * `root.scrollHeight − slot.scrollHeight` 会因 `slot.scrollHeight` 是**内容高**而得名负值
+   * （实测 −7595）⇒ 旧实现回退成 `bodyOffset`，使 `readBodyOffset` 恒解出 **0**
+   * ⇒ 任何"非宿主驱动的结算"（换壳后再结算/用户拖动）都把正文**打回章首**
+   * （真机表现：进度恢复落在第 1 页而非保存页）。
+   */
+  function pageChrome(slot, rootEl) {
+    if (slotIsFrozen(slot)) return 0;
+    var chrome = ((rootEl && rootEl.scrollHeight) || 0) - (slot.scrollHeight || 0);
+    return (chrome >= 0 && isFinite(chrome)) ? chrome : 0;
   }
 
   function clampBodyOffset(value, slot, rootEl) {
@@ -200,11 +224,9 @@
     return Math.max(0, Math.min(max, value));
   }
 
-  /** 按正文偏移定位（与结构无关；`chrome` 为当前结构的页眉高）。 */
+  /** 按正文偏移定位（与结构无关；补偿量见 [pageChrome]）。 */
   function applyBodyOffset(slot, rootEl) {
-    var chrome = ((rootEl && rootEl.scrollHeight) || 0) - (slot.scrollHeight || 0);
-    if (!(chrome >= 0) || !isFinite(chrome)) chrome = 0;
-    slot.scrollTop = bodyOffset + chrome;
+    slot.scrollTop = bodyOffset + pageChrome(slot, rootEl);
   }
 
   function bodySlots() {
@@ -279,7 +301,16 @@
       // 换壳（重挂 `innerHTML`）之后布局尚未 reflow，此刻读 `root/slot.scrollHeight` 会拿到
       // 未生效的旧值（真机实测把 667 反解成 0 ⇒ 页面被拉回首屏、页码恒 1/1）。
       bodyOffsetAuthoritative = false;
-      if (authoritativePage >= 0) {
+      if (authoritativeRatio >= 0) {
+        // **内容比例口径**（与壳无关 ⇒ 恢复精确）：`bodyOffset = ratio × (内容高 − 页高)`。
+        // ⚠️ 归一化必须与 [progressRatio]（保存侧）**完全一致**：两侧都按"滚动区间"归一
+        // （2026-10-12 真机二次校正：曾用 `ratio × 内容高` 与保存侧混用 ⇒ 往返仍偏 1 页）。
+        var ratioContent = slot.scrollHeight || 0;
+        bodyOffset = clampBodyOffset(
+          authoritativeRatio * Math.max(0, ratioContent - visible), slot, root
+        );
+        authoritativeRatio = -1;
+      } else if (authoritativePage >= 0) {
         authoritativeIndex = clampIndex(authoritativePage, totalPages);
         bodyOffset = clampBodyOffset(authoritativePage * visible, slot, root);
         authoritativePage = -1;
@@ -310,6 +341,29 @@
   function indexFromOffset(offset, visible, totalPages, maxOffset) {
     if (totalPages > 1 && maxOffset > 0 && offset >= maxOffset - 1) return totalPages - 1;
     return clampIndex(offset / visible, totalPages);
+  }
+
+  /**
+   * 当前**内容比例**（0..1）= `正文偏移 / (内容高 − 页高)`；宿主据此保存进度。
+   *
+   * ⚠️ 为什么保存侧也要用它（2026-10-12 真机二次校正）：宿主此前存的是"页号 / 页数"，
+   * 与恢复侧 `ratio × (内容高 − 页高)` **不是同一种归一化**（分页网格末页是部分页 ⇒
+   * `页数 × 页高 > 内容高`）⇒ 往返必然偏 1~2 页。两侧同归一化后重开**精确**落回同一内容位置。
+   */
+  function progressRatio() {
+    try {
+      if (isScrollMode()) {
+        var sc = scrollContainer();
+        var maxScroll = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+        return maxScroll > 0 ? Math.max(0, Math.min(1, (sc.scrollTop || 0) / maxScroll)) : 0;
+      }
+      var slot = bodySlots() ? bodySlots()[0] : null;
+      if (!slot) return 0;
+      var max = maxBodyOffset(slot, root);
+      return max > 0 ? Math.max(0, Math.min(1, bodyOffset / max)) : 0;
+    } catch (error) {
+      return 0;
+    }
   }
 
   /**
@@ -420,7 +474,8 @@
     // 依赖内容高度，紧接 `goto` 的那次结算同样可能读到未 reflow 的旧值（同 C1 换壳的成因）
     if (bodyOffsetAuthoritative) {
       bodyOffsetAuthoritative = false;
-      authoritativePage = -1;   // 滚动面走**偏移**口径（不是页号），此处只清标记
+      authoritativePage = -1;   // 滚动面走**偏移**口径（不是页号/比例），此处只清标记
+      authoritativeRatio = -1;
       scrollable.scrollTop = bodyOffset;
     }
     var scrollTop = scrollable.scrollTop || 0;
@@ -473,6 +528,7 @@
     bodyOffset = 0;
     pageCount = 1;
     authoritativePage = -1;             // 换章 ⇒ 清空上一章的权威页号（防串章）
+    authoritativeRatio = -1;            // 同理清比例口径
     resetChromeCache();                 // 换章 ⇒ 按壳占位缓存作废（结构可能整体变化）
     // 结构状态以运行为准（runtime 的 `renderShell` 已在 initialize 之前把首页结构挂上）
     flowShell = shellName();
@@ -524,6 +580,7 @@
     // 兜底复位：分栏路径不消费该标记（它直接写 `scrollLeft`）⇒ 不留悬空状态给下一次结算
     bodyOffsetAuthoritative = false;
     authoritativePage = -1;
+    authoritativeRatio = -1;
     var costMs = ((window.performance && performance.now) ? performance.now() : Date.now()) - startedAt;
     if (window.ReaderTemplateRuntime) {
       // 结算自证（C1）：结构（首页/续页）与正文偏移随 stable 一并留痕 ——
@@ -537,7 +594,9 @@
           ',h=' + Math.round(lastPageHeight) +
           ',slotTop=' + Math.round((bodySlots() && bodySlots()[0] ? bodySlots()[0].offsetTop : -1))
       });
-      window.ReaderTemplateRuntime.onFlowSettled(result.pageIndex, result.pageCount, costMs);
+      window.ReaderTemplateRuntime.onFlowSettled(
+        result.pageIndex, result.pageCount, costMs, progressRatio()
+      );
     }
     if (remeasure) {
       // 重测不额外上报（stable 已含新页数）；此处仅保留语义分支便于诊断
@@ -665,9 +724,44 @@
     });
   }
 
+  /**
+   * 按**章内内容比例**定位（0..1；0=章首、1=章末）。进度恢复用。
+   *
+   * 与 [goto]（页号口径）的关系：两者都经由 `settle` 的权威分支落位，但本函数把目标表达为
+   * `bodyOffset = ratio × 内容高`（clamp 到 `0..maxOffset`），**与首页壳/续页壳的页数差异无关** ⇒ 恢复精确。
+   * 为什么不能只用页号（2026-10-12 真机铁证）：双壳帧高不同（510 / 729）⇒ 页数不同（17 / 12），
+   * `ratio × 当前壳页数` 会偏 ≤2 页（保存 10/12 恢复成 12/12）。
+   */
+  function gotoRatio(ratio) {
+    var r = (typeof ratio === 'number' && isFinite(ratio)) ? Math.max(0, Math.min(1, ratio)) : 0;
+    bodyOffsetAuthoritative = true;
+    authoritativePage = -1;      // 本指令走内容比例口径（互斥）
+    authoritativeRatio = r;
+    try {
+      if (isScrollMode()) {
+        var scrollable = scrollContainer();
+        var max = Math.max(0, (scrollable.scrollHeight || 0) - (scrollable.clientHeight || 0));
+        bodyOffset = r * max;
+        scrollable.scrollTop = bodyOffset;
+      } else {
+        // 目标不在章首 ⇒ 必须切到**续页壳**（首屏壳只服务第 1 页）；定位统一交给随后的 settle
+        switchShellForPage(r > 0 ? 1 : 0);
+      }
+    } catch (error) {
+      if (window.ReaderTemplateRuntime) {
+        window.ReaderTemplateRuntime.send('error', {
+          code: 'template-goto-failed',
+          message: String((error && error.message) || error)
+        });
+      }
+    }
+    return settle(false);
+  }
+
   window.ReaderTemplateFlow = {
     initialize: initialize,
     settle: settle,
-    goto: goto
+    goto: goto,
+    gotoRatio: gotoRatio
   };
 })();

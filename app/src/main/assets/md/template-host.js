@@ -14,7 +14,7 @@
 
   // 与 ReaderTemplateBridgePolicy 的 FROM_WEB 表保持一致（Kotlin 侧另有一份权威表 + 契约测试）。
   var INBOUND_TYPES = {
-    stable: ['pageIndex', 'pageCount'],
+    stable: ['pageIndex', 'pageCount', 'progressRatio'],
     error: ['code', 'message'],
     metrics: ['costMs'],
     renderState: ['state'],

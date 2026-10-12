@@ -2653,7 +2653,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             override fun onReMeasured(token: RenderToken, chapterIndex: Int, pageCount: Int) {
-                applyPendingTextRichRestore(chapterIndex, pageCount)
+                applyPendingTextRichRestore(pageCount)
                 upSeekBarProgress()
             }
 
@@ -2789,7 +2789,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun onTextRichRendered(chapterIndex: Int, pageCount: Int) {
-        applyPendingTextRichRestore(chapterIndex, pageCount)
+        applyPendingTextRichRestore(pageCount)
         upSeekBarProgress()
     }
 
@@ -2797,27 +2797,18 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 应用「待恢复的文本富渲染位置」——与 [applyTemplatePendingRestore] 同口径：
      * **页数 <= 1 时不消费**（首次结算页数可能尚未定型 ⇒ `(ratio * 1)` 恒 0 会把进度退回页首）。
      */
-    private fun applyPendingTextRichRestore(chapterIndex: Int, pageCount: Int) {
+    private fun applyPendingTextRichRestore(pageCount: Int) {
         if (!textRichRestorePending || pageCount <= 1) return
         textRichRestorePending = false
-        textRichBackend?.let { restoreTextRichPosition(it, chapterIndex, pageCount) }
-    }
-
-    /**
-     * 位置恢复：把既有字符偏移（`ReadBook.durChapterPos`）按**章内字符区间**的比例映射为滚动位置。
-     *
-     * 这是"章内相对比例"兜底路径（AD-14 允许），不做像素级假换算。
-     */
-    private fun restoreTextRichPosition(backend: TextRichRenderBackend, chapterIndex: Int, pageCount: Int) {
         val start = textRichChapterStart
         val end = textRichChapterEnd
-        if (start == null || end == null || end <= start || pageCount <= 0) {
-            backend.scrollToTop()
-            return
+        val ratio = if (start != null && end != null && end > start) {
+            ((ReadBook.durChapterPos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
+        } else {
+            0f
         }
-        val ratio = ((ReadBook.durChapterPos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
-        val pageIndex = (ratio * pageCount).toInt().coerceIn(0, pageCount - 1)
-        backend.importPosition(ReadingPosition.Page(chapterIndex, pageIndex, 0f))
+        // 与模板面同口径：用**内容比例**定位（与"页数何时定型/如何估算"无关 ⇒ 恢复精确）
+        textRichBackend?.scrollToRatio(ratio)
     }
 
     /** 位置保存：把当前滚动比例折算回字符偏移，交由既有进度/阅读记录机制持久化。 */
@@ -3148,12 +3139,13 @@ class ReadBookActivity : BaseReadBookActivity(),
         val ratio = templatePendingRestoreRatio ?: return
         if (pageCount <= 1) return
         templatePendingRestoreRatio = null
-        val target = (ratio * pageCount).toInt().coerceIn(0, pageCount - 1)
         AppLog.putDebugWithTag(
             AppLog.TAG_READER_TEMPLATE,
-            "restore: pageCount=$pageCount, target=$target"
+            "restore: pageCount=$pageCount, ratio=$ratio"
         )
-        templateBackend?.gotoPage(target)
+        // 用**内容比例**定位（不是页号）：模板面双壳页数不同（实测 17 / 12）⇒ 按页号折算会偏 ≤2 页；
+        // 比例口径在沙箱内 `bodyOffset = ratio × (内容高 − 页高)`，与壳无关 ⇒ 恢复精确（2026-10-12）
+        templateBackend?.gotoRatio(ratio)
     }
 
     /** 位置保存：同上（章内相对比例 ⇒ 字符偏移，不做像素级假换算）。 */
@@ -3162,9 +3154,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         val start = textRichChapterStart ?: return
         val end = textRichChapterEnd ?: return
         if (end <= start) return
-        val position = backend.exportPosition() as? ReadingPosition.Page ?: return
-        val pageCount = backend.currentPageCount().coerceAtLeast(1)
-        val ratio = ((position.pageIndex + position.inPageRatio) / pageCount).coerceIn(0f, 1f)
+        // ⚠️ 必须用**内容比例**（沙箱自报，`正文偏移 / (内容高 − 页高)`）：与恢复侧的
+        // `ratio × (内容高 − 页高)` **同一归一化**。此前用「页号 / 页数」折算，与恢复侧不一致
+        // （分页网格末页是部分页 ⇒ `页数 × 页高 > 内容高`）⇒ 往返偏 1~2 页（2026-10-12 真机铁证）。
+        val ratio = backend.currentContentRatio().coerceIn(0f, 1f)
         ReadBook.durChapterPos = (start + ratio * (end - start)).toInt()
     }
 

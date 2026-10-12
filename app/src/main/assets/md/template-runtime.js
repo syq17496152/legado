@@ -18,7 +18,10 @@
 
   // 与 ReaderTemplateBridgePolicy 的 FROM_WEB 类型表保持一致（契约测试会校验一致性）。
   var SEND_TYPES = {
-    stable: ['pageIndex', 'pageCount'],
+    // `progressRatio`（2026-10-12）：沙箱自报的**内容比例** = `正文偏移 / (内容高 − 页高)`。
+    // 宿主保存进度时用它（而不是"页号/页数"）⇒ 与恢复侧的 `ratio × (内容高 − 页高)` **同一归一化**
+    // ⇒ 重开精确落回同一内容位置（此前两种归一化不一致，恢复会偏 1~2 页）。
+    stable: ['pageIndex', 'pageCount', 'progressRatio'],
     error: ['code', 'message'],
     metrics: ['costMs'],
     renderState: ['state'],
@@ -513,13 +516,18 @@
   }
 
   /** 分页结果上报（由 template-browser-flow.js 调用）。 */
-  function onFlowSettled(pageIndex, pageCount, costMs) {
+  function onFlowSettled(pageIndex, pageCount, costMs, progressRatio) {
     state.pageIndex = pageIndex;
     state.pageCount = pageCount;
     // 页码/总页数只有沙箱知道（分页是它算的）⇒ 每次结算后回填 `page`/`pageCount` 槽位，
     // 否则作者的页脚页码永远停在占位文本上（宿主 init 里没有这两个字段）
     refreshFields();
-    send('stable', { pageIndex: pageIndex, pageCount: pageCount });
+    var payload = { pageIndex: pageIndex, pageCount: pageCount };
+    // 内容比例（可选）：宿主据此保存进度 ⇒ 与恢复侧同归一化（见 SEND_TYPES 注释）
+    if (typeof progressRatio === 'number' && isFinite(progressRatio)) {
+      payload.progressRatio = Math.max(0, Math.min(1, progressRatio));
+    }
+    send('stable', payload);
     if (typeof costMs === 'number') send('metrics', { costMs: costMs });
   }
 
@@ -674,7 +682,12 @@
           break;
         case 'goto-page':
           // 宿主驱动翻页：沙箱跨源，宿主无法直接操作本帧滚动
-          flow.goto(data.pageIndex);
+          // `ratio` 优先（进度恢复用**内容比例**口径 ⇒ 与首页壳/续页壳页数差异无关，恢复精确）
+          if (typeof data.ratio === 'number') {
+            flow.gotoRatio(data.ratio);
+          } else {
+            flow.goto(data.pageIndex);
+          }
           break;
         case 'set-motion':
           // 动效生命周期（4.15 C6）：拖动中/离页/翻页结算期间由宿主下令停并回静态帧

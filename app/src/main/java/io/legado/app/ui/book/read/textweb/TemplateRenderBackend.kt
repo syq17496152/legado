@@ -106,6 +106,14 @@ class TemplateRenderBackend(
     private var currentChapter: ChapterRef? = null
     private var pageCount: Int = 1
     private var pageIndex: Int = 0
+
+    /**
+     * 沙箱自报的**内容比例**（`正文偏移 / (内容高 − 页高)`，0..1）。
+     *
+     * 宿主保存进度用它（而不是"页号/页数"）⇒ 与恢复侧 `ratio × (内容高 − 页高)` **同一归一化**
+     * ⇒ 重开精确落回同一内容位置（2026-10-12 真机：两种归一化混用会偏 1~2 页，用户可感知）。
+     */
+    private var contentRatio: Float = 0f
     private var expectedToken: String = ""
     private var reportedFirstPage: Boolean = false
     /** 翻页瞬间是否已由宿主冻结动效（4.19）；`onStable` 消费并复位。 */
@@ -118,6 +126,9 @@ class TemplateRenderBackend(
     fun view(): View = ensureWebView()
 
     fun currentPageCount(): Int = pageCount
+
+    /** 当前**内容比例**（0..1）；保存进度用（与恢复侧同归一化，见 [contentRatio]）。 */
+    fun currentContentRatio(): Float = contentRatio
 
     /** 供宿主调用的初始页索引（用于位置恢复）。 */
     var initialPageIndex: Int = 0
@@ -154,6 +165,25 @@ class TemplateRenderBackend(
 
     fun gotoPage(target: Int) {
         val clamped = target.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+        postGoto("""{"pageIndex":$clamped}""")
+    }
+
+    /**
+     * 按**章内内容比例**定位（0..1）。进度恢复专用。
+     *
+     * 为什么不能只用 [gotoPage]（2026-10-12 真机铁证 + 顾问判定必须根治）：模板面是**双壳**结构
+     * （首页壳帧高 510 / 续页壳 729）⇒ 两壳页数不同（实测 17 / 12），而"内容比例 → 页号"只拿得到
+     * 当前壳的页数 ⇒ 恢复偏 ≤2 页（保存 10/12 恢复成 12/12，用户可感知"进度不对"）。
+     * 比例口径在沙箱内折算 `bodyOffset = ratio × (内容高 − 页高)`，**与壳无关 ⇒ 恢复精确**。
+     */
+    fun gotoRatio(ratio: Float) {
+        val clamped = ratio.coerceIn(0f, 1f)
+        // 保留 6 位小数（比例无需更高精度，且避免 `0.30000001192092896` 这类脏值进文档）
+        val text = String.format(java.util.Locale.US, "%.6f", clamped)
+        postGoto("""{"ratio":$text}""")
+    }
+
+    private fun postGoto(payloadJson: String) {
         runOnUI {
             val view = webView ?: return@runOnUI
             // 装饰冻结（4.19 / AD-33）：翻页瞬间停动效（装饰不重绘 ⇒ 不与分页重排抢主线程），
@@ -166,10 +196,7 @@ class TemplateRenderBackend(
                 )
             }
             view.evaluateJavascript(
-                ReaderTemplateHostDocument.postScript(
-                    "goto-page",
-                    """{"pageIndex":$clamped}"""
-                ),
+                ReaderTemplateHostDocument.postScript("goto-page", payloadJson),
                 null
             )
         }
@@ -565,6 +592,7 @@ class TemplateRenderBackend(
     private fun onStable(event: ReaderTemplateHostEventCodec.Event.Stable) {
         pageCount = event.pageCount.coerceAtLeast(1)
         pageIndex = event.pageIndex.coerceIn(0, pageCount - 1)
+        contentRatio = event.progressRatio.coerceIn(0f, 1f)
         val token = RenderToken(generation)
         val chapterIndex = currentChapter?.chapterIndex ?: return
         AppLog.putDebugWithTag(

@@ -21,7 +21,7 @@ internal object ReaderTemplateHostEventCodec {
 
     sealed interface Event {
         /** 分页结算（宿主据此设定页数与当前位置）。 */
-        data class Stable(val pageIndex: Int, val pageCount: Int) : Event
+        data class Stable(val pageIndex: Int, val pageCount: Int, val progressRatio: Float = 0f) : Event
 
         /** 渲染状态（`ready` / `inject-done` / `inject-unavailable` / `inject-failed`）。 */
         data class RenderState(val state: String) : Event
@@ -100,7 +100,9 @@ internal object ReaderTemplateHostEventCodec {
         val event = when (resolvedType) {
             "stable" -> Event.Stable(
                 pageIndex = obj.intOrNull("pageIndex") ?: 0,
-                pageCount = obj.intOrNull("pageCount") ?: 1
+                pageCount = obj.intOrNull("pageCount") ?: 1,
+                // 可选字段（老沙箱不带 ⇒ 默认 0）：宿主保存进度用它做**同归一化**折算
+                progressRatio = (obj.floatOrNull("progressRatio") ?: 0f).coerceIn(0f, 1f)
             )
 
             "renderState" -> Event.RenderState(obj.stringOrNull("state").orEmpty())
@@ -147,4 +149,8 @@ internal object ReaderTemplateHostEventCodec {
 
     private fun JsonObject.longOrNull(name: String): Long? =
         get(name)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asLong }.getOrNull() }
+
+    /** 浮点字段（容错：非数值/超范围一律 null，交调用方取默认值 ⇒ 不因畸形消息崩）。 */
+    private fun JsonObject.floatOrNull(name: String): Float? =
+        get(name)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asFloat }.getOrNull() }
 }

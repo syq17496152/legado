@@ -118,6 +118,24 @@ class TextRichRenderBackend(
         runOnUI { webView?.scrollTo(0, 0) }
     }
 
+    /**
+     * 按**章内内容比例**定位（0..1）。进度恢复专用。
+     *
+     * 为什么不用"页号 × 页高"（2026-10-12）：本面的页数由 `ceil(内容高 / 视口高)` 推出，
+     * 内容高在结算前/富渲染注入后会变 ⇒ 按页号折算会漂；比例口径直接用**实测内容高**折算，
+     * 与"页数何时定型"无关 ⇒ 恢复精确。
+     *
+     * 调用前置：宿主只在 `pageCount > 1`（即内容高已被量到）后调用 ⇒ `contentHeight > 0`。
+     */
+    fun scrollToRatio(ratio: Float) {
+        val clamped = ratio.coerceIn(0f, 1f)
+        runOnUI {
+            val viewport = currentConfig?.pageHeightPx ?: 0
+            val max = (contentHeight - viewport).coerceAtLeast(0)
+            webView?.scrollTo(0, (clamped * max).toInt())
+        }
+    }
+
     override fun attach(host: RenderHost) {
         this.host = host
     }

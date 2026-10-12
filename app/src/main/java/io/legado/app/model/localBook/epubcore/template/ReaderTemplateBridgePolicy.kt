@@ -35,7 +35,9 @@ internal object ReaderTemplateBridgePolicy {
 
     /** 消息类型 → 允许字段（唯一真相源；未登记即拒收）。 */
     private val fromWebFields: Map<String, Set<String>> = mapOf(
-        "stable" to setOf("pageIndex", "pageCount"),
+        // `progressRatio`（2026-10-12）：沙箱自报的**内容比例**（`正文偏移 / (内容高 − 页高)`）。
+        // 宿主用它保存进度 ⇒ 与恢复侧同一归一化 ⇒ 重开精确落回同一内容位置（见 template-browser-flow.js）
+        "stable" to setOf("pageIndex", "pageCount", "progressRatio"),
         "error" to setOf("code", "message"),
         "metrics" to setOf("costMs"),
         "renderState" to setOf("state"),
@@ -57,7 +59,10 @@ internal object ReaderTemplateBridgePolicy {
         "set-theme" to setOf("themeId"),
         // 宿主驱动翻页（4.14 收口）：沙箱 iframe **跨源** ⇒ 只有沙箱内部的 JS 能操作
         // 它自己的滚动视口，宿主只能下指令（否则"点下一页没反应"——N1 同类陷阱）
-        "goto-page" to setOf("pageIndex"),
+        // `ratio`（2026-10-12）：**内容比例**口径，专供进度恢复 —— 模板面双壳帧高不同 ⇒ 两壳页数不同
+        // （实测 17 / 12），按页号折算会偏 ≤2 页；按比例定位与壳无关（沙箱内 `ratio × (内容高 − 页高)`）。
+        // 两者互斥：带 `ratio` 即走比例口径，否则按 `pageIndex`。
+        "goto-page" to setOf("pageIndex", "ratio"),
         // 动效生命周期（4.15 C6）：宿主掌握"用户正在拖动/已离页"这类**沙箱看不到**的事实，
         // 只有它能下令停动效（`prefers-reduced-motion` 与装饰强度已由 init 下发，此处是**运行时**闸门）
         "set-motion" to setOf("paused")
