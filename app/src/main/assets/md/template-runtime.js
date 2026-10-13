@@ -121,7 +121,9 @@
     '--reader-safe-left': '0px',
     '--reader-safe-top': '0px',
     '--reader-safe-right': '0px',
-    '--reader-safe-bottom': '0px'
+    '--reader-safe-bottom': '0px',
+    // archive `baseCss` 另有选中色变量（主题 CSS 用 `var(--reader-selection-color, …)` 兜底）
+    '--reader-selection-color': 'rgba(70,138,255,.2)'
   };
 
   /** 把契约变量写到 `<html>`；`config.readerVars` 可逐项覆盖默认值（宿主留出的升级位）。 */
@@ -200,6 +202,21 @@
   }
 
   var lastMotionPage = null, lastMotionState = '';
+
+  /**
+   * 组装 archive 形 `beforePage` 事件（page/pageIndex/first/type）。
+   *
+   * archive 主题用它做"每页逻辑"：`doraemon_scroll` 按当前时段在页元素上写 `data-dora-period`；
+   * `builtin.vertical` 在页内量正文流并写竖排列宽/行距间隙变量。缺该钩子 ⇒ 这两套主题静默失效。
+   */
+  function pageEvent(shellName) {
+    return {
+      page: authorPage(),
+      pageIndex: state.pageIndex,
+      first: shellName !== 'continuation',
+      type: (state.template && state.template.type === 'scroll') ? 'scroll' : 'paged'
+    };
+  }
 
   /** 组装 archive 形 motionChange 事件（page/state/previousPage/previousState/reducedMotion）。 */
   function motionEvent() {
@@ -370,6 +387,9 @@
     // 换壳会**整块替换根壳 innerHTML** ⇒ 新槽是全新元素，槽上的整行网格变量随之丢失
     // （真机实测续页 `grid=-`/`pt=0`，段距回落 1em ⇒ 续页末行重新被裁半）⇒ 必须重新写入
     applyLineGrid();
+    // archive 契约：换壳后补发 `beforePage`（新页元素上的"每页逻辑"，如竖排量流/时段标记）。
+    // 仅在正文已注入时发：首次 `renderShell()` 时正文尚未到达，那次由 continueInit 统一补发。
+    if (state.bodyHtml) emitHook('beforePage', pageEvent(target));
     return true;
   }
 
@@ -1101,6 +1121,8 @@
     // archive 契约钩子：排版前（beforeLayout）—— 主题在此为段落打语义类
     // （`as-scene`/`as-dialogue`/`as-lead`），这些类必须早于分页结算才参与测量与外观。
     emitHook('beforeLayout', { generation: 0, viewport: authorApi.viewport });
+    // archive 契约：`beforePage`（本页每页逻辑）—— 必须在首次结算之前，作者的量取才参与分页
+    emitHook('beforePage', pageEvent(currentPageShell()));
     // 素材治理（C11）：图片按需解码 + 去重，**解码就绪后才提交可翻阅页面**；
     // 无图（纯文字章节）时同步回调 ⇒ 保持"立即结算一次"的语义不变。
     // 这一次结算是 `stable` 的唯一来源：章节不含富渲染元素时不会有后续 `remeasure`，

@@ -18,20 +18,27 @@
  * 虽不经过脚本转义路径，但保持源头干净是既定纪律（见 ReaderTemplateSandboxDocument KDoc）。
  */
 
-/* ===== 装饰强度：无 / 轻 / 中 / 强（默认 medium） ===== */
-html[data-rp-decoration="none"] [data-reader-decor] {
+/* ===== 装饰强度：无 / 轻 / 中 / 强（默认 medium） =====
+   两个标记都收：`data-reader-decor`（引擎自动分层 / 我方作者显式声明）与
+   `data-reader-decoration`（**archive 主题的作者自标** —— 如 `builtin.magazine` /
+   `builtin.vertical` 的装饰元素）⇒ 从 archive 导入的主题同样吃"装饰强度/专注模式"设置。 */
+html[data-rp-decoration="none"] [data-reader-decor],
+html[data-rp-decoration="none"] [data-reader-decoration] {
   opacity: 0 !important;
 }
 
-html[data-rp-decoration="light"] [data-reader-decor] {
+html[data-rp-decoration="light"] [data-reader-decor],
+html[data-rp-decoration="light"] [data-reader-decoration] {
   opacity: 0.45 !important;
 }
 
-html[data-rp-decoration="medium"] [data-reader-decor] {
+html[data-rp-decoration="medium"] [data-reader-decor],
+html[data-rp-decoration="medium"] [data-reader-decoration] {
   opacity: 0.85 !important;
 }
 
-html[data-rp-decoration="strong"] [data-reader-decor] {
+html[data-rp-decoration="strong"] [data-reader-decor],
+html[data-rp-decoration="strong"] [data-reader-decoration] {
   opacity: 1 !important;
 }
 
@@ -39,7 +46,9 @@ html[data-rp-decoration="strong"] [data-reader-decor] {
    恢复**静态帧**（`animation:none` 回到基础样式）而非 `paused`：后者停在随机一帧，
    同一章节重进会看到不同画面（观感不稳定）。 */
 html[data-reader-motion="paused"] [data-reader-decor],
-html[data-reader-motion="paused"] [data-reader-decor] * {
+html[data-reader-motion="paused"] [data-reader-decor] *,
+html[data-reader-motion="paused"] [data-reader-decoration],
+html[data-reader-motion="paused"] [data-reader-decoration] * {
   animation: none !important;
   transition: none !important;
 }
@@ -47,7 +56,9 @@ html[data-reader-motion="paused"] [data-reader-decor] * {
 /* 系统级"减少动效"兜底（宿主已按同一判据下发 paused，此处防宿主判据缺失时漏网） */
 @media (prefers-reduced-motion: reduce) {
   html [data-reader-decor],
-  html [data-reader-decor] * {
+  html [data-reader-decor] *,
+  html [data-reader-decoration],
+  html [data-reader-decoration] * {
     animation: none !important;
     transition: none !important;
   }
