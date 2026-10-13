@@ -40,6 +40,13 @@
    */
   var CHROME_DRIFT_TOL = 2;
 
+  /**
+   * 该壳**首次**量取占位后的重测延迟（ms）：装饰带（内联 SVG）首帧尚未定型 ⇒ 即使改到 rAF 仍可能
+   * 量到偏小值（实测首帧 `71`、定型后 `91`，差一整行）⇒ 首次量取后延迟一小段再重测重结算。
+   * 取 150ms：远超一次 SVG 布局定型所需、又远小于可感卡顿阈值；**仅该壳首次量取触发一次**。
+   */
+  var CHROME_FIRST_MEASURE_DELAY_MS = 150;
+
   var root = null;
   var config = null;
 
@@ -192,8 +199,10 @@
     var prev = chromeByShell[key];
     chromeByShell[key] = total;
     shellChromeNow = total;
-    // 装饰带定型后与首帧量取差一整行 ⇒ 下一帧重结算一次（差异收敛后不再触发，不会自激）
-    if (prev !== undefined && Math.abs(prev - total) > CHROME_DRIFT_TOL) scheduleResettle();
+    // ⚠️ **该壳的第一次量取必然偏小**（装饰带尚未定型）⇒ 延迟一小段后重测重结算；
+    // 之后若与上次仍差一整行（> CHROME_DRIFT_TOL）则下一帧再收敛一次。差异消失即停（不自激）。
+    if (prev === undefined) scheduleResettle(CHROME_FIRST_MEASURE_DELAY_MS);
+    else if (Math.abs(prev - total) > CHROME_DRIFT_TOL) scheduleResettle(0);
     return total;
   }
 
@@ -203,23 +212,30 @@
   }
 
   /**
-   * 首帧占位定型后**下一帧**重结算一次（幂等）。
+   * 占位定型后重结算一次（幂等收敛）。
    *
    * 为什么需要：装饰带（内联 SVG）首帧高与定型后差一整行（见 [chromeForShell]）⇒ 首帧冻出的页框
-   * 与后续页不一致（多一行），且保存/恢复跨一档页码。下一帧布局定型后再结算即收敛；
-   * `resettleScheduled` 保证同时只有一个待执行回调，且差异消失后不再触发（不会自激）。
+   * 与后续页不一致（多一行）；且保存/恢复跨一档页码（用户实测：「每页文字个数的不同，页脚还能
+   * 自己变动」）。该壳**首次**量取必然偏小 ⇒ 用 `delay > 0` 把它推迟到装饰带定型之后；
+   * 后续只在"与上次差一整行"时补一次（`delay = 0` ⇒ 下一帧）。
+   * `resettleScheduled` 保证同时只有一个待执行回调 ⇒ 不会自激。
    */
   var resettleScheduled = false;
-  function scheduleResettle() {
+  function scheduleResettle(delay) {
     if (resettleScheduled) return;
     resettleScheduled = true;
+    var run = function () {
+      resettleScheduled = false;
+      try { settle(true); } catch (error) { }
+    };
+    if (delay > 0) {
+      setTimeout(run, delay);
+      return;
+    }
     var later = (typeof requestAnimationFrame === 'function')
       ? requestAnimationFrame
       : function (fn) { return setTimeout(fn, 16); };
-    later(function () {
-      resettleScheduled = false;
-      try { settle(true); } catch (error) { }
-    });
+    later(run);
   }
 
   /**
