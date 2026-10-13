@@ -88,6 +88,7 @@ import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.utils.ColorUtils
 import kotlin.math.roundToInt
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.theme.bodySecondary
 
 private const val MAX_SAVEABLE_MULTI_CHOICE_ITEMS = 128
@@ -218,8 +219,14 @@ fun AppDialogFrame(
                     AppDialogMessageText(message = message, style = style)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+                // 内容区**自适应**：保留 520dp 视觉上限，同时允许在**矮窗口**下收缩。
+                // 铁证 2026-10-13（横屏 1600x900 / density 300 ⇒ 可视高仅 480dp）：固定 `heightIn(max=520dp)`
+                // 会让「文件选择」弹框内容（路径行 + 400dp 列表）把动作区（新建文件夹 / OK）**挤出可视区且不可达**
+                // ⇒ archive ZIP 主题包导入在真机上无法完成。`weight(fill=false)` 在有界窗口下把剩余高度让给内容，
+                // 内容短时行为与旧实现完全一致（wrap 内容），仅在窗口不足时才收缩。
                 val contentModifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
                     .heightIn(max = 520.dp)
                 val shouldScrollContent = scrollContent || messageInContent
                 if (shouldScrollContent) {
@@ -424,81 +431,83 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val readOnly = args.getBoolean(ARG_READ_ONLY)
-                val hintText = args.getString(ARG_HINT).orEmpty()
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
-                val minLines = args.getInt(ARG_MIN_LINES)
-                val maxLines = args.getInt(ARG_MAX_LINES)
-                var text by rememberSaveable {
-                    mutableStateOf(args.getString(ARG_INITIAL_TEXT).orEmpty())
-                }
-                val style = rememberAppDialogStyle()
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    content = {
-                        AppDialogTextField(
-                            value = text,
-                            onValueChange = { if (!readOnly) text = it },
-                            label = hintText,
-                            minLines = minLines,
-                            maxLines = maxLines,
-                            readOnly = readOnly
-                        )
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        val neutralLabel = neutralText
-                        val neutralCallback = onNeutral
-                        if (neutralLabel != null && neutralCallback != null) {
-                            LegadoMiuixActionButton(
-                                text = neutralLabel,
-                                palette = palette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    neutralCallback.invoke()
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = {
-                                onNegative?.invoke()
-                                dismissAllowingStateLoss()
-                            },
-                            cornerRadius = style.actionRadius
-                        )
-                        onPositive?.let { positiveCallback ->
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = positiveText,
-                                palette = palette,
-                                onClick = {
-                                    val current = text
-                                    if (validateInput?.invoke(current) != false) {
-                                        dismissAllowingStateLoss()
-                                        positiveCallback.invoke(current)
-                                    }
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val readOnly = args.getBoolean(ARG_READ_ONLY)
+                    val hintText = args.getString(ARG_HINT).orEmpty()
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
+                    val minLines = args.getInt(ARG_MIN_LINES)
+                    val maxLines = args.getInt(ARG_MAX_LINES)
+                    var text by rememberSaveable {
+                        mutableStateOf(args.getString(ARG_INITIAL_TEXT).orEmpty())
                     }
-                )
+                    val style = rememberAppDialogStyle()
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        content = {
+                            AppDialogTextField(
+                                value = text,
+                                onValueChange = { if (!readOnly) text = it },
+                                label = hintText,
+                                minLines = minLines,
+                                maxLines = maxLines,
+                                readOnly = readOnly
+                            )
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            val neutralLabel = neutralText
+                            val neutralCallback = onNeutral
+                            if (neutralLabel != null && neutralCallback != null) {
+                                LegadoMiuixActionButton(
+                                    text = neutralLabel,
+                                    palette = palette,
+                                    onClick = {
+                                        dismissAllowingStateLoss()
+                                        neutralCallback.invoke()
+                                    },
+                                    cornerRadius = style.actionRadius
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            LegadoMiuixActionButton(
+                                text = negativeText,
+                                palette = palette,
+                                onClick = {
+                                    onNegative?.invoke()
+                                    dismissAllowingStateLoss()
+                                },
+                                cornerRadius = style.actionRadius
+                            )
+                            onPositive?.let { positiveCallback ->
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
+                                    palette = palette,
+                                    onClick = {
+                                        val current = text
+                                        if (validateInput?.invoke(current) != false) {
+                                            dismissAllowingStateLoss()
+                                            positiveCallback.invoke(current)
+                                        }
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -580,68 +589,70 @@ class ComposeTipTemplateDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-                    mutableStateOf(TextFieldValue(args.getString(ARG_INITIAL_TEXT).orEmpty()))
-                }
-                val style = rememberAppDialogStyle()
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = stringResource(R.string.tip_template_help),
-                    content = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            AppDialogValueTextField(
-                                value = field,
-                                onValueChange = { field = it },
-                                label = stringResource(R.string.tip_template_label),
-                                minLines = 2,
-                                maxLines = 4
-                            )
-                            TipTemplatePlaceholderChips(
-                                style = style,
-                                onInsert = { name ->
-                                    val (text, cursor) = ReadTipTemplate.insertPlaceholder(
-                                        text = field.text,
-                                        selectionStart = field.selection.start,
-                                        selectionEnd = field.selection.end,
-                                        name = name
-                                    )
-                                    field = TextFieldValue(text, TextRange(cursor))
-                                }
-                            )
-                            TipTemplatePreview(text = field.text, style = style)
-                        }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        LegadoMiuixActionButton(
-                            text = stringResource(R.string.cancel),
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                        onPositive?.let { callback ->
-                            Spacer(modifier = Modifier.width(8.dp))
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+                        mutableStateOf(TextFieldValue(args.getString(ARG_INITIAL_TEXT).orEmpty()))
+                    }
+                    val style = rememberAppDialogStyle()
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = stringResource(R.string.tip_template_help),
+                        content = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                AppDialogValueTextField(
+                                    value = field,
+                                    onValueChange = { field = it },
+                                    label = stringResource(R.string.tip_template_label),
+                                    minLines = 2,
+                                    maxLines = 4
+                                )
+                                TipTemplatePlaceholderChips(
+                                    style = style,
+                                    onInsert = { name ->
+                                        val (text, cursor) = ReadTipTemplate.insertPlaceholder(
+                                            text = field.text,
+                                            selectionStart = field.selection.start,
+                                            selectionEnd = field.selection.end,
+                                            name = name
+                                        )
+                                        field = TextFieldValue(text, TextRange(cursor))
+                                    }
+                                )
+                                TipTemplatePreview(text = field.text, style = style)
+                            }
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
                             LegadoMiuixActionButton(
-                                text = stringResource(R.string.ok),
+                                text = stringResource(R.string.cancel),
                                 palette = palette,
-                                onClick = {
-                                    val current = field.text
-                                    dismissAllowingStateLoss()
-                                    callback.invoke(current)
-                                },
-                                primary = true,
+                                onClick = { dismissAllowingStateLoss() },
                                 cornerRadius = style.actionRadius
                             )
+                            onPositive?.let { callback ->
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.ok),
+                                    palette = palette,
+                                    onClick = {
+                                        val current = field.text
+                                        dismissAllowingStateLoss()
+                                        callback.invoke(current)
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -758,105 +769,107 @@ class ComposeSuggestionTextInputDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val hintText = args.getString(ARG_HINT).orEmpty()
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
-                val suggestions = remember {
-                    mutableStateListOf<String>().apply {
-                        addAll(args.getStringArrayList(ARG_SUGGESTIONS).orEmpty())
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val hintText = args.getString(ARG_HINT).orEmpty()
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
+                    val suggestions = remember {
+                        mutableStateListOf<String>().apply {
+                            addAll(args.getStringArrayList(ARG_SUGGESTIONS).orEmpty())
+                        }
                     }
-                }
-                var text by rememberSaveable {
-                    mutableStateOf(args.getString(ARG_INITIAL_TEXT).orEmpty())
-                }
-                val style = rememberAppDialogStyle()
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    content = {
-                        AppDialogTextField(
-                            value = text,
-                            onValueChange = { text = it },
-                            label = hintText,
-                            minLines = 1,
-                            maxLines = 4
-                        )
-                        if (suggestions.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 280.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                itemsIndexed(
-                                    items = suggestions,
-                                    key = { index, item -> "$index:$item" }
-                                ) { index, suggestion ->
-                                    SuggestionInputRow(
-                                        text = suggestion,
-                                        style = style,
-                                        deletable = args.getBoolean(ARG_DELETABLE) &&
-                                            onSuggestionDeleted != null,
-                                        onClick = { text = suggestion },
-                                        onDelete = {
-                                            suggestions.removeAt(index)
-                                            onSuggestionDeleted?.invoke(suggestion)
-                                        }
-                                    )
+                    var text by rememberSaveable {
+                        mutableStateOf(args.getString(ARG_INITIAL_TEXT).orEmpty())
+                    }
+                    val style = rememberAppDialogStyle()
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        content = {
+                            AppDialogTextField(
+                                value = text,
+                                onValueChange = { text = it },
+                                label = hintText,
+                                minLines = 1,
+                                maxLines = 4
+                            )
+                            if (suggestions.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 280.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = suggestions,
+                                        key = { index, item -> "$index:$item" }
+                                    ) { index, suggestion ->
+                                        SuggestionInputRow(
+                                            text = suggestion,
+                                            style = style,
+                                            deletable = args.getBoolean(ARG_DELETABLE) &&
+                                                onSuggestionDeleted != null,
+                                            onClick = { text = suggestion },
+                                            onDelete = {
+                                                suggestions.removeAt(index)
+                                                onSuggestionDeleted?.invoke(suggestion)
+                                            }
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        val neutralLabel = neutralText
-                        val neutralCallback = onNeutral
-                        if (neutralLabel != null && neutralCallback != null) {
-                            LegadoMiuixActionButton(
-                                text = neutralLabel,
-                                palette = palette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    neutralCallback.invoke()
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                        onPositive?.let { positiveCallback ->
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = positiveText,
-                                palette = palette,
-                                onClick = {
-                                    val current = text
-                                    if (validateInput?.invoke(current) != false) {
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            val neutralLabel = neutralText
+                            val neutralCallback = onNeutral
+                            if (neutralLabel != null && neutralCallback != null) {
+                                LegadoMiuixActionButton(
+                                    text = neutralLabel,
+                                    palette = palette,
+                                    onClick = {
                                         dismissAllowingStateLoss()
-                                        positiveCallback.invoke(current)
-                                    }
-                                },
-                                primary = true,
+                                        neutralCallback.invoke()
+                                    },
+                                    cornerRadius = style.actionRadius
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            LegadoMiuixActionButton(
+                                text = negativeText,
+                                palette = palette,
+                                onClick = { dismissAllowingStateLoss() },
                                 cornerRadius = style.actionRadius
                             )
+                            onPositive?.let { positiveCallback ->
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
+                                    palette = palette,
+                                    onClick = {
+                                        val current = text
+                                        if (validateInput?.invoke(current) != false) {
+                                            dismissAllowingStateLoss()
+                                            positiveCallback.invoke(current)
+                                        }
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -970,128 +983,130 @@ class ComposeTextFormDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null && onPositiveWithChecks == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val labels = remember {
-                    args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
-                }
-                val checkboxLabels = remember {
-                    args.getStringArrayList(ARG_CHECKBOX_LABELS)?.toList().orEmpty()
-                }
-                val initialValues = remember(labels) {
-                    val rawValues = args.getStringArrayList(ARG_INITIAL_VALUES)?.toList().orEmpty()
-                    List(labels.size) { index -> rawValues.getOrNull(index).orEmpty() }
-                }
-                val initialChecked = remember(checkboxLabels) {
-                    val rawValues = args.getBooleanArray(ARG_CHECKBOX_VALUES) ?: booleanArrayOf()
-                    List(checkboxLabels.size) { index -> rawValues.getOrNull(index) ?: false }
-                }
-                val passwordFlags = remember(labels) {
-                    val rawFlags = args.getBooleanArray(ARG_PASSWORD_FLAGS) ?: booleanArrayOf()
-                    BooleanArray(labels.size) { index -> rawFlags.getOrNull(index) ?: false }
-                }
-                var values by rememberSaveable(labels) { mutableStateOf(initialValues) }
-                var checkedValues by rememberSaveable(checkboxLabels) { mutableStateOf(initialChecked) }
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val style = rememberAppDialogStyle()
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    content = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            labels.forEachIndexed { index, label ->
-                                val isPassword = passwordFlags.getOrNull(index) ?: false
-                                AppDialogTextField(
-                                    value = values.getOrNull(index).orEmpty(),
-                                    onValueChange = { nextValue ->
-                                        values = values.updateAt(index, nextValue, labels.size)
-                                    },
-                                    label = label,
-                                    singleLine = true,
-                                    visualTransformation = if (isPassword) {
-                                        PasswordVisualTransformation()
-                                    } else {
-                                        VisualTransformation.None
-                                    },
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = if (isPassword) {
-                                            KeyboardType.Password
-                                        } else {
-                                            KeyboardType.Text
-                                        }
-                                    )
-                                )
-                            }
-                            checkboxLabels.forEachIndexed { index, label ->
-                                val checked = checkedValues.getOrNull(index) ?: false
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            checkedValues = checkedValues.updateCheckedAt(index, !checked, checkboxLabels.size)
-                                        }
-                                        .padding(vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = checked,
-                                        onCheckedChange = { next ->
-                                            checkedValues = checkedValues.updateCheckedAt(index, next, checkboxLabels.size)
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null && onPositiveWithChecks == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val labels = remember {
+                        args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
+                    }
+                    val checkboxLabels = remember {
+                        args.getStringArrayList(ARG_CHECKBOX_LABELS)?.toList().orEmpty()
+                    }
+                    val initialValues = remember(labels) {
+                        val rawValues = args.getStringArrayList(ARG_INITIAL_VALUES)?.toList().orEmpty()
+                        List(labels.size) { index -> rawValues.getOrNull(index).orEmpty() }
+                    }
+                    val initialChecked = remember(checkboxLabels) {
+                        val rawValues = args.getBooleanArray(ARG_CHECKBOX_VALUES) ?: booleanArrayOf()
+                        List(checkboxLabels.size) { index -> rawValues.getOrNull(index) ?: false }
+                    }
+                    val passwordFlags = remember(labels) {
+                        val rawFlags = args.getBooleanArray(ARG_PASSWORD_FLAGS) ?: booleanArrayOf()
+                        BooleanArray(labels.size) { index -> rawFlags.getOrNull(index) ?: false }
+                    }
+                    var values by rememberSaveable(labels) { mutableStateOf(initialValues) }
+                    var checkedValues by rememberSaveable(checkboxLabels) { mutableStateOf(initialChecked) }
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val style = rememberAppDialogStyle()
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        content = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                labels.forEachIndexed { index, label ->
+                                    val isPassword = passwordFlags.getOrNull(index) ?: false
+                                    AppDialogTextField(
+                                        value = values.getOrNull(index).orEmpty(),
+                                        onValueChange = { nextValue ->
+                                            values = values.updateAt(index, nextValue, labels.size)
                                         },
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = style.accent,
-                                            uncheckedColor = style.secondaryText,
-                                            checkmarkColor = style.surface
+                                        label = label,
+                                        singleLine = true,
+                                        visualTransformation = if (isPassword) {
+                                            PasswordVisualTransformation()
+                                        } else {
+                                            VisualTransformation.None
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = if (isPassword) {
+                                                KeyboardType.Password
+                                            } else {
+                                                KeyboardType.Text
+                                            }
                                         )
                                     )
-                                    Text(
-                                        text = label,
-                                        color = style.primaryText,
-                                        fontFamily = style.bodyFontFamily,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                }
+                                checkboxLabels.forEachIndexed { index, label ->
+                                    val checked = checkedValues.getOrNull(index) ?: false
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                checkedValues = checkedValues.updateCheckedAt(index, !checked, checkboxLabels.size)
+                                            }
+                                            .padding(vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = { next ->
+                                                checkedValues = checkedValues.updateCheckedAt(index, next, checkboxLabels.size)
+                                            },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = style.accent,
+                                                uncheckedColor = style.secondaryText,
+                                                checkmarkColor = style.surface
+                                            )
+                                        )
+                                        Text(
+                                            text = label,
+                                            color = style.primaryText,
+                                            fontFamily = style.bodyFontFamily,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                        if (onPositive != null || onPositiveWithChecks != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
                             LegadoMiuixActionButton(
-                                text = positiveText,
+                                text = negativeText,
                                 palette = palette,
-                                onClick = {
-                                    val current = values
-                                    val currentChecked = checkedValues.toBooleanArray()
-                                    if (validateInput?.invoke(current) != false) {
-                                        dismissAllowingStateLoss()
-                                        onPositive?.invoke(current)
-                                        onPositiveWithChecks?.invoke(current, currentChecked)
-                                    }
-                                },
-                                primary = true,
+                                onClick = { dismissAllowingStateLoss() },
                                 cornerRadius = style.actionRadius
                             )
+                            if (onPositive != null || onPositiveWithChecks != null) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
+                                    palette = palette,
+                                    onClick = {
+                                        val current = values
+                                        val currentChecked = checkedValues.toBooleanArray()
+                                        if (validateInput?.invoke(current) != false) {
+                                            dismissAllowingStateLoss()
+                                            onPositive?.invoke(current)
+                                            onPositiveWithChecks?.invoke(current, currentChecked)
+                                        }
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1217,183 +1232,185 @@ class ComposeNumberPickerDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val style = rememberAppDialogStyle()
-                val minValue = args.getInt(ARG_MIN_VALUE)
-                val maxValue = args.getInt(ARG_MAX_VALUE)
-                val safeMin = minOf(minValue, maxValue)
-                val safeMax = maxOf(minValue, maxValue)
-                val isDecimalMode = args.getBoolean(ARG_DECIMAL_MODE)
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val customText = args.getString(ARG_CUSTOM_TEXT)?.takeIf { it.isNotBlank() }
-                var currentValue by rememberSaveable {
-                    mutableIntStateOf(args.getInt(ARG_VALUE).coerceIn(safeMin, safeMax))
-                }
-                var inputText by rememberSaveable(currentValue, isDecimalMode) {
-                    mutableStateOf(formatPickerValue(currentValue, isDecimalMode))
-                }
-                val usePercentSlider = !isDecimalMode &&
-                    safeMax == 100 &&
-                    safeMin in 0..100 &&
-                    safeMin < safeMax
-
-                fun inputValueOrCurrent(): Int {
-                    return parsePickerValue(inputText, isDecimalMode)
-                        ?.coerceIn(safeMin, safeMax)
-                        ?: currentValue
-                }
-
-                fun commitValue(): Int {
-                    val next = inputValueOrCurrent()
-                    currentValue = next
-                    inputText = formatPickerValue(next, isDecimalMode)
-                    return next
-                }
-
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    scrollContent = true,
-                    content = {
-                        val palette = style.toMiuixPalette()
-                        if (usePercentSlider) {
-                            LegadoMiuixCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = style.fieldSurface,
-                                contentColor = style.primaryText,
-                                cornerRadius = style.actionRadius,
-                                insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-                            ) {
-                                Text(
-                                    text = "${currentValue.coerceIn(safeMin, safeMax)}%",
-                                    color = style.primaryText,
-                                    fontSize = MaterialTheme.typography.headlineSmall.fontSize,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                AppThemedStepperSlider(
-                                    value = currentValue.coerceIn(safeMin, safeMax),
-                                    range = safeMin..safeMax,
-                                    onValueChange = {
-                                        currentValue = it.coerceIn(safeMin, safeMax)
-                                        inputText = formatPickerValue(currentValue, isDecimalMode)
-                                    },
-                                    palette = palette
-                                )
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                NumberPickerStepButton(
-                                    text = "-",
-                                    enabled = inputValueOrCurrent() > safeMin,
-                                    palette = palette,
-                                    onClick = {
-                                        currentValue = (inputValueOrCurrent() - 1).coerceAtLeast(safeMin)
-                                        inputText = formatPickerValue(currentValue, isDecimalMode)
-                                    }
-                                )
-                                OutlinedTextField(
-                                    value = inputText,
-                                    onValueChange = { inputText = it },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = when {
-                                            safeMin < 0 -> KeyboardType.Text
-                                            isDecimalMode -> KeyboardType.Decimal
-                                            else -> KeyboardType.Number
-                                        }
-                                    ),
-                                    textStyle = MaterialTheme.typography.titleLarge.copy(
-                                        color = style.primaryText,
-                                        fontFamily = style.bodyFontFamily,
-                                        fontWeight = FontWeight.SemiBold,
-                                        textAlign = TextAlign.Center
-                                    ),
-                                    shape = RoundedCornerShape(style.actionRadius),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = style.primaryText,
-                                        unfocusedTextColor = style.primaryText,
-                                        focusedContainerColor = style.fieldSurface,
-                                        unfocusedContainerColor = style.fieldSurface,
-                                        focusedBorderColor = style.accent.copy(alpha = 0.55f),
-                                        unfocusedBorderColor = style.stroke,
-                                        cursorColor = style.accent
-                                    )
-                                )
-                                NumberPickerStepButton(
-                                    text = "+",
-                                    enabled = inputValueOrCurrent() < safeMax,
-                                    palette = palette,
-                                    onClick = {
-                                        currentValue = (inputValueOrCurrent() + 1).coerceAtMost(safeMax)
-                                        inputText = formatPickerValue(currentValue, isDecimalMode)
-                                    }
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (usePercentSlider) {
-                                "$safeMin% - $safeMax%"
-                            } else {
-                                "${formatPickerValue(safeMin, isDecimalMode)} - ${formatPickerValue(safeMax, isDecimalMode)}"
-                            },
-                            color = style.secondaryText,
-                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        val customCallback = onCustom
-                        if (customText != null && customCallback != null) {
-                            LegadoMiuixActionButton(
-                                text = customText,
-                                palette = palette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    customCallback.invoke()
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                        onPositive?.let { callback ->
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = positiveText,
-                                palette = palette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    callback.invoke(commitValue())
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val style = rememberAppDialogStyle()
+                    val minValue = args.getInt(ARG_MIN_VALUE)
+                    val maxValue = args.getInt(ARG_MAX_VALUE)
+                    val safeMin = minOf(minValue, maxValue)
+                    val safeMax = maxOf(minValue, maxValue)
+                    val isDecimalMode = args.getBoolean(ARG_DECIMAL_MODE)
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val customText = args.getString(ARG_CUSTOM_TEXT)?.takeIf { it.isNotBlank() }
+                    var currentValue by rememberSaveable {
+                        mutableIntStateOf(args.getInt(ARG_VALUE).coerceIn(safeMin, safeMax))
                     }
-                )
+                    var inputText by rememberSaveable(currentValue, isDecimalMode) {
+                        mutableStateOf(formatPickerValue(currentValue, isDecimalMode))
+                    }
+                    val usePercentSlider = !isDecimalMode &&
+                        safeMax == 100 &&
+                        safeMin in 0..100 &&
+                        safeMin < safeMax
+
+                    fun inputValueOrCurrent(): Int {
+                        return parsePickerValue(inputText, isDecimalMode)
+                            ?.coerceIn(safeMin, safeMax)
+                            ?: currentValue
+                    }
+
+                    fun commitValue(): Int {
+                        val next = inputValueOrCurrent()
+                        currentValue = next
+                        inputText = formatPickerValue(next, isDecimalMode)
+                        return next
+                    }
+
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        scrollContent = true,
+                        content = {
+                            val palette = style.toMiuixPalette()
+                            if (usePercentSlider) {
+                                LegadoMiuixCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = style.fieldSurface,
+                                    contentColor = style.primaryText,
+                                    cornerRadius = style.actionRadius,
+                                    insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+                                ) {
+                                    Text(
+                                        text = "${currentValue.coerceIn(safeMin, safeMax)}%",
+                                        color = style.primaryText,
+                                        fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AppThemedStepperSlider(
+                                        value = currentValue.coerceIn(safeMin, safeMax),
+                                        range = safeMin..safeMax,
+                                        onValueChange = {
+                                            currentValue = it.coerceIn(safeMin, safeMax)
+                                            inputText = formatPickerValue(currentValue, isDecimalMode)
+                                        },
+                                        palette = palette
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    NumberPickerStepButton(
+                                        text = "-",
+                                        enabled = inputValueOrCurrent() > safeMin,
+                                        palette = palette,
+                                        onClick = {
+                                            currentValue = (inputValueOrCurrent() - 1).coerceAtLeast(safeMin)
+                                            inputText = formatPickerValue(currentValue, isDecimalMode)
+                                        }
+                                    )
+                                    OutlinedTextField(
+                                        value = inputText,
+                                        onValueChange = { inputText = it },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = when {
+                                                safeMin < 0 -> KeyboardType.Text
+                                                isDecimalMode -> KeyboardType.Decimal
+                                                else -> KeyboardType.Number
+                                            }
+                                        ),
+                                        textStyle = MaterialTheme.typography.titleLarge.copy(
+                                            color = style.primaryText,
+                                            fontFamily = style.bodyFontFamily,
+                                            fontWeight = FontWeight.SemiBold,
+                                            textAlign = TextAlign.Center
+                                        ),
+                                        shape = RoundedCornerShape(style.actionRadius),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = style.primaryText,
+                                            unfocusedTextColor = style.primaryText,
+                                            focusedContainerColor = style.fieldSurface,
+                                            unfocusedContainerColor = style.fieldSurface,
+                                            focusedBorderColor = style.accent.copy(alpha = 0.55f),
+                                            unfocusedBorderColor = style.stroke,
+                                            cursorColor = style.accent
+                                        )
+                                    )
+                                    NumberPickerStepButton(
+                                        text = "+",
+                                        enabled = inputValueOrCurrent() < safeMax,
+                                        palette = palette,
+                                        onClick = {
+                                            currentValue = (inputValueOrCurrent() + 1).coerceAtMost(safeMax)
+                                            inputText = formatPickerValue(currentValue, isDecimalMode)
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (usePercentSlider) {
+                                    "$safeMin% - $safeMax%"
+                                } else {
+                                    "${formatPickerValue(safeMin, isDecimalMode)} - ${formatPickerValue(safeMax, isDecimalMode)}"
+                                },
+                                color = style.secondaryText,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            val customCallback = onCustom
+                            if (customText != null && customCallback != null) {
+                                LegadoMiuixActionButton(
+                                    text = customText,
+                                    palette = palette,
+                                    onClick = {
+                                        dismissAllowingStateLoss()
+                                        customCallback.invoke()
+                                    },
+                                    cornerRadius = style.actionRadius
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            LegadoMiuixActionButton(
+                                text = negativeText,
+                                palette = palette,
+                                onClick = { dismissAllowingStateLoss() },
+                                cornerRadius = style.actionRadius
+                            )
+                            onPositive?.let { callback ->
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
+                                    palette = palette,
+                                    onClick = {
+                                        dismissAllowingStateLoss()
+                                        callback.invoke(commitValue())
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -1514,120 +1531,122 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null && onItemCheckedChange == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val style = rememberAppDialogStyle()
-                val itemLabels = remember {
-                    args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
-                }
-                val initialCheckedValues = remember(itemLabels) {
-                    val initialChecked = args.getBooleanArray(ARG_CHECKED) ?: booleanArrayOf()
-                    List(itemLabels.size) { index -> initialChecked.getOrNull(index) ?: false }
-                }
-                val saveCheckedState = itemLabels.size <= MAX_SAVEABLE_MULTI_CHOICE_ITEMS
-                val saveableChecked = if (saveCheckedState) {
-                    rememberSaveable(itemLabels) { mutableStateOf(initialCheckedValues) }
-                } else {
-                    null
-                }
-                val localChecked = if (saveCheckedState) {
-                    null
-                } else {
-                    remember(itemLabels) {
-                        mutableStateListOf<Boolean>().apply { addAll(initialCheckedValues) }
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null && onItemCheckedChange == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val style = rememberAppDialogStyle()
+                    val itemLabels = remember {
+                        args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
                     }
-                }
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val canSubmit = onPositive != null
-                val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    scrollContent = false,
-                    content = {
-                        val palette = style.toMiuixPalette()
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 420.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            itemsIndexed(itemLabels) { index, label ->
-                                LegadoMiuixChoiceRow(
-                                    text = label,
-                                    selected = saveableChecked?.value?.getOrNull(index)
-                                        ?: localChecked?.getOrNull(index)
-                                        ?: false,
-                                    palette = palette,
-                                    onClick = {
-                                        if (index in itemLabels.indices) {
-                                            val nextChecked = !(saveableChecked?.value?.getOrNull(index)
-                                                ?: localChecked?.getOrNull(index)
-                                                ?: false)
-                                            val state = saveableChecked
-                                            if (state != null) {
-                                                state.value = state.value.toggleAt(index, itemLabels.size)
-                                            } else {
-                                                localChecked?.let { values ->
-                                                    if (index in values.indices) {
-                                                        values[index] = nextChecked
+                    val initialCheckedValues = remember(itemLabels) {
+                        val initialChecked = args.getBooleanArray(ARG_CHECKED) ?: booleanArrayOf()
+                        List(itemLabels.size) { index -> initialChecked.getOrNull(index) ?: false }
+                    }
+                    val saveCheckedState = itemLabels.size <= MAX_SAVEABLE_MULTI_CHOICE_ITEMS
+                    val saveableChecked = if (saveCheckedState) {
+                        rememberSaveable(itemLabels) { mutableStateOf(initialCheckedValues) }
+                    } else {
+                        null
+                    }
+                    val localChecked = if (saveCheckedState) {
+                        null
+                    } else {
+                        remember(itemLabels) {
+                            mutableStateListOf<Boolean>().apply { addAll(initialCheckedValues) }
+                        }
+                    }
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val canSubmit = onPositive != null
+                    val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        scrollContent = false,
+                        content = {
+                            val palette = style.toMiuixPalette()
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 420.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                itemsIndexed(itemLabels) { index, label ->
+                                    LegadoMiuixChoiceRow(
+                                        text = label,
+                                        selected = saveableChecked?.value?.getOrNull(index)
+                                            ?: localChecked?.getOrNull(index)
+                                            ?: false,
+                                        palette = palette,
+                                        onClick = {
+                                            if (index in itemLabels.indices) {
+                                                val nextChecked = !(saveableChecked?.value?.getOrNull(index)
+                                                    ?: localChecked?.getOrNull(index)
+                                                    ?: false)
+                                                val state = saveableChecked
+                                                if (state != null) {
+                                                    state.value = state.value.toggleAt(index, itemLabels.size)
+                                                } else {
+                                                    localChecked?.let { values ->
+                                                        if (index in values.indices) {
+                                                            values[index] = nextChecked
+                                                        }
                                                     }
                                                 }
+                                                onItemCheckedChange?.invoke(index, nextChecked)
                                             }
-                                            onItemCheckedChange?.invoke(index, nextChecked)
-                                        }
+                                        },
+                                        minHeight = 42.dp
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            if (neutralText != null && onNeutral != null) {
+                                LegadoMiuixActionButton(
+                                    text = neutralText,
+                                    palette = palette,
+                                    onClick = {
+                                        dismissAllowingStateLoss()
+                                        onNeutral?.invoke()
                                     },
-                                    minHeight = 42.dp
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
+                            LegadoMiuixActionButton(
+                                text = negativeText,
+                                palette = palette,
+                                onClick = { dismissAllowingStateLoss() },
+                                cornerRadius = style.actionRadius
+                            )
+                            if (canSubmit) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
+                                    palette = palette,
+                                    onClick = {
+                                        val result = BooleanArray(itemLabels.size) { index ->
+                                            saveableChecked?.value?.getOrNull(index)
+                                                ?: localChecked?.getOrNull(index)
+                                                ?: false
+                                        }
+                                        dismissAllowingStateLoss()
+                                        onPositive?.invoke(result)
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
                                 )
                             }
                         }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        if (neutralText != null && onNeutral != null) {
-                            LegadoMiuixActionButton(
-                                text = neutralText,
-                                palette = palette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    onNeutral?.invoke()
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                        if (canSubmit) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = positiveText,
-                                palette = palette,
-                                onClick = {
-                                    val result = BooleanArray(itemLabels.size) { index ->
-                                        saveableChecked?.value?.getOrNull(index)
-                                            ?: localChecked?.getOrNull(index)
-                                            ?: false
-                                    }
-                                    dismissAllowingStateLoss()
-                                    onPositive?.invoke(result)
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1708,107 +1727,109 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
-                val dangerPositive = args.getBoolean(ARG_DANGER_POSITIVE)
-                val positiveRequiresCallback = args.getBoolean(ARG_POSITIVE_REQUIRES_CALLBACK, true)
-                val negativeRequiresCallback = args.getBoolean(ARG_NEGATIVE_REQUIRES_CALLBACK, false)
-                val messageInContent = args.getBoolean(ARG_MESSAGE_IN_CONTENT)
-                val showNegative = args.getBoolean(ARG_SHOW_NEGATIVE, true)
-                val checkboxLabel = args.getString(ARG_CHECKBOX_LABEL)?.takeIf { it.isNotBlank() }
-                checkboxCheckedState.value = args.getBoolean(ARG_CHECKBOX_CHECKED)
-                DismissWhenCallbackMissing(
-                    missing = positiveRequiresCallback && onPositive == null ||
-                        negativeRequiresCallback && onNegative == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    messageInContent = messageInContent,
-                    content = {
-                        if (checkboxLabel != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        checkboxCheckedState.value = !checkboxCheckedState.value
-                                    }
-                            ) {
-                                Checkbox(
-                                    checked = checkboxCheckedState.value,
-                                    onCheckedChange = { checkboxCheckedState.value = it }
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
+                    val dangerPositive = args.getBoolean(ARG_DANGER_POSITIVE)
+                    val positiveRequiresCallback = args.getBoolean(ARG_POSITIVE_REQUIRES_CALLBACK, true)
+                    val negativeRequiresCallback = args.getBoolean(ARG_NEGATIVE_REQUIRES_CALLBACK, false)
+                    val messageInContent = args.getBoolean(ARG_MESSAGE_IN_CONTENT)
+                    val showNegative = args.getBoolean(ARG_SHOW_NEGATIVE, true)
+                    val checkboxLabel = args.getString(ARG_CHECKBOX_LABEL)?.takeIf { it.isNotBlank() }
+                    checkboxCheckedState.value = args.getBoolean(ARG_CHECKBOX_CHECKED)
+                    DismissWhenCallbackMissing(
+                        missing = positiveRequiresCallback && onPositive == null ||
+                            negativeRequiresCallback && onNegative == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        messageInContent = messageInContent,
+                        content = {
+                            if (checkboxLabel != null) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            checkboxCheckedState.value = !checkboxCheckedState.value
+                                        }
+                                ) {
+                                    Checkbox(
+                                        checked = checkboxCheckedState.value,
+                                        onCheckedChange = { checkboxCheckedState.value = it }
+                                    )
+                                    Text(
+                                        text = checkboxLabel,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = style.primaryText
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            var hasPriorAction = false
+                            val neutralCallback = onNeutral
+                            if (neutralText != null && neutralCallback != null) {
+                                LegadoMiuixActionButton(
+                                    text = neutralText,
+                                    palette = palette,
+                                    onClick = {
+                                        handledAction = true
+                                        dismissAllowingStateLoss()
+                                        neutralCallback.invoke()
+                                    },
+                                    cornerRadius = style.actionRadius
                                 )
-                                Text(
-                                    text = checkboxLabel,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = style.primaryText
+                                hasPriorAction = true
+                            }
+                            val negativeCallback = onNegative
+                            if (showNegative && (!negativeRequiresCallback || negativeCallback != null)) {
+                                if (hasPriorAction) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                LegadoMiuixActionButton(
+                                    text = negativeText,
+                                    palette = palette,
+                                    onClick = {
+                                        if (negativeCallback != null) handledAction = true
+                                        dismissAllowingStateLoss()
+                                        negativeCallback?.invoke()
+                                    },
+                                    cornerRadius = style.actionRadius
+                                )
+                                hasPriorAction = true
+                            }
+                            val positiveCallback = onPositive
+                            if (!positiveRequiresCallback || positiveCallback != null) {
+                                if (hasPriorAction) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
+                                    palette = palette,
+                                    onClick = {
+                                        handledAction = true
+                                        dismissAllowingStateLoss()
+                                        onCheckboxConfirmed?.invoke(checkboxCheckedState.value)
+                                        positiveCallback?.invoke()
+                                    },
+                                    primary = !dangerPositive,
+                                    danger = dangerPositive,
+                                    cornerRadius = style.actionRadius
                                 )
                             }
                         }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        var hasPriorAction = false
-                        val neutralCallback = onNeutral
-                        if (neutralText != null && neutralCallback != null) {
-                            LegadoMiuixActionButton(
-                                text = neutralText,
-                                palette = palette,
-                                onClick = {
-                                    handledAction = true
-                                    dismissAllowingStateLoss()
-                                    neutralCallback.invoke()
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                            hasPriorAction = true
-                        }
-                        val negativeCallback = onNegative
-                        if (showNegative && (!negativeRequiresCallback || negativeCallback != null)) {
-                            if (hasPriorAction) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            LegadoMiuixActionButton(
-                                text = negativeText,
-                                palette = palette,
-                                onClick = {
-                                    if (negativeCallback != null) handledAction = true
-                                    dismissAllowingStateLoss()
-                                    negativeCallback?.invoke()
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                            hasPriorAction = true
-                        }
-                        val positiveCallback = onPositive
-                        if (!positiveRequiresCallback || positiveCallback != null) {
-                            if (hasPriorAction) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            LegadoMiuixActionButton(
-                                text = positiveText,
-                                palette = palette,
-                                onClick = {
-                                    handledAction = true
-                                    dismissAllowingStateLoss()
-                                    onCheckboxConfirmed?.invoke(checkboxCheckedState.value)
-                                    positiveCallback?.invoke()
-                                },
-                                primary = !dangerPositive,
-                                danger = dangerPositive,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1892,72 +1913,74 @@ class ComposeSingleChoiceDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onPositive == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val style = rememberAppDialogStyle()
-                val itemLabels = remember {
-                    args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
-                }
-                val allowNoSelection = args.getBoolean(ARG_ALLOW_NO_SELECTION)
-                var selectedIndex by rememberSaveable {
-                    mutableStateOf(args.getInt(ARG_SELECTED_INDEX).coerceIn(-1, itemLabels.lastIndex))
-                }
-                val positiveText = args.getString(ARG_POSITIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.ok) }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val canSubmit = onPositive != null &&
-                    (allowNoSelection || selectedIndex in itemLabels.indices)
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    scrollContent = false,
-                    content = {
-                        val palette = style.toMiuixPalette()
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 420.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            itemsIndexed(itemLabels) { index, label ->
-                                LegadoMiuixChoiceRow(
-                                    text = label,
-                                    selected = selectedIndex == index,
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onPositive == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val style = rememberAppDialogStyle()
+                    val itemLabels = remember {
+                        args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
+                    }
+                    val allowNoSelection = args.getBoolean(ARG_ALLOW_NO_SELECTION)
+                    var selectedIndex by rememberSaveable {
+                        mutableStateOf(args.getInt(ARG_SELECTED_INDEX).coerceIn(-1, itemLabels.lastIndex))
+                    }
+                    val positiveText = args.getString(ARG_POSITIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.ok) }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val canSubmit = onPositive != null &&
+                        (allowNoSelection || selectedIndex in itemLabels.indices)
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        scrollContent = false,
+                        content = {
+                            val palette = style.toMiuixPalette()
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 420.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                itemsIndexed(itemLabels) { index, label ->
+                                    LegadoMiuixChoiceRow(
+                                        text = label,
+                                        selected = selectedIndex == index,
+                                        palette = palette,
+                                        onClick = { selectedIndex = index },
+                                        minHeight = 42.dp
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            LegadoMiuixActionButton(
+                                text = negativeText,
+                                palette = palette,
+                                onClick = { dismissAllowingStateLoss() },
+                                cornerRadius = style.actionRadius
+                            )
+                            if (canSubmit) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = positiveText,
                                     palette = palette,
-                                    onClick = { selectedIndex = index },
-                                    minHeight = 42.dp
+                                    onClick = {
+                                        dismissAllowingStateLoss()
+                                        onPositive?.invoke(selectedIndex)
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
                                 )
                             }
                         }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                        if (canSubmit) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = positiveText,
-                                palette = palette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    onPositive?.invoke(selectedIndex)
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -2017,63 +2040,65 @@ class ComposeActionListDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onSelected == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val style = rememberAppDialogStyle()
-                val itemLabels = remember {
-                    args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
-                }
-                val itemDescriptions = remember {
-                    args.getStringArrayList(ARG_DESCRIPTIONS)?.toList().orEmpty()
-                }
-                val dangerIndices = remember {
-                    args.getIntegerArrayList(ARG_DANGER_INDICES)?.toSet().orEmpty()
-                }
-                val negativeText = args.getString(ARG_NEGATIVE_TEXT)
-                    .orEmpty()
-                    .ifBlank { stringResource(R.string.cancel) }
-                val canSelect = onSelected != null
-                AppDialogFrame(
-                    title = args.getString(ARG_TITLE).orEmpty(),
-                    message = args.getString(ARG_MESSAGE),
-                    scrollContent = false,
-                    content = {
-                        val palette = style.toMiuixPalette()
-                        if (canSelect) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                itemsIndexed(itemLabels) { index, label ->
-                                    LegadoMiuixActionRow(
-                                        text = label,
-                                        palette = palette,
-                                        onClick = {
-                                            dismissAllowingStateLoss()
-                                            onSelected?.invoke(index)
-                                        },
-                                        description = itemDescriptions.getOrNull(index),
-                                        danger = index in dangerIndices,
-                                        cornerRadius = style.actionRadius
-                                    )
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onSelected == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val style = rememberAppDialogStyle()
+                    val itemLabels = remember {
+                        args.getStringArrayList(ARG_LABELS)?.toList().orEmpty()
+                    }
+                    val itemDescriptions = remember {
+                        args.getStringArrayList(ARG_DESCRIPTIONS)?.toList().orEmpty()
+                    }
+                    val dangerIndices = remember {
+                        args.getIntegerArrayList(ARG_DANGER_INDICES)?.toSet().orEmpty()
+                    }
+                    val negativeText = args.getString(ARG_NEGATIVE_TEXT)
+                        .orEmpty()
+                        .ifBlank { stringResource(R.string.cancel) }
+                    val canSelect = onSelected != null
+                    AppDialogFrame(
+                        title = args.getString(ARG_TITLE).orEmpty(),
+                        message = args.getString(ARG_MESSAGE),
+                        scrollContent = false,
+                        content = {
+                            val palette = style.toMiuixPalette()
+                            if (canSelect) {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 420.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    itemsIndexed(itemLabels) { index, label ->
+                                        LegadoMiuixActionRow(
+                                            text = label,
+                                            palette = palette,
+                                            onClick = {
+                                                dismissAllowingStateLoss()
+                                                onSelected?.invoke(index)
+                                            },
+                                            description = itemDescriptions.getOrNull(index),
+                                            danger = index in dangerIndices,
+                                            cornerRadius = style.actionRadius
+                                        )
+                                    }
                                 }
                             }
+                        },
+                        actions = {
+                            val palette = style.toMiuixPalette()
+                            LegadoMiuixActionButton(
+                                text = negativeText,
+                                palette = palette,
+                                onClick = { dismissAllowingStateLoss() },
+                                cornerRadius = style.actionRadius
+                            )
                         }
-                    },
-                    actions = {
-                        val palette = style.toMiuixPalette()
-                        LegadoMiuixActionButton(
-                            text = negativeText,
-                            palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -2337,33 +2362,35 @@ class ComposeFetchedModelDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DismissWhenCallbackMissing(
-                    missing = onAddSingle == null,
-                    dismiss = ::dismissAllowingStateLoss
-                )
-                val modelIds = remember {
-                    args.getStringArrayList(ARG_MODEL_IDS)?.toList().orEmpty()
+                LegadoTheme {
+                    DismissWhenCallbackMissing(
+                        missing = onAddSingle == null,
+                        dismiss = ::dismissAllowingStateLoss
+                    )
+                    val modelIds = remember {
+                        args.getStringArrayList(ARG_MODEL_IDS)?.toList().orEmpty()
+                    }
+                    val existingIds = remember {
+                        args.getStringArrayList(ARG_EXISTING_IDS)?.toSet().orEmpty()
+                    }
+                    io.legado.app.ui.config.FetchedModelSelectorContent(
+                        modelIds = modelIds,
+                        existingIds = existingIds,
+                        onAddSingle = { modelId ->
+                            dismissAllowingStateLoss()
+                            onAddSingle?.invoke(modelId)
+                        },
+                        onAddSelected = { selectedIds ->
+                            dismissAllowingStateLoss()
+                            onAddSelected?.invoke(selectedIds)
+                        },
+                        onAddAll = { allIds ->
+                            dismissAllowingStateLoss()
+                            onAddAll?.invoke(allIds)
+                        },
+                        onDismiss = { dismissAllowingStateLoss() }
+                    )
                 }
-                val existingIds = remember {
-                    args.getStringArrayList(ARG_EXISTING_IDS)?.toSet().orEmpty()
-                }
-                io.legado.app.ui.config.FetchedModelSelectorContent(
-                    modelIds = modelIds,
-                    existingIds = existingIds,
-                    onAddSingle = { modelId ->
-                        dismissAllowingStateLoss()
-                        onAddSingle?.invoke(modelId)
-                    },
-                    onAddSelected = { selectedIds ->
-                        dismissAllowingStateLoss()
-                        onAddSelected?.invoke(selectedIds)
-                    },
-                    onAddAll = { allIds ->
-                        dismissAllowingStateLoss()
-                        onAddAll?.invoke(allIds)
-                    },
-                    onDismiss = { dismissAllowingStateLoss() }
-                )
             }
         }
     }
