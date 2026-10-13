@@ -321,12 +321,13 @@
       // 未生效的旧值（真机实测把 667 反解成 0 ⇒ 页面被拉回首屏、页码恒 1/1）。
       bodyOffsetAuthoritative = false;
       if (authoritativeRatio >= 0) {
-        // **内容比例口径**（与壳无关 ⇒ 恢复精确）：`bodyOffset = ratio × (内容高 − 页高)`。
-        // ⚠️ 归一化必须与 [progressRatio]（保存侧）**完全一致**：两侧都按"滚动区间"归一
-        // （2026-10-12 真机二次校正：曾用 `ratio × 内容高` 与保存侧混用 ⇒ 往返仍偏 1 页）。
-        var ratioContent = slot.scrollHeight || 0;
+        // **滚动区间比例口径**：`bodyOffset = ratio × (内容高 − 箱高)`，分母恒取 [maxBodyOffset]。
+        // ⚠️ 必须与保存侧 [progressRatio] **完全同源** —— 保存侧用的就是 `maxBodyOffset`；恢复侧
+        // 若改用 `可见窗口高`（被 `padding-bottom` 吃掉一段残量），分母就差 (clientHeight − visible)
+        // 个像素区间 ⇒ 真机实测由精确恢复**退化为 ±1 页**（`4/14 → 3/14`；页脚变薄时偏差被放大）。
+        // （2026-10-12 二次校正：曾用 `ratio × 内容高` 混用 ⇒ 同样偏 1 页。同一铁律的第 3 次复现。）
         bodyOffset = clampBodyOffset(
-          authoritativeRatio * Math.max(0, ratioContent - visible), slot, root
+          authoritativeRatio * maxBodyOffset(slot, root), slot, root
         );
         authoritativeRatio = -1;
       } else if (authoritativePage >= 0) {
