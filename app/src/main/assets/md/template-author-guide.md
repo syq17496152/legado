@@ -41,6 +41,7 @@
 | `chapterTitle` | 章节名 |
 | `progress` | 阅读进度百分比 |
 | `page` / `pageCount` | 当前页 / 总页数（**沙箱派生**） |
+| `pageIndex` | 当前页号（**0 基**，与 Archive 主题口径一致） |
 | `percent` | `progress` 的别名 |
 | `time` | 当前时间（分钟级刷新） |
 | `battery` | 电量文本（取不到时**保持占位，不写假值**） |
@@ -58,6 +59,26 @@
   装饰透明度 ⇒ 作者 CSS 里的低不透明度**会被覆盖**（低调观感请把 alpha 做进素材本身）。
 - **动效克制**：声明了动效就必须给 `@media (prefers-reduced-motion: reduce)` 静默分支；
   建议元素 ≤ 120、动画声明 ≤ 12。
+- **Archive 兼容变量**：运行时同时下发一组 `--reader-*`（`--reader-font-size` / `-line-height` /
+  `-font-family` / `-text-color` / `-page-background` / `-accent` / `-paragraph-indent` /
+  `-paragraph-spacing` / `-safe-*` / `-padding-*`），取值与 Archive 的**兼容默认值**同口径 ⇒
+  从 Archive 导出的模板可**零改动**正确继承字号、纸色、缩进与安全区，无需改写变量名。
+
+## 四·五、作者脚本接口（`readerTemplate`，Archive 兼容）
+
+模板的 `javascript` 里可直接使用 **`window.readerTemplate`**（与 Archive 同形）：
+
+| 成员 | 说明 |
+|------|------|
+| `.on(name, fn)` | 注册钩子，返回注销句柄；钩子：`beforeLayout` / `afterLayout` / `pageChange` / `motionChange` / `fieldsChange` / `dispose` |
+| `.source` | 正文根（首个正文槽位），用于点选 `.reader-paragraph` / `.reader-chapter-title` 等段落元素 |
+| `.fields` / `.viewport` | 当前字段真值 / 阅读区尺寸 |
+| `.pageIndex` / `.pageCount` | 当前页号（0 基）/ 总页数 |
+| `.motionState` / `.type` | 动效状态（`running` / `paused`）/ 模板类型 |
+| `.requestLayout()` | 请求重新排版（如钩子内改变了正文测量） |
+
+> 钩子内抛异常**不会白屏**：异常并入模板错误路径并保留已渲染内容。
+> 多正文槽可用 `data-reader-order` 声明先后；`data-reader-text-ignore` 子树不参与正文抽取。
 
 ## 五、素材与合规
 

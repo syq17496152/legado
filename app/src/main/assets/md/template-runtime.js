@@ -95,6 +95,183 @@
    */
   var DECOR_SCALE = { none: '0', light: '0.75', medium: '1', strong: '1.25' };
 
+  /**
+   * archive 契约：宿主变量（AD-38 / archive-template-compat）。
+   *
+   * archive 主题（如 `builtin.asuka_sync`）的 CSS 依赖这一组 `--reader-*`。取值与 archive
+   * 的**兼容默认值**同口径（archive `EpubTemplateDocument.baseCss`）：**固定默认值**，
+   * 不跟随阅读主题；模板可自行覆盖。缺这组变量时作者的 `var(--reader-font-size)` 等
+   * 全部回落 UA 值 ⇒ 字号/纸色/缩进/安全区全线错位（用户实测「完全效果都不一样」）。
+   *
+   * 与既有 `--md-*` / `--rp-*` **并存**（不改写、不替换）：`--md-*` 仍供我方内置模板消费。
+   */
+  var READER_VAR_DEFAULTS = {
+    '--reader-text-color': '#222',
+    '--reader-page-background': '#fff',
+    '--reader-accent': '#555',
+    '--reader-font-size': '18px',
+    '--reader-line-height': '1.7',
+    '--reader-font-family': 'serif',
+    '--reader-paragraph-indent': '2em',
+    '--reader-paragraph-spacing': '.65em',
+    '--reader-padding-left': '0px',
+    '--reader-padding-top': '0px',
+    '--reader-padding-right': '0px',
+    '--reader-padding-bottom': '0px',
+    '--reader-safe-left': '0px',
+    '--reader-safe-top': '0px',
+    '--reader-safe-right': '0px',
+    '--reader-safe-bottom': '0px'
+  };
+
+  /** 把契约变量写到 `<html>`；`config.readerVars` 可逐项覆盖默认值（宿主留出的升级位）。 */
+  function applyReaderVars(config) {
+    var root = document.documentElement;
+    var overrides = (config && config.readerVars) || {};
+    for (var name in READER_VAR_DEFAULTS) {
+      if (!Object.prototype.hasOwnProperty.call(READER_VAR_DEFAULTS, name)) continue;
+      var value = Object.prototype.hasOwnProperty.call(overrides, name)
+        ? overrides[name] : READER_VAR_DEFAULTS[name];
+      if (value === null || value === undefined) continue;
+      root.style.setProperty(name, String(value));
+    }
+  }
+
+  /**
+   * 正文槽位（按 `data-reader-order` 升序；未声明 order 视为 0）。
+   *
+   * archive 契约：多正文槽（`data-reader-flow="body"`）以 `data-reader-order` 声明先后 ⇒
+   * `readerTemplate.source` 与注入顺序都取首个。只声明一个槽位时与原行为完全一致。
+   */
+  function orderedBodySlots() {
+    var list = Array.prototype.slice.call(
+      document.querySelectorAll('[data-reader-flow="body"]')
+    );
+    list.sort(function (a, b) {
+      var na = Number(a.getAttribute('data-reader-order')) || 0;
+      var nb = Number(b.getAttribute('data-reader-order')) || 0;
+      return na - nb;
+    });
+    return list;
+  }
+
+  /**
+   * 段落/标题语义类归一（archive 契约）。
+   *
+   * archive 的正文由 `TextReaderDocument` 产出时已带 `.reader-paragraph` / `.reader-chapter-title`；
+   * 我方的 md / 在线正文管线（`MdDocumentBuilder`）产出的是**裸 `<p>` / `<h*>`** ⇒ 从 archive
+   * 导入的主题 JS（点选 `.reader-paragraph`）会**点空**，段落语义装饰（`as-scene`/对白等）全线失效
+   * ⇒ 观感退回「死图」。这里在正文注入后补一次归一，与 archive 正文形态对齐。
+   *
+   * 对既有模板无副作用：`md/template-layout.css` 对 `p` 与 `.reader-paragraph` 是**同规则**。
+   */
+  function normalizeReaderClasses() {
+    var slots = orderedBodySlots();
+    for (var i = 0; i < slots.length; i++) {
+      var paragraphs = slots[i].querySelectorAll('p');
+      for (var p = 0; p < paragraphs.length; p++) {
+        if (!paragraphs[p].classList.contains('reader-paragraph')) {
+          paragraphs[p].classList.add('reader-paragraph');
+        }
+      }
+      var headings = slots[i].querySelectorAll('h1,h2,h3,h4,h5,h6');
+      for (var h = 0; h < headings.length; h++) {
+        if (!headings[h].classList.contains('reader-chapter-title')) {
+          headings[h].classList.add('reader-chapter-title');
+        }
+      }
+    }
+  }
+
+  /**
+   * 我方"页"= 模板根壳（作者装饰/页眉页脚所在层）。
+   *
+   * archive 的钩子载荷把 `page` / `pages` 传成**页元素**：主题据此在页内查询 `.as-scan` /
+   * 查询 `.as-wave i` / `.as-live-dot` 并用 Web Animations 起"每页动图"，也在页元素上写
+   * `data-as-progress` / `--as-progress`。我方分页是"单壳 + 滚动窗口"，页元素即根壳。
+   */
+  function authorPage() {
+    return document.getElementById('reader-template-root');
+  }
+
+  /** 动效状态名（archive 口径：`settled` / `running` / `paused`）。 */
+  function motionStateName() {
+    return state.motion ? 'running' : 'paused';
+  }
+
+  var lastMotionPage = null, lastMotionState = '';
+
+  /** 组装 archive 形 motionChange 事件（page/state/previousPage/previousState/reducedMotion）。 */
+  function motionEvent() {
+    var page = authorPage();
+    var name = motionStateName();
+    var event = {
+      page: page, state: name,
+      previousPage: lastMotionPage, previousState: lastMotionState,
+      reducedMotion: false
+    };
+    lastMotionPage = page;
+    lastMotionState = name;
+    return event;
+  }
+
+  /**
+   * archive 作者契约：`window.readerTemplate`（AD-38）。
+   *
+   * archive 主题的 `javascript` 一律以 `readerTemplate.on('beforeLayout' | …)`
+   * 与 `readerTemplate.source.querySelectorAll(...)` 驱动段落语义装饰与页脚更新；
+   * **缺这个对象时主题 JS 首行即抛**（`readerTemplate is not defined`）⇒ 观感退化为
+   * 「死图」（正文有、装饰/每页变化全无）。这正是此前 「archive 主题完全不一样」的根因。
+   *
+   * 只暴露**只读语义**（`source/fields/viewport/on/…`）：不发网络、不碰宿主对象，
+   * 与沙箱隔离约束一致（AD-23）。
+   */
+  var authorHooks = Object.create(null);
+
+  /** 同步分发钩子（作者可返回 Promise；异步失败并入模板错误路径，绝不阻断渲染）。 */
+  function emitHook(name, value) {
+    var callbacks = (authorHooks[name] || []).slice();
+    for (var i = 0; i < callbacks.length; i++) {
+      try {
+        var outcome = callbacks[i](value, authorApi);
+        if (outcome && typeof outcome.then === 'function') {
+          outcome.then(null, function (error) { reportError('template-hook-failed', error); });
+        }
+      } catch (error) {
+        reportError('template-hook-failed', error);
+      }
+    }
+  }
+
+  var authorApi = {
+    /** 正文根（= 首个正文槽位）；archive 主题据此点选 `.reader-paragraph` 等段落元素。 */
+    get source() { var slots = orderedBodySlots(); return slots.length ? slots[0] : null; },
+    get fields() { return state.fields; },
+    get viewport() { return { width: state.viewport.w, height: state.viewport.h }; },
+    on: function (name, callback) {
+      if (typeof callback !== 'function') throw new TypeError('readerTemplate.on requires a function');
+      var list = authorHooks[name] || (authorHooks[name] = []);
+      list.push(callback);
+      // 返回注销句柄（archive 语义）
+      return function () { var index = list.indexOf(callback); if (index >= 0) list.splice(index, 1); };
+    },
+    requestLayout: function () {
+      try { flow.settle(true); } catch (error) { reportError('template-hook-failed', error); }
+    },
+    waitUntil: function (promise) {
+      // 登记即时兜底 handler，避免未处理的 rejection 冒泡为宿主级错误
+      try { if (promise && typeof promise.catch === 'function') promise.catch(function () {}); } catch (error) { }
+      return promise;
+    },
+    get pageIndex() { return state.pageIndex; },
+    get pageCount() { return state.pageCount; },
+    get pages() { return []; },
+    get currentPage() { return null; },
+    get motionState() { return motionStateName(); },
+    get type() { return (state.template && state.template.type === 'scroll') ? 'scroll' : 'paged'; }
+  };
+  window.readerTemplate = authorApi;
+
   function send(type, payload) {
     var allowed = SEND_TYPES[type];
     if (!allowed) return;                       // 未登记类型：静默丢弃（宿主侧同样会拒收）
@@ -209,6 +386,8 @@
   function applyFields(fields) {
     state.fields = fields || {};
     refreshFields();
+    // archive 契约钩子：字段变化（fieldsChange）—— 主题据此刷新页眉书名的联动外观。
+    emitHook('fieldsChange', { fields: state.fields });
   }
 
   /** 本地时间 HH:mm（沙箱时钟即设备时钟）。 */
@@ -231,6 +410,8 @@
   function derivedField(key) {
     switch (key) {
       case 'page': return String(state.pageIndex + 1);
+      // archive 契约页脚口径：`pageIndex` 为 **0 基**页号（archive 主题写 `PAGE {pageIndex}`）
+      case 'pageIndex': return String(state.pageIndex);
       case 'pageCount': return String(state.pageCount);
       case 'percent':
         return typeof state.fields.progress === 'number' ? String(state.fields.progress) : null;
@@ -299,7 +480,7 @@
   function applyBody(bodyHtml) {
     // 缓存正文 HTML：换壳（C1）会整块替换根壳，必须能把它再注入回来
     if (bodyHtml !== undefined) state.bodyHtml = bodyHtml || '';
-    var containers = document.querySelectorAll('[data-reader-flow="body"]');
+    var containers = orderedBodySlots();
     if (!containers.length) {
       // 模板未声明正文槽位 ⇒ 视为作者错误，保留当前显示并报错（不静默吞掉）
       reportError('template-missing-body-slot', '模板未声明 data-reader-flow="body"');
@@ -308,6 +489,8 @@
     for (var i = 0; i < containers.length; i++) {
       containers[i].innerHTML = state.bodyHtml;
     }
+    // 段落/标题语义类归一（archive 契约）：见 [normalizeReaderClasses]
+    normalizeReaderClasses();
     state.revision++;
     send('contentChanged', { revision: state.revision });
   }
@@ -350,8 +533,15 @@
    * 沙箱**看不到**宿主的手势与生命周期，只能由宿主下令。
    */
   function applyMotion(running) {
-    state.motion = !!running;
-    document.documentElement.setAttribute('data-reader-motion', state.motion ? 'running' : 'paused');
+    var next = !!running;
+    var changed = state.motion !== next;
+    state.motion = next;
+    document.documentElement.setAttribute('data-reader-motion', motionStateName());
+    // 同步到"页元素"（archive 把动效属性放在页上；部分主题 CSS 选择器按它启停动效）。
+    var shell = authorPage();
+    if (shell) shell.setAttribute('data-reader-motion', motionStateName());
+    // archive 契约钩子：动效状态变化（motionChange）—— 主题据此启停每页动图/波形。
+    if (changed) emitHook('motionChange', motionEvent());
   }
 
   /**
@@ -571,6 +761,15 @@
     }
     send('stable', payload);
     if (typeof costMs === 'number') send('metrics', { costMs: costMs });
+    // archive 契约钩子：排版完成（afterLayout，载荷 `pages`）与本页切换（pageChange，载荷 `page`）
+    // —— 主题据此刷新"每页元素变化"（页眉/页脚/进度）与启动每页动图。缺 `page/pages` 时
+    // 主题（如「明日香」）会在 `event.pages.forEach` / `page.querySelector` 上**直接失效**。
+    var shell = authorPage();
+    emitHook('afterLayout', { pages: shell ? [shell] : [], pageCount: state.pageCount, generation: 0 });
+    emitHook('pageChange', { page: shell, pageIndex: state.pageIndex, pageCount: state.pageCount });
+    // 初次/换壳后补一次动效事件：主题在 afterLayout 里 `stop()` 清了旧动画（换壳后旧节点已
+    // 脱离文档），必须再给一次 motionChange 才会在新节点上重新起动画（否则首屏与续页都无动图）。
+    emitHook('motionChange', motionEvent());
   }
 
   /**
@@ -869,6 +1068,9 @@
   function continueInit(config) {
     state.pageIndex = typeof config.pageIndex === 'number' ? config.pageIndex : 0;
     setTheme(config.themeId);
+    // archive 契约变量必须在**渲染作者 CSS 之前**就位：作者的 `var(--reader-font-size)` 等
+    // 在首帧就要解析到真值，晚一拍会先按回落值画一帧再跳变。
+    applyReaderVars(config);
     try {
       renderShell();
     } catch (error) {
@@ -896,6 +1098,9 @@
     // 竖排规格（C10）：`data-rp-writing` 同样必须在结算之前就位（滞后一拍就会错轴分页）；
     // 响应式收紧（C9）已在上方 `flow.initialize` 之前完成（见那段注释）。
     applyWritingMode();
+    // archive 契约钩子：排版前（beforeLayout）—— 主题在此为段落打语义类
+    // （`as-scene`/`as-dialogue`/`as-lead`），这些类必须早于分页结算才参与测量与外观。
+    emitHook('beforeLayout', { generation: 0, viewport: authorApi.viewport });
     // 素材治理（C11）：图片按需解码 + 去重，**解码就绪后才提交可翻阅页面**；
     // 无图（纯文字章节）时同步回调 ⇒ 保持"立即结算一次"的语义不变。
     // 这一次结算是 `stable` 的唯一来源：章节不含富渲染元素时不会有后续 `remeasure`，
@@ -934,4 +1139,6 @@
   };
 
   window.addEventListener('message', handleMessage, false);
+  // archive 契约钩子：销毁（dispose）—— 主题据此清理定时器/动画；`pagehide` 即帧卸载。
+  window.addEventListener('pagehide', function () { emitHook('dispose', null); }, { once: true });
 })();
