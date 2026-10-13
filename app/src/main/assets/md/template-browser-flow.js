@@ -413,7 +413,14 @@
    */
   function indexFromOffset(offset, visible, totalPages, maxOffset) {
     if (totalPages > 1 && maxOffset > 0 && offset >= maxOffset - 1) return totalPages - 1;
-    return clampIndex(offset / visible, totalPages);
+    // ⚠️ 必须**四舍五入**（与 [scrollIndex] 同一既有铁证，分页路径此前漏改）：
+    // 分页偏移是按"页号 × 可见窗口高"取整生成的，恢复侧再把"比例 × 区间"回乘回来
+    // ⇒ 结果**恰好落在页边界上**；此时任何浮点误差 / 箱高微差都会让 `Math.floor` 判退到
+    // **前一页**（真机实测：`page=4/14` 冷启恢复成 `3/14`，用户可感知"进度不对"）。
+    if (!(visible > 0)) return 0;
+    var value = (offset || 0) / visible;
+    if (!isFinite(value)) return 0;
+    return clampIndex(Math.round(value), totalPages);
   }
 
   /**
