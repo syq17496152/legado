@@ -190,6 +190,9 @@
     // 否则翻到续页就是"页眉页脚还在、正文全空"（2026-10-10 C1 真机实证：slot 高塌成 16px、页数 1/1）。
     // 用 `applyBody` 一并回填字段槽位（新壳里的页码/时间等占位同样需要真值）。
     applyBody(state.bodyHtml);
+    // 换壳会**整块替换根壳 innerHTML** ⇒ 新槽是全新元素，槽上的整行网格变量随之丢失
+    // （真机实测续页 `grid=-`/`pt=0`，段距回落 1em ⇒ 续页末行重新被裁半）⇒ 必须重新写入
+    applyLineGrid();
     return true;
   }
 
@@ -413,6 +416,45 @@
   }
 
   /**
+   * 响应式收紧（C9，**布局级**）：**已废止**（2026-10-13 用户真机铁证）。
+   *
+   * 沿革：先用 `transform: scale()`（只缩视觉、不动布局盒 ⇒ 省下的像素变成空白、正文槽仍按未收紧占位算）；
+   * 后改 `zoom`（会动布局盒）。`zoom` 有两个致命副作用：①缩放的是元素自身的**盒宽**，块级子元素
+   * 本就占满容器宽 ⇒ 收窄后**右侧空出一条**（用户真机铁证：「现在左右为什么不占满屏幕？留一个左右黑边」）；
+   * ②各模板外壳层级不同，"不含正文槽的极大子树"判定在 paged/scroll 两类模板上行为不一致。
+   *
+   * ⇒ 收紧的**正确落点**是模板自身用相对单位（`em`/`vh`）声明页眉页脚尺寸（天生随屏适配），
+   * 由分页引擎把**剩余空间如实交还正文槽**（见 `template-browser-flow.js` 的恒定冻结）。引擎不再施加任何缩放。
+   */
+
+  /**
+   * 正文**整行网格**（分页正确性的前提）：把正文槽的实际行高写进 `--rp-line-height`，
+   * 由布局基线（`md/template-layout.css` 同名段）把"槽顶部内边距 + 段间距"归一到整行。
+   *
+   * 为什么必须有它（2026-10-13 用户真机铁证「最后一行只显示一半」）：分页按整行裁切页框，
+   * 只有全部行盒落在同一网格上，页边界才恒在行与行之间。模板各行内边距/段距千差万别
+   * （实测段距 ≈0.48 行 ⇒ 每段推移半行）⇒ 不归一必然出现半行裁切。
+   *
+   * 为什么必须在**页眉/页脚占位量取之前**：内边距与段距会改变正文高（影响分页口径）。
+   */
+  function applyLineGrid() {
+    var slot = document.querySelector('[data-reader-flow="body"]');
+    if (!slot) return;
+    try {
+      var lh = parseFloat(window.getComputedStyle(slot).lineHeight);
+      if (!isFinite(lh) || !(lh > 0)) return;
+      // ⚠️ 写在**正文槽**上（不是 `<html>`）：真机实测写在 `<html>` 会让模板页眉/插画整体被推高
+      // 90px（正文区从 74% 掉到 58%，正是用户抱怨的「头尾太宽」回归）——本变量的消费者只有
+      // 正文槽及其后代，作用域收在最内层最安全。
+      // 代价：C1 双结构换壳会整块替换根壳 innerHTML ⇒ 槽上的变量会随新壳丢失，因此
+      // [applyPageShell] 换壳后必须**重新写入**（否则续页段距回落 1em、网格失效、末行被裁半）。
+      slot.style.setProperty('--rp-line-height', lh + 'px');
+    } catch (error) {
+      // 取不到就不写：基线回落 0px 内边距 / 1em 段距，分页仍可用（仅可能半行裁切）
+    }
+  }
+
+  /**
    * 竖排规格（4.15 C10）：判定正文槽位的书写方向并置 `html[data-rp-writing]`，
    * 由引擎布局基线施加"确定宽高 / 段距走 block 轴 / 接排不重复缩进 / 独立图片按区域约束"。
    *
@@ -607,7 +649,52 @@
       // 预算自证（4.19 / NFR-08）：元素数与**当前真的在跑**的动画数 —— 重装饰模板卡顿的
       // 第一手数字，缺了它"P99 超标"只能反推、无法归因到元素/动画规模
       ',elems=' + elementCounts().elements + ',anims=' + elementCounts().animations +
-      ',budget=' + budgetState();
+      ',budget=' + budgetState() +
+      // 底色自证（2026-10-13）：沙箱跨源 ⇒ 宿主读不到模板的底色，"底部空白是模板底还是引擎底"
+      // 这类问题只能靠沙箱回发（缺了它会把"底色不一致"误判成"外壳没铺满"）。
+      ',bg=' + backgroundFacts() +
+      // 外壳分件自证（诊断）：根壳**直接子元素**的 `名:高@顶` —— "头尾太宽"必须能定位到具体元素
+      ',chr=' + rootChildrenFacts();
+  }
+
+  /** 模板根壳直接子元素的高度/顶部（诊断用；类名是模板 CSS 名，不含业务数据）。 */
+  function rootChildrenFacts() {
+    try {
+      var root = document.getElementById('reader-template-root');
+      if (!root) return '-';
+      var out = [];
+      var kids = root.children;
+      for (var i = 0; i < kids.length && i < 12; i++) {
+        var rect = kids[i].getBoundingClientRect();
+        var name = kids[i].tagName.toLowerCase();
+        var cls = kids[i].getAttribute('class');
+        if (cls) name += '.' + String(cls).split(/\s+/)[0];
+        out.push(name + ':' + Math.round(rect.height) + '@' + Math.round(rect.top));
+      }
+      return out.join('/');
+    } catch (error) {
+      return '-';
+    }
+  }
+
+  /**
+   * 三层底色的 computed 值（`html` / `body` / 模板根壳）；取不到返回 `-`。
+   *
+   * 为什么值得常驻：模板外壳铺不满视口时，空隙里露出的是**谁**的底色决定了修法
+   * （外壳底色≠画布底色 ⇒ 需要外壳铺满；相同 ⇒ 只是观感差）——没有这三个值就只能靠猜。
+   */
+  function backgroundFacts() {
+    function colorOf(el) {
+      if (!el) return '-';
+      try {
+        var c = window.getComputedStyle(el).backgroundColor;
+        return c ? c.replace(/\s/g, '') : '-';
+      } catch (error) {
+        return '-';
+      }
+    }
+    return colorOf(document.documentElement) + '|' + colorOf(document.body) + '|' +
+      colorOf(document.getElementById('reader-template-root'));
   }
 
   /**
@@ -676,7 +763,9 @@
           break;
         case 'remeasure':
           // 帧尺寸可能已变（宿主改尺寸/富渲染改变文档高）⇒ 重测前刷新响应式断点，
-          // 否则窄屏/横屏收紧会停留在旧判定上
+          // 否则窄屏/横屏判定会停留在旧值上（`--rp-vp-w/h` 被作者 CSS 消费）；
+          // 字号/主题变更也可能改变行高 ⇒ 同步刷新整行网格，否则页边界与网格错位（半行裁切）
+          applyLineGrid();
           applyViewport();
           flow.settle(true);
           break;
@@ -786,6 +875,12 @@
       reportError('template-render-failed', error);
       return;
     }
+    // 整行网格（分页正确性前提）必须最先：它改的是正文槽的内边距/段距 ⇒ 之后再量占位与分页
+    applyLineGrid();
+    // 响应式断点（C9）必须在**页眉/页脚占位量取之前**刷新：`--rp-vp-w/h` 与 `data-rp-narrow/landscape`
+    // 会被作者 CSS 消费（窄屏/横屏采用不同尺寸）⇒ 晚于 `flow.initialize` 就"滞后一拍"，
+    // 首屏仍按**未刷新**的尺寸分页（症状：首屏页高与后续页不一致）。
+    applyViewport();
     // ⚠️ 顺序即正确性：`flow.initialize` 必须在**正文注入之前**——自研回退分页以"此刻文档高"
     // 作为页眉/页脚等固定占位（注入后量就把正文自身算进占位，页框会被算成 0 高）
     flow.initialize(config.flow);
@@ -798,9 +893,8 @@
     // 字段派生（C2）：电量异步填充；时间按分钟刷新（页码在每次结算后回填）
     watchBattery();
     startClock();
-    // 响应式收紧（C9）与竖排规格（C10）：必须在结算之前完成 —— 页框量取与分页都以
-    // `--rp-vp-h` / `data-rp-writing` 为依据，滞后一拍就会按错误尺寸分页
-    applyViewport();
+    // 竖排规格（C10）：`data-rp-writing` 同样必须在结算之前就位（滞后一拍就会错轴分页）；
+    // 响应式收紧（C9）已在上方 `flow.initialize` 之前完成（见那段注释）。
     applyWritingMode();
     // 素材治理（C11）：图片按需解码 + 去重，**解码就绪后才提交可翻阅页面**；
     // 无图（纯文字章节）时同步回调 ⇒ 保持"立即结算一次"的语义不变。
@@ -832,6 +926,7 @@
     applyPageShell: applyPageShell,
     currentPageShell: currentPageShell,
     applyViewport: applyViewport,
+    applyLineGrid: applyLineGrid,
     applyWritingMode: applyWritingMode,
     materializeMaterials: materializeMaterials,
     onFlowSettled: onFlowSettled,

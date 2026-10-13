@@ -93,7 +93,15 @@
 
   /** 最近一次结算结果（供换壳时夹取目标页与复用页高，避免"换壳瞬间用未知量"）。 */
   var pageCount = 1;
+  /** 最近一次结算的**可见窗口高**（= 页步长；翻页与页数口径用它）。 */
   var lastPageHeight = 0;
+  /**
+   * 最近一次结算的**箱高**（页框 border-box 高 = 可用高；换壳时用它把新壳冻结成"铺满"状态）。
+   *
+   * 为什么与 [lastPageHeight] 分开存：两者语义不同（箱高负责"铺满/不可拖/页脚贴底"，
+   * 窗口高负责"整行对齐/不裁字"）⇒ 混用会退回"箱体比视口矮一截、可上下扒拉"的老症状。
+   */
+  var lastBoxHeight = 0;
 
   /**
    * 页（可翻阅）区高：**由视口与页眉占位推出**，不读槽位 `clientHeight`。
@@ -145,7 +153,7 @@
       shellChromeNow = chromeByShell[key];
       return shellChromeNow;
     }
-    // 此刻正文槽**尚未冻结**（调用点在 freezeSlot 之前）⇒ 根壳内"槽以外"的占位与槽自身高无关。
+    // 此刻正文槽**尚未冻结**（调用点在 freezePagedSlot 之前）⇒ 根壳内"槽以外"的占位与槽自身高无关。
     // ⚠️ 上占位必须取**槽的视口顶** `sr.top`（不是 `sr.top - rr.top`）：根壳自身离视口顶还有一段
     // 偏移（实测 10px，来自沙箱宿主文档）——只算"根壳内"的相对量会漏掉它，页框总高多 10px ⇒
     // 页脚下沿被挤出视口（真机实测：内容底 864 > 视口 854）。目标口径 = **内容底边贴视口底**。
@@ -186,8 +194,13 @@
    * 再做边界夹取。
    */
   function maxBodyOffset(slot, rootEl) {
-    var content = (slot && slot.scrollHeight) || 0;
-    return Math.max(0, content - visibleHeight());
+    var total = (slot && slot.scrollHeight) || 0;
+    // 口径：`scrollHeight` 含上下内边距，箱高（`clientHeight`）同样含**上**内边距 ⇒ 两者之差恰为
+    // "最后一行底贴到窗口底"的最大滚动量。**不能用可见窗口高**（`lastPageHeight`）：窗口高被
+    // `padding-bottom` 吃掉了一段残量，用它算最大偏移会**多滚一段**（章末页底部露出空白）。
+    var box = (slot && slot.clientHeight) || 0;
+    var page = box > 0 ? box : (lastPageHeight > 0 ? lastPageHeight : visibleHeight());
+    return Math.max(0, total - page);
   }
 
   /**
@@ -271,22 +284,28 @@
     // ⚠️ 视口高必须**结算时实时读**：`initialize` 那一刻沙箱帧可能还没布局完（实测 vp=0），
     // 把它缓存下来会让页框算成负数 ⇒ 直接放弃分页（症状：预览/阅读页"页数恒 1 且正文空白"）。
     // 只缓存 `chromeHeight`（正文注入前的固定占位）——它**必须**在注入前量，才是正确的占位口径。
-    var visible = visibleHeight();
-    lastPageHeight = visible;
-    if (!(visible > MIN_PAGE_HEIGHT)) {
-      reportPageFrame(slot, visible);
+    var box = visibleHeight();
+    if (!(box > MIN_PAGE_HEIGHT)) {
+      lastPageHeight = box;
+      lastBoxHeight = box;
+      reportPageFrame(slot, box);
       return { pageIndex: 0, pageCount: 1 };
     }
-    // 冻结前先把"当前正文偏移"从冻结页框的滚动位置里反解出来（跨结构可比量，见 [bodyOffset]）。
-    // 冻结页框之外（例如刚换壳、尚未冻结）`scrollTop` 恒 0 ⇒ 反解得 0，随后由 `applyBodyOffset` 定位。
-    if ((slot.scrollHeight || 0) > visible + 1) {
-      freezeSlot(slot, visible);
-      // ⚠️ 贴底校正（2026-10-12 真机铁证）：占位是**注入前估算**（模板装饰多为 vh 单位 SVG，
-      // 注入后最终布局可能与估算差一截）⇒ 冻结后必须用**布局事实**（根壳底 vs 视口底）再校一次，
-      // 否则页框超高会把页脚压出视口（用户可直接上下扒拉）；同时把校正结果写回按壳占位缓存。
-      visible = correctFrameHeight(slot, visible);
-      lastPageHeight = visible;
-    }
+    // ① **恒定冻结**（2026-10-13 用户真机铁证：「阅读页面底部这么大空白」「页脚还能自己变动」）：
+    // 原实现只在"内容溢出一屏"时才冻结 ⇒ **短章（内容不足一屏）永不冻结**，模板外壳便塌成内容高：
+    // 页脚紧贴正文末尾、其下留出大片空白（实测 25% 屏高，与用户截图逐像素吻合）；续页壳因页高变大
+    // 也因同一守卫不重冻，同样留 91px 空白。改为**不论是否溢出都冻结** ⇒ 外壳高恒 = 可用高 = 视口高 − 占位。
+    // ⑤ **两个高度分开**（2026-10-13 用户真机铁证：「一页还可以上下拖动？而不是刚刚好的」「最后一行只显示一半」）：
+    // 箱高 = 可用高（铺满、不可拖、页脚贴底）；可见窗口 = 整行对齐高（由 padding-bottom 吃残量 ⇒ 不裁字、不丢内容）。
+    var visible = freezePagedSlot(slot, box);
+    // ⚠️ 贴底校正（2026-10-12 真机铁证）：占位是**注入前估算**（模板装饰多为 vh 单位 SVG，
+    // 注入后最终布局可能与估算差一截）⇒ 冻结后必须用**布局事实**（根壳底 vs 视口底）再校一次，
+    // 否则页框超高会把页脚压出视口（用户可直接上下扒拉）；同时把校正结果写回按壳占位缓存。
+    box = correctFrameHeight(slot, box);
+    // 校正改变了箱高 ⇒ 可见窗口（以及对齐后的底部留白）必须**重算**（否则裁切边界又落到行中间）
+    visible = freezePagedSlot(slot, box);
+    lastBoxHeight = box;
+    lastPageHeight = visible;
     reportPageFrame(slot, visible);
     // 页数口径与既有实现保持**逐字一致**（`ceil(内容高/页高)`）——口径一变，真机上的
     // 既有页数断言会整体漂移，无法与历史证据对照
@@ -407,20 +426,85 @@
         // 结构无关定位（C1）的自证：root 高（页眉+正文+页脚）与正文偏移 —— 缺了它
         // "换壳后正文错位/页码跳飞"只能靠肉眼比对，无法定位是哪一项量错了
         ',root=' + Math.round((root && root.scrollHeight) || 0) +
-        ',body=' + Math.round(bodyOffset)
+        ',body=' + Math.round(bodyOffset) +
+        // 整行网格自证（2026-10-13）：`lh`=computed 行高、`grid`=运行时写入的网格变量、
+        // `pt`=正文槽顶部内边距 —— 三者缺一，"末行被裁半"就只能靠猜（分不清是网格没生效还是对齐没跑）
+        ',lh=' + Math.round(lineHeightOf(slot) * 100) / 100 +
+        ',grid=' + (slot.style.getPropertyValue('--rp-line-height') || '-') +
+        ',pt=' + Math.round(slotPaddingTop(slot))
     });
   }
 
   /**
-   * 把正文槽位冻结为**页框**：固定高 + 裁切（border-box ⇒ 含 padding，与量取口径一致）。
+   * 正文槽位的**实际行高**（px；取不到返回 0 = 不做整行对齐）。
    *
-   * 只改我们用契约拥有的槽位自身（不动作者的结构与后代样式）；`overflow:hidden` 的元素仍是
-   * 可编程滚动容器 ⇒ 翻页只需改 `scrollTop`，无需包裹正文（包裹会破坏作者 `>选择器`）。
+   * 为什么读 computed 而不是读模板 CSS：行高可能来自任何一层（模板 `html,body` 的
+   * `line-height`、引擎基线 `--md-line-height`、正文元素自身的相对值）——computed 是**最终生效值**，
+   * 作者怎么写都能拿到；`line-height: normal` 时 computed 也返回像素值（浏览器已折算）。
    */
-  function freezeSlot(slot, pageHeight) {
+  function lineHeightOf(slot) {
+    try {
+      var cs = window.getComputedStyle(slot);
+      var lh = parseFloat(cs.lineHeight);
+      if (isFinite(lh) && lh > 0) return lh;
+      // `line-height: normal` + 旧内核：用字号 × 1.2 兜底（避免整行对齐整体失效）
+      var fs = parseFloat(cs.fontSize);
+      if (isFinite(fs) && fs > 0) return fs * 1.2;
+    } catch (error) {
+      return 0;
+    }
+    return 0;
+  }
+
+  /** 正文槽的 computed 顶部内边距（诊断自证用；取不到返回 0）。 */
+  function slotPaddingTop(slot) {
+    try {
+      var value = parseFloat(window.getComputedStyle(slot).paddingTop);
+      return isFinite(value) ? value : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  /**
+   * 正文**可见窗口高**（= 页步长）：把"箱高 − 槽顶部内边距"向下取整到**整行**。
+   *
+   * ⚠️ 前提：**正文必须落在整行网格上**——由引擎布局基线（`md/template-layout.css` 的
+   * `[data-reader-flow="body"]` 段）把"槽顶部内边距 + 子元素段间距"归一到 `--rp-line-height`
+   * 的整数倍（该变量由运行时按 computed 行高写入，见 `template-runtime.js` 的 `applyLineGrid`）。
+   * 没有这一步，段间距会逐段推移行网格（实测 0.48 行/段）⇒ 从槽顶算起的整行倍数落不到行边界上，
+   * 末行照样被裁半（2026-10-13 用户真机铁证：「最后一行只显示一半」）。
+   *
+   * 只**向下**取整：向上会让窗口高过可用高 ⇒ 正文被挤出页框（可上下扒拉）。取不到行高 ⇒ 返回可用量。
+   */
+  function alignToWholeLines(slot, boxHeight) {
+    var room = boxHeight - slotPaddingTop(slot);
+    var lh = lineHeightOf(slot);
+    if (!(lh > 0) || !(room > lh)) return Math.max(0, room);
+    var lines = Math.floor(room / lh);
+    var windowHeight = lines * lh;
+    return windowHeight > MIN_PAGE_HEIGHT ? windowHeight : Math.max(0, room);
+  }
+
+  /**
+   * 把正文槽位冻结为**页框**（`paged` 自研回退分页的落点）。
+   *
+   * 两个高度**必须分开**（2026-10-13 用户真机铁证「一页还可以上下拖动？而不是刚刚好的」）：
+   * - **箱高 = 可用高**：页框铺满视口 ⇒ 页脚恒贴视口底、外壳不可上下拖（观感"刚刚好一屏"）；
+   * - **可见窗口 = 整行对齐高**：由 `padding-bottom` 吃掉"不到一行的残量" ⇒ 裁切边界落在行与行之间，
+   *   末行**完整显示**（不裁字）、**不丢内容**（下一屏从该行起）。
+   * 若把两者混用（箱高 = 整行高），箱体就比视口矮一截 —— 正是"能上下扒拉一截"的根因。
+   *
+   * @returns 可见窗口高（= 页步长，供翻页与页数口径使用）
+   */
+  function freezePagedSlot(slot, boxHeight) {
     slot.style.boxSizing = 'border-box';
-    slot.style.height = Math.floor(pageHeight) + 'px';
+    slot.style.height = Math.floor(boxHeight) + 'px';
     slot.style.overflow = 'hidden';
+    var windowHeight = alignToWholeLines(slot, boxHeight);
+    var gutter = boxHeight - slotPaddingTop(slot) - windowHeight;
+    slot.style.paddingBottom = Math.max(0, Math.floor(gutter)) + 'px';
+    return windowHeight;
   }
 
   /**
@@ -432,31 +516,51 @@
    * ⇒ 注入/换壳后最终布局与估算可能不一致。**真机铁证（2026-10-12）**：估算页框 748，冻结后根壳底 874
    * > 视口 854 ⇒ 页脚被压出视口 20px，用户可直接上下扒拉（且自证串 `rb=874/sb=787` 与该结论一致）。
    *
-   * ⚠️ **只收缩、不放大**（2026-10-12 真机复核）：部分模板的根壳高由 CSS 钳定（实测 `root` 恒 844、
-   * 根壳底恒 = 视口底）⇒ "欠填"时放大页框既无收益（根壳底不变）又会在换壳瞬态上误触发 ⇒ 单向校正更稳。
+   * ⚠️ **双向**校正（2026-10-13 用户真机铁证后由"只收缩"改为双向）：占位是**冻结前**量取的，
+   * 而冻结（`overflow:hidden`）会把正文槽变成 BFC ⇒ 末段落的外边距不再塌出槽外 ⇒
+   * **冻结后的下占位比冻结前的估算小**（实测 52 → 35px）⇒ 单向收缩会让根壳底**够不到视口底**
+   * （实测 818 vs 854，留 36px 空白）。故欠填时同样按布局事实**放大**页框，直到根壳底贴视口底。
+   * 仍受 [FRAME_CORRECT_MAX] 与 [MIN_PAGE_HEIGHT] 双重边界保护 ⇒ 作者畸形 DOM 不会抖动或除零。
    *
-   * 占位↔页框是 **1:1** 关系（页框 = 视口 − 占位）⇒ 一次迭代即收敛；迭代上界 [FRAME_CORRECT_MAX]
-   * 防作者畸形 DOM 引发抖动/死循环；校正结果写回按壳占位缓存 ⇒ 同一壳后续结算零额外读。
+   * 占位↔页框是 **1:1** 关系（页框 = 视口 − 占位）⇒ 一次迭代即收敛；校正结果写回按壳占位缓存
+   * ⇒ 同一壳后续结算零额外读。
    *
-   * @returns 校正后的页框高（未冻结 / 无 `root` / 读数异常 / 未溢出 ⇒ 原样返回）
+   * @returns 校正后的页框高（未冻结 / 无 `root` / 读数异常 ⇒ 原样返回）
    */
-  function correctFrameHeight(slot, height) {
-    if (!root || !slot || !slotIsFrozen(slot)) return height;
-    var corrected = height;
+  function correctFrameHeight(slot, boxHeight) {
+    if (!root || !slot || !slotIsFrozen(slot)) return boxHeight;
+    var corrected = boxHeight;
     for (var i = 0; i < FRAME_CORRECT_MAX; i++) {
-      var overflow = 0;
+      var delta = 0;      // > 0 = 根壳底**超出**视口底（须收缩）；< 0 = 根壳底**欠填**（须放大）
       try {
-        overflow = root.getBoundingClientRect().bottom - currentViewportHeight();
+        delta = root.getBoundingClientRect().bottom - currentViewportHeight();
       } catch (error) {
         return corrected;
       }
-      if (!isFinite(overflow) || overflow <= FRAME_CORRECT_TOL) break;
-      var next = corrected - overflow;
+      if (!isFinite(delta) || Math.abs(delta) <= FRAME_CORRECT_TOL) break;
+      var next = corrected - delta;
       if (!(next > MIN_PAGE_HEIGHT) || next === corrected) break;
+      if (next > corrected) {
+        // **放大前先验**：部分模板的根壳高被 CSS 钳定（根壳底恒 = 视口底）⇒ 放大页框不会让根壳底下移。
+        // 此时放大只是把正文挤出根壳（内容被裁），故试放一次、若无位移即回退并终止。
+        freezePagedSlot(slot, next);
+        var after = 0;
+        try {
+          after = root.getBoundingClientRect().bottom - currentViewportHeight();
+        } catch (error) {
+          after = delta;
+        }
+        if (!isFinite(after) || after <= delta + FRAME_CORRECT_TOL) {
+          freezePagedSlot(slot, corrected);
+          break;
+        }
+        corrected = next;
+        continue;
+      }
       corrected = next;
-      freezeSlot(slot, corrected);
+      freezePagedSlot(slot, corrected);
     }
-    if (corrected === height) return height;
+    if (corrected === boxHeight) return boxHeight;
     // 写回按壳占位：`chrome = 视口 − 页框`（与 [visibleHeight] 同口径），后续结算直接命中
     var vp = currentViewportHeight();
     if (vp > 0) chromeByShell[shellName() || 'none'] = Math.max(0, vp - corrected);
@@ -527,6 +631,8 @@
     // 会带到新章节的首页，症状是新章开篇失去封面页）
     bodyOffset = 0;
     pageCount = 1;
+    lastPageHeight = 0;                 // 换章 ⇒ 页高作废（新章结构/字号可能不同，须重新结算）
+    lastBoxHeight = 0;                  // 箱高同理（它参与"铺满"判定，不得跨章复用）
     authoritativePage = -1;             // 换章 ⇒ 清空上一章的权威页号（防串章）
     authoritativeRatio = -1;            // 同理清比例口径
     resetChromeCache();                 // 换章 ⇒ 按壳占位缓存作废（结构可能整体变化）
@@ -687,7 +793,9 @@
     if (want === flowShell) return false;                // 同结构连续换页：不重建 DOM（见 [flowShell]）
     // 换壳后必须**冻结新页框**（旧壳的冻结内联高属于旧结构）；正文偏移的接力与定位由调用方
     // （`goto` 的权威偏移 + `settle` 的只写定位）负责 —— 此处读写会拿到未 reflow 的旧布局
-    var pageHeight = visibleHeight() || lastPageHeight;  // 页高由视口推出（见 [visibleHeight] 的口径说明）
+    // 优先复用**上次结算的箱高**（已含贴底校正）⇒ 换壳瞬间就把新壳冻结成"铺满"状态；
+    // 首次（尚无历史箱高）才回落到按视口推出的估算（见 [visibleHeight]）。
+    var boxHeight = lastBoxHeight > 0 ? lastBoxHeight : visibleHeight();
     var changed = runtime.applyPageShell(want);
     if (changed) {
       flowShell = want;
@@ -697,7 +805,7 @@
         // ⚠️ 这里**不**定位滚动：重挂 `innerHTML` 后布局尚未 reflow，任何基于 `scrollHeight`
         // 的换算都会读到旧值（真机实测把偏移反解成 0）。定位统一交给随后 `settle` 的权威分支
         // （`slot.scrollTop = bodyOffset`，只写不读）。
-        freezeSlot(fresh, pageHeight);
+        freezePagedSlot(fresh, boxHeight);
       }
     }
     return changed;

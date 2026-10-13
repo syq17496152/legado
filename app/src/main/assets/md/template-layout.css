@@ -23,26 +23,72 @@ html {
   --rp-chrome-scale: 1;
 }
 
-/* ===== C9 响应式收紧：窄屏 / 横屏缩小页眉与装饰，为正文保留空间 =====
- *
- * 实现口径（**有意选 transform 而非改盒模型**）：
- * - 收紧对象是 `data-reader-decor`（运行时自动标记的装饰，含页眉/页脚/开篇插画等）
- *   与作者显式声明的 `data-reader-chrome`；
- * - 用 `transform: scale()`（**纯视觉、不改变布局盒**）⇒ 观感收紧但**绝不牵动正文测量**
- *   （4.8d 红线：装饰不得参与正文测量 ⇒ 收紧装饰不会改变页数）；
- * - 正文槽位及其祖先**永远不在** `data-reader-decor` 集合里（见运行时 markDecorations 的 keep 集合）
- *   ⇒ 正文不可能被缩放。
- *
- * 需要"真的改变页面盒尺寸"的模板：给页眉/页脚加 `data-reader-chrome`，
- * 并自行消费 `--rp-chrome-scale`（本基线对 `data-reader-chrome` 用同样的视觉缩放作为默认兜底）。
- */
-html[data-rp-narrow="1"] [data-reader-decor],
-html[data-rp-narrow="1"] [data-reader-chrome],
-html[data-rp-landscape="1"] [data-reader-decor],
-html[data-rp-landscape="1"] [data-reader-chrome] {
-  transform: scale(var(--rp-chrome-scale));
-  transform-origin: center top;
+/* 画布恒铺满视口（2026-10-13 用户真机铁证）：页面底边只保证**整行对齐**（见
+ * `template-browser-flow.js` 的 `alignToWholeLines`）⇒ 外壳底与视口底之间必然留 <1 行的残量；
+ * 短章时该残量更大。若 `body` 只有内容高，残量处会露出**画布底色**（与正文区不同色）——
+ * 用户观感即「阅读页底部这么大空白」。`min-height` 只补底色、**不改任何几何** ⇒ 不影响分页测量。 */
+body {
+  min-height: 100vh;
 }
+
+/* 沙箱文档自身**不可滚动/不可上下拖**（2026-10-13 用户真机铁证：「一页还可以上下拖动？而不是刚刚好的」）。
+ * 分页页框已由运行时按"可用高"冻结（见 `template-browser-flow.js` 的 `freezePagedSlot`），
+ * 若文档仍可滚动，用户就能把整页上下拖出一截（观感"没对齐"、手势也失真）。
+ * 滚动类模板（`data-reader-scroll-viewport`）的滚动发生在**该容器内部**，不受本规则影响。 */
+html,
+body {
+  overflow: hidden;
+}
+
+/* ===== 正文**整行网格**（分页正确性的前提；2026-10-13 用户真机铁证）=====
+ *
+ * 分页按"整行"裁切页框（见 `template-browser-flow.js` 的 `alignToWholeLines`）⇒ 只有当**所有行盒
+ * 都落在同一网格**上时，页边界才恒落在行与行之间；否则必然出现「最后一行只显示一半」。
+ * 网格口径 = 从正文顶部起、每行 **一个行高**（`--rp-line-height`，由运行时按 computed 行高写入）：
+ *   ① 正文槽的 `padding-top` 归一到**整行**（模板各行内边距千差万别，不归一必然错位）；
+ *   ② 正文槽内**块级段落元素**的段间距归一到**整行**、上间距清零 —— 不归一时段距会逐段推移网格
+ *      （实测段距 ≈0.48 行 ⇒ 每段漂移半行，页边界因此落在行中间）。
+ *
+ * ⚠️ 作者要偏离网格，应改 `--rp-line-height`（而不是改间距）；否则分页会重新出现半行裁切。
+ * ⚠️ 块级元素（图片 / 表格 / 代码块）高度天然不是行高整数倍 ⇒ 其后的网格会短暂错位，
+ *    这是"自动排版"可达精度的边界（引擎不做逐页重排）。
+ */
+[data-reader-flow="body"] {
+  padding-top: var(--rp-line-height, 0px) !important;
+}
+/* ⚠️ 选择器**只认段落级元素**（`p` / `.reader-paragraph` / 标题 / 引用）：**不得**用
+ * `[data-reader-flow="body"] > *` 这类通配 —— 真机上它会让模板**页眉/插画/开篇图也吃到整行段距**，
+ * 把页眉整体推高 90px（正文区从 74% 掉到 58%，等于把用户抱怨的「头尾太宽」做回来了）。
+ * 正文内容由渲染管线产出为 `p` / `.reader-paragraph` / 标题，段落级选择器足以覆盖行网格。 */
+[data-reader-flow="body"] p,
+[data-reader-flow="body"] .reader-paragraph,
+[data-reader-flow="body"] .reader-chapter-title,
+[data-reader-flow="body"] blockquote,
+[data-reader-flow="body"] h1,
+[data-reader-flow="body"] h2,
+[data-reader-flow="body"] h3,
+[data-reader-flow="body"] h4,
+[data-reader-flow="body"] h5,
+[data-reader-flow="body"] h6 {
+  margin-top: 0 !important;
+  margin-bottom: var(--rp-line-height, 1em) !important;
+}
+
+/* ===== C9 响应式收紧：**已废止**（2026-10-13 用户真机铁证）=====
+ *
+ * 撤销沿革（两种实现都栽在同一处，故撤销而非再修）：
+ * ① `transform: scale()`：只缩视觉、**不动布局盒** ⇒ 页眉/装饰画小了但占位高度不变，
+ *    省下的像素既没给正文也不是装饰，而是变成**一大片空白**（用户真机铁证：「底部一大片空白 + 中间一点点正文」）；
+ * ② `zoom`：会动布局盒，但缩放的是元素**自身盒宽**，而块级页眉/页脚本就占满容器宽
+ *    ⇒ 收窄后**右侧空出一条**（用户真机铁证：「现在左右为什么不占满屏幕？留一个左右黑边」）。
+ *
+ * ⇒ 收紧的**正确落点**是模板自身用相对单位（`em`/`vh`）声明页眉页脚尺寸（天生随屏适配），
+ *    由分页引擎把**剩余空间如实交还正文槽**（见 `template-browser-flow.js` 的「恒定冻结」）。
+ *    引擎**不再**对模板外壳施加任何缩放；`--rp-chrome-scale` 仅作为**可选变量**留给作者自觉消费。
+ *
+ * 生效时机仍要求：运行时的 `applyViewport()`（写 `data-rp-*` 与 `--rp-vp-w/h`）必须**早于**
+ *   `flow.initialize()`（页眉/页脚占位量取）—— 否则窄屏/横屏的尺寸判定"滞后一拍"，首屏按旧尺寸分页。
+ */
 
 /* ===== C10 竖排规格：竖排须给确定宽高 / 段距走 block 轴 / 接排不重复缩进 / 独立图片按区域约束 =====
  *
