@@ -33,6 +33,13 @@
   /** 页框高校正的最大迭代数（占位→页框是 1:1 关系 ⇒ 一次即收敛；留一次用于子像素抖动）。 */
   var FRAME_CORRECT_MAX = 2;
 
+  /**
+   * 按壳占位的"漂移"阈值（px）：两次量取差超过它 ⇒ 判为"首帧装饰未定型"，
+   * 下一帧重结算一次（见 [chromeForShell] / [scheduleResettle]）。取 2px：装饰带（SVG）
+   * 未定型时差一整条行高（实测 20px），而子像素抖动在 1px 内。
+   */
+  var CHROME_DRIFT_TOL = 2;
+
   var root = null;
   var config = null;
 
@@ -146,13 +153,20 @@
 
   /** 最近一次占位量取的 rect 事实（诊断自证用；"占位不对"时能一眼看出是上/下哪一段错）。 */
   var shellRectDebug = '';
+  /**
+   * 当前壳的页眉页脚占位（`slot` 视口顶 + 根壳底与槽底之差）。
+   *
+   * ⚠️ **必须每次都实测**（2026-10-13 真机铁证）：换壳后**首帧**量取时，页脚装饰（内联 SVG 带）
+   * 尚未定型 ⇒ 占位偏小整整一条行高（实测续页首帧 `chromeNow=71` vs 后续 `91`，差 20px ⇒
+   * 箱高 782 vs 763）⇒ 该壳**首帧比后续页多一行**，且保存/恢复会跨一档页码（用户实测症状：
+   * 「每页文字个数的不同，页脚还能自己变动」）。旧实现"同壳只测一次"把这份偏小值缓存下来
+   * ⇒ 偏差一直保留到下一次 remeasure（真机对照：*同一续页*首帧 `h=744`、翻到第 2 页后 `716`、
+   * **回访第 1 页也变回 716** ⇒ 证明是"首帧量取过早"而不是"该页真的矮"）。
+   * ⇒ 改为**每次实测** + 与上次差异 > 2px 时**下一帧重结算一次**（幂等收敛，见 [scheduleResettle]）。
+   */
   function chromeForShell(shell, slot) {
     if (!root || !slot) return chromeHeight;
     var key = shell || 'none';
-    if (chromeByShell[key] !== undefined) {
-      shellChromeNow = chromeByShell[key];
-      return shellChromeNow;
-    }
     // 此刻正文槽**尚未冻结**（调用点在 freezePagedSlot 之前）⇒ 根壳内"槽以外"的占位与槽自身高无关。
     // ⚠️ 上占位必须取**槽的视口顶** `sr.top`（不是 `sr.top - rr.top`）：根壳自身离视口顶还有一段
     // 偏移（实测 10px，来自沙箱宿主文档）——只算"根壳内"的相对量会漏掉它，页框总高多 10px ⇒
@@ -175,14 +189,37 @@
         ',st' + Math.round(sr.top) + ',sb' + Math.round(sr.bottom) +
         ',sy' + Math.round(window.scrollY || 0);
     }
+    var prev = chromeByShell[key];
     chromeByShell[key] = total;
     shellChromeNow = total;
+    // 装饰带定型后与首帧量取差一整行 ⇒ 下一帧重结算一次（差异收敛后不再触发，不会自激）
+    if (prev !== undefined && Math.abs(prev - total) > CHROME_DRIFT_TOL) scheduleResettle();
     return total;
   }
 
   /** 换章/重开时清空按壳的占位缓存（结构可能整体变化）。 */
   function resetChromeCache() {
     chromeByShell = {};
+  }
+
+  /**
+   * 首帧占位定型后**下一帧**重结算一次（幂等）。
+   *
+   * 为什么需要：装饰带（内联 SVG）首帧高与定型后差一整行（见 [chromeForShell]）⇒ 首帧冻出的页框
+   * 与后续页不一致（多一行），且保存/恢复跨一档页码。下一帧布局定型后再结算即收敛；
+   * `resettleScheduled` 保证同时只有一个待执行回调，且差异消失后不再触发（不会自激）。
+   */
+  var resettleScheduled = false;
+  function scheduleResettle() {
+    if (resettleScheduled) return;
+    resettleScheduled = true;
+    var later = (typeof requestAnimationFrame === 'function')
+      ? requestAnimationFrame
+      : function (fn) { return setTimeout(fn, 16); };
+    later(function () {
+      resettleScheduled = false;
+      try { settle(true); } catch (error) { }
+    });
   }
 
   /**
