@@ -300,9 +300,51 @@
     return slots.length ? slots : null;
   }
 
+  /**
+   * 竖排判据（**单源**：运行时写在 `<html data-rp-writing>` 上，
+   * 见 `template-runtime.js` 的 `applyWritingMode`；此处不重复判定 `writing-mode`）。
+   *
+   * 为什么分栏判据需要它：竖排正文按块轴排布 ⇒ 翻页必须**横移**，退回纵移的自研回退会**打错轴**。
+   */
+  function isVerticalWriting() {
+    return document.documentElement.getAttribute('data-rp-writing') === 'vertical';
+  }
+
+  /**
+   * 作者是否**真的提供了列布局**（R9：只认"声明"不够）。
+   *
+   * ⚠️ 真机铁证（2026-10-13，archive 主题「明日香」）：作者只声明
+   * `data-reader-flow-pagination="columns"` 却**未写 `column-*`** ⇒ 旧判据直接掉进
+   * `settleColumns` 的"只读结果"路径：`scrollWidth == clientWidth` ⇒ **页数恒 1**、且该路径
+   * **从不冻结页框**（`lastPageHeight == 0`）⇒ 正文溢出视口、页脚缺失、无法翻页
+   * （用户实测「正文内容还超了/底部展示不全」）。故必须要求"列布局证据"：
+   * ①正文槽已产生**横向溢出**（作者的 `column-*` 真在起作用）；或
+   * ②作者**显式**声明了列数/列宽。
+   */
+  function authorProvidesColumns() {
+    var slot = bodySlots() ? bodySlots()[0] : null;
+    if (!slot) return false;
+    // ① 已产生横向溢出 ⇒ 列布局真的生效
+    if ((slot.scrollWidth || 0) > (slot.clientWidth || 0) + 1) return true;
+    // ② 显式声明了列数 / 列宽（computed 为 `auto` 表示作者没写）
+    try {
+      var cs = window.getComputedStyle(slot);
+      var count = String(cs.columnCount || 'auto');
+      if (count !== 'auto' && count !== 'normal' && count !== '1') return true;
+      var width = parseFloat(cs.columnWidth);
+      if (isFinite(width) && width > 0 && width < (slot.clientWidth || 0) * 0.9) return true;
+    } catch (error) {
+      return false;
+    }
+    return false;
+  }
+
   function isColumnsMode() {
     var marker = document.querySelector('[data-reader-flow-pagination="columns"]');
-    return !!marker || (config && config.pagination === 'columns');
+    if (!marker && !(config && config.pagination === 'columns')) return false;
+    // 竖排 ⇒ 必须分栏（横移），不得退回纵移路径
+    if (isVerticalWriting()) return true;
+    return authorProvidesColumns();
   }
 
   function isScrollMode() {
