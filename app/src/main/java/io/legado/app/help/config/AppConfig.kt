@@ -9,6 +9,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.help.ai.AiToolNameLimits
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateDecorationPolicy
@@ -1341,9 +1342,11 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             ?.filter { it.isNotBlank() }
             ?.toSet()
             ?: emptySet<String>()
+        // 写入侧收口上限（条数/单条长度）：MCP 工具与 UI 共用本 setter，防畸形入参把 prefs 撑爆
+        // （铁证 2026-10-13：该键曾被写成 155MB，prefs XML 涨至 402MB ⇒ 启动解析卡顿）。
         set(value) = appCtx.putPrefStringSet(
             PreferKey.aiEnabledToolNames,
-            value.filter { it.isNotBlank() }.toMutableSet()
+            AiToolNameLimits.sanitize(value).toMutableSet()
         )
 
     var aiEnabledToolNamesVersion: Int
