@@ -420,6 +420,27 @@ object ReadBook : CoroutineScope by MainScope() {
         callBack?.get()?.upContent(resetPageOffset = false)
     }
 
+    /**
+     * 高亮规则 → 匹配层纯规则（**单一映射出口**）。
+     *
+     * canvas 路径（逐列绘制，见 [ruleMatchesOfChapter]）与模板路径（生成正文 HTML，
+     * 见 `HighlightHtmlDecorator`）都从**这里**取规则 ⇒ 两套渲染口径不可能漂移
+     * （各写一份时，新增字段必然只落一边 —— 本项目多次栽在这类"双口径"上）。
+     */
+    fun highlightMatcherRules(): List<HighlightRuleMatcher.Rule> = highlightRules.toList().map {
+        HighlightRuleMatcher.Rule(
+            id = it.id,
+            pattern = it.pattern,
+            isRegex = it.isRegex,
+            style = it.toHighlightStyle(),
+            timeoutMs = it.timeoutMillisecond,
+            replacement = it.replacement,
+            isDotAll = it.isDotAll,
+            // R12.1：把编辑器里的作用域选项真正传给匹配层（此前该字段无消费点）
+            targetScope = it.targetScope
+        )
+    }
+
     /** 本章规则命中(整章匹配, 缓存在 TextChapter 上, 随重排/规则版本失效) */
     fun ruleMatchesOfChapter(
         textChapter: TextChapter
@@ -444,19 +465,7 @@ object ReadBook : CoroutineScope by MainScope() {
             )
         }
         val chapterText = HighlightTextBuilder.buildChapter(lines)
-        val rules = rulesSnapshot.map {
-            HighlightRuleMatcher.Rule(
-                id = it.id,
-                pattern = it.pattern,
-                isRegex = it.isRegex,
-                style = it.toHighlightStyle(),
-                timeoutMs = it.timeoutMillisecond,
-                replacement = it.replacement,
-                isDotAll = it.isDotAll,
-                // R12.1：把编辑器里的作用域选项真正传给匹配层（此前该字段无消费点）
-                targetScope = it.targetScope
-            )
-        }
+        val rules = highlightMatcherRules()
         val startMs = System.currentTimeMillis()
         // §9.5.6：整章总预算（默认 300ms，可在「其他设置」调整）；超预算即降级，取代「逐规则 3s 累加」
         val budgetMs = AppConfig.highlightMatchBudgetMs.toLong()

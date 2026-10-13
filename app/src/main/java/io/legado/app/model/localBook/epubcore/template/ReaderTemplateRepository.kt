@@ -205,7 +205,15 @@ internal class ReaderTemplateRepository(
         const val LibraryFileName = "readerTemplates.json"
         const val DefaultMaxTemplates = 64
 
-        /** 单模板体量上限（compat 报告 §五：`css > 2MB` 应优雅报错）。 */
-        const val DefaultMaxTemplateChars = 2 * 1024 * 1024
+        /**
+         * 单模板体量上限。
+         *
+         * **为什么是 4 MiB 而不是 2 MiB**（2026-10-13 用户铁证「落实兼容 archive 所有主题模式」）：
+         * archive 官方内置 `builtin.lord_of_mysteries` 的 `css` 单项即 2.6 MB（`resourceSource()`
+         * 合计约 2.65 MB）⇒ 2 MiB 上限会让它**在导入期就被拒**（"导入成功却用不了"的反面案例）。
+         * archive 侧本身只对**包**设限（64 MiB），单模板不设字符上限；取 4 MiB 既容纳 archive 最大内置，
+         * 又仍是有界值（防畸形/超大体量模板拖垮编辑器与沙箱首帧）。
+         */
+        const val DefaultMaxTemplateChars = 4 * 1024 * 1024
     }
 }

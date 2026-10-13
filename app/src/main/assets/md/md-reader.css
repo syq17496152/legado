@@ -6,7 +6,9 @@
  * 使阅读器主题（字号、行距、日夜、字体）**一处生效**，与 canvas 路径的阅读设置同源。
  *
  * 主题：`:root` 提供日/夜两套变量；宿主通过 `<html data-md-theme="night">` 切换，
- * 无 JS 依赖（避免渲染前闪白）。
+ * 无 JS 依赖（避免渲染前闪白）。三态之三「水墨屏」为 `data-md-theme="eink"`（黑白高对比，
+ * 见文件末块）——沙箱运行时按宿主下发的主题 id **同时**写 `data-reader-theme` 与 `data-md-theme`，
+ * 保证模板自带的正文配色与这套基线（代码块/引用/表格底纹）**取态一致**。
  */
 
 :root {
@@ -35,6 +37,18 @@ html[data-md-theme="night"] {
   --md-code-bg: #1c1c1c;
   --md-link-color: #6db3f2;
   --md-table-stripe: #191919;
+}
+
+/* 三态之三：水墨屏。灰阶靠抖动模拟 ⇒ 半透明灰会脏底、低对比边框会糊 ⇒ 一律黑白高对比。 */
+html[data-md-theme="eink"] {
+  --md-text-color: #000000;
+  --md-bg-color: #ffffff;
+  --md-muted-color: #333333;
+  --md-border-color: #000000;
+  --md-quote-bg: #ffffff;
+  --md-code-bg: #ffffff;
+  --md-link-color: #000000;
+  --md-table-stripe: #ffffff;
 }
 
 html,

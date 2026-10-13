@@ -56,6 +56,8 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookHighlight
 import io.legado.app.help.HighlightColors
+import io.legado.app.help.HighlightHtmlDecorator
+import io.legado.app.help.HighlightPalette
 import io.legado.app.help.HighlightStyle
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.data.entities.BookParagraphRule
@@ -2529,6 +2531,16 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var textRichBackend: TextRichRenderBackend? = null
     private var textRichPrepared: TextRichContentProbe.RichContent? = null
     private var textRichPreparedIndex = -1
+    /**
+     * 模板面"已装饰内容"对应的**高亮规则版本**（R7）。
+     *
+     * 高亮规则变化（增删改/启停）后必须**重新装饰并重渲染**：`upHighlightRules()` 走的是
+     * `upContent(resetPageOffset = false)`，而 [loadTemplateContentAwait] 有"同章且后端在场即跳过"
+     * 的早退闸 ⇒ 不带上版本号就会被闸住（用户观感＝"改完规则没反应"）。
+     */
+    private var templateHighlightVersion = -1
+    /** 本次模板正文实际被高亮装饰的规则条数（仅诊断/自证用；0 = 无规则或无命中）。 */
+    private var templateDecoratedRules = 0
     private var textRichChapterRef: ChapterRef? = null
     private var textRichChapterStart: Long? = null
     private var textRichChapterEnd: Long? = null
@@ -2916,6 +2928,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         val chapterTitle = textRichChapterRef?.title.orEmpty()
         return TemplateRenderBackend.ReaderValues(
             dark = AppConfig.isNightTheme,
+            // 三态之三（水墨屏）：优先级高于日夜（与 HighlightPalette.Tone.EINK 的判序一致），
+            // 由沙箱写成 `data-reader-theme="eink"` / `data-md-theme="eink"`，模板与基线同时取态。
+            eink = AppConfig.isEInkMode,
             bookName = bookName,
             chapterTitle = chapterTitle,
             progressPercent = progress,
@@ -3053,7 +3068,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         if (templateLoading ||
-            (templateActive && textRichPreparedIndex == index && templateBackend != null)
+            // R7：高亮规则版本也必须参与闸门——规则变了要重装饰重渲染（否则"改规则没反应"）
+            (templateActive && textRichPreparedIndex == index && templateBackend != null &&
+                templateHighlightVersion == ReadBook.highlightRulesVersion)
         ) {
             if (relativePosition == 0) upSeekBarProgress()
             loadStates = false
@@ -3073,7 +3090,20 @@ class ReadBookActivity : BaseReadBookActivity(),
                             raw,
                             allowPlainText = richTextAllowsPlainText()
                         )
-                    }.getOrNull()
+                    }.getOrNull()?.let { content ->
+                        // R7 高亮接线：在宿主侧把启用规则装饰进正文 HTML。
+                        // 必须在**交给沙箱之前**完成 —— archive 官方口径是"高亮加入正文后再测量布局"，
+                        // 沙箱的分页/换壳以装饰后的版式为准（晚一步会先按无高亮版式分页再跳变）。
+                        val decorated = HighlightHtmlDecorator.decorate(
+                            content.html,
+                            ReadBook.highlightMatcherRules(),
+                            // 阅读器三态（日/夜/水墨屏）与整章匹配预算均与 canvas 路径同源
+                            tone = HighlightPalette.currentTone(),
+                            budgetMs = AppConfig.highlightMatchBudgetMs.toLong()
+                        )
+                        templateDecoratedRules = decorated.matchedRules
+                        content.copy(html = decorated.html)
+                    }
                 }
             }
             if (chapter == null || prepared == null) {
@@ -3089,7 +3119,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             AppLog.putDebugWithTag(
                 AppLog.TAG_READER_TEMPLATE,
                 "prepare: chapter=$index, mermaid=${prepared.hasMermaid}, math=${prepared.hasMath}, " +
-                        "htmlLen=${prepared.html.length}, template=${templateResolved?.id}"
+                        "htmlLen=${prepared.html.length}, hl=${templateDecoratedRules}, " +
+                        "template=${templateResolved?.id}"
             )
             textRichPrepared = prepared
             textRichPreparedIndex = index
@@ -3104,6 +3135,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             // 换章 ⇒ 作废上一章的比例（由 durChapterPos 重算）
             templatePendingRestoreRatio = null
             switchTemplate(true)
+            // R7：记录本次正文是按哪一版高亮规则装饰的（闸门据此判断"规则变了要不要重渲染"）
+            templateHighlightVersion = ReadBook.highlightRulesVersion
             // S11：模板面开局（书级后端 DIRECT_WEB）⇒ 后续失败经治理层**整书**降级；
             // 同书重复调用保持书级粘性（不会把已降级的书又拉回模板面）。
             renderGovernor.startBook(book.bookUrl, BackendSelectionPolicy.Backend.DIRECT_WEB)

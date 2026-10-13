@@ -32,14 +32,31 @@ html[data-rp-decoration="light"] [data-reader-decoration] {
   opacity: 0.45 !important;
 }
 
-html[data-rp-decoration="medium"] [data-reader-decor],
-html[data-rp-decoration="medium"] [data-reader-decoration] {
-  opacity: 0.85 !important;
+/* 「中」（默认档）= **作者原样**：本节**刻意不写 opacity 规则**。
+   默认档位若改写透明度，archive 主题的插画/纹理层（作者自声明 `opacity:.09` 等）会被整体拉高
+   ⇒ 导入主题与 archive 观感直接走样（用户实测「适配过来就是一个死图 / 完全效果都不一样」）。
+   档位在此只登记 `--rp-decor-scale`（可选变量，作者可自行消费）。 */
+html[data-rp-decoration="medium"] {
+  --rp-decor-scale: 1;
 }
 
-html[data-rp-decoration="strong"] [data-reader-decor],
-html[data-rp-decoration="strong"] [data-reader-decoration] {
-  opacity: 1 !important;
+/* 「强」：同样**不改 opacity**（只放大可选缩放变量）。
+   升级路径：内置模板消费 `transform: scale(var(--rp-decor-scale))` 后，「强」才会产生尺寸差异；
+   当前仅对已消费该变量的模板生效（避免强改作者透明度带来的观感风险）。 */
+html[data-rp-decoration="strong"] {
+  --rp-decor-scale: 1.25;
+}
+
+/* ===== 三态之三「水墨屏」：装饰动效全停 =====
+   水墨屏刷新慢（整屏闪），装饰动画只会拖慢感知。**不动 opacity** —— 同为保真：透明度归作者
+   （水墨屏下强行拉满会让插画层压死正文）。这里按 `data-reader-theme="eink"` 收口，
+   内置主题与导入主题一视同仁。 */
+html[data-reader-theme="eink"] [data-reader-decor],
+html[data-reader-theme="eink"] [data-reader-decor] *,
+html[data-reader-theme="eink"] [data-reader-decoration],
+html[data-reader-theme="eink"] [data-reader-decoration] * {
+  animation: none !important;
+  transition: none !important;
 }
 
 /* ===== 动效闸门：专注模式 / 系统 reduce-motion / 拖动与截图期间暂停 =====

@@ -74,6 +74,8 @@ class TemplateRenderBackend(
     /** 模板槽位真值（`data-reader-field` + 内容感知变量）。 */
     data class ReaderValues(
         val dark: Boolean,
+        /** 水墨屏（三态之三）；优先级高于 [dark]，映射见 [TemplateThemeId.of]。 */
+        val eink: Boolean = false,
         val bookName: String,
         val chapterTitle: String,
         val progressPercent: Int,
@@ -89,7 +91,7 @@ class TemplateRenderBackend(
          */
         val seed: Int = 0
     ) {
-        val themeId: String get() = if (dark) ThemeNight else ThemeDay
+        val themeId: String get() = TemplateThemeId.of(dark, eink)
     }
 
     override val capabilities: BackendCapabilities = BackendCapabilities.DirectWeb
@@ -775,8 +777,6 @@ class TemplateRenderBackend(
         private const val HostJsAsset = "md/template-host.js"
         private const val FlowJsAsset = "md/template-browser-flow.js"
         private const val RuntimeJsAsset = "md/template-runtime.js"
-        private const val ThemeNight = "night"
-        private const val ThemeDay = "day"
 
         /** 装饰强度默认字面量（与 `ReaderTemplateDecorationPolicy.Intensity.MEDIUM.cssValue` 同值）。 */
         private const val DecorationMedium = "medium"

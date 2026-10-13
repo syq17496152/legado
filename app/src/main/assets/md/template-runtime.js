@@ -315,6 +315,8 @@
       // 滚动模板是单份 `scrollHtml`（无首/续之分）
       pageShell = 'scroll';
       mountMarkup(template.scrollHtml || '');
+      // archive 契约：滚动模板的页根同样要带 `data-reader-page="scroll"`（主题按它切换配色/尺寸）
+      applyPageAttrs('scroll');
       return;
     }
     // paged：每个章节都从**首页结构**开始（C1 双结构；续页由流程层按页切换）。
@@ -380,6 +382,8 @@
     if (target === pageShell) return false;
     pageShell = target;
     mountMarkup(target === 'opening' ? openingHtml() : continuationHtml());
+    // archive 契约：页元素属性随换壳同步（`first` / `other`）——主题按它区分开篇页与正文页
+    applyPageAttrs(target);
     // ⚠️ 关键：换壳会**整块替换根壳 innerHTML**（新壳里当然没有正文）⇒ 必须把正文注入回来，
     // 否则翻到续页就是"页眉页脚还在、正文全空"（2026-10-10 C1 真机实证：slot 高塌成 16px、页数 1/1）。
     // 用 `applyBody` 一并回填字段槽位（新壳里的页码/时间等占位同样需要真值）。
@@ -517,7 +521,30 @@
 
   function setTheme(themeId) {
     state.themeId = themeId || 'day';
+    // archive 契约：主题标识写在 <html data-reader-theme>（archive 主题 CSS/JS 按它取态；
+    // 我方内置主题同样按它分「日间 / 夜间 / 水墨屏」三态）。
     document.documentElement.setAttribute('data-reader-theme', state.themeId);
+    // 同步到 `data-md-theme`：`md/` 基线样式表（md-reader.css）的三态变量块按**该**属性选择。
+    // 只写 reader 侧会让基线（代码块/引用/表格底纹/边框）在夜间与水墨屏下仍停在浅色默认值 ——
+    // 这正是「内置主题日夜兼容不全」的成因（正文色由模板自带，基线色却停在天亮态）。
+    document.documentElement.setAttribute('data-md-theme', state.themeId);
+  }
+
+  /**
+   * archive 契约：页元素属性（`data-reader-page="first|other|scroll"` + `data-reader-active`）。
+   *
+   * archive 官方作者文档写明「页面根节点：data-reader-page="first|other"」，其主题 CSS 依赖它做
+   * 首页/续页差异（`[data-reader-page]{padding:0}`、`[data-reader-page="first"] .tpl-magazine{gap:…}`、
+   * `[data-reader-page="scroll"]{…}`），`builtin.minecraft_live` 还用
+   * `[data-reader-active="true"][data-reader-motion="paused"]` 做页面级动效启停。
+   * 缺失时这些选择器**静默落空** ⇒ 导入主题与 archive 观感不一致（用户实测「完全效果都不一样」）。
+   */
+  function applyPageAttrs(which) {
+    var root = document.getElementById('reader-template-root');
+    if (!root) return;
+    var value = which === 'scroll' ? 'scroll' : (which === 'continuation' ? 'other' : 'first');
+    root.setAttribute('data-reader-page', value);
+    root.setAttribute('data-reader-active', 'true');
   }
 
   /**

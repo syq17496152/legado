@@ -391,7 +391,8 @@
     // 页脚紧贴正文末尾、其下留出大片空白（实测 25% 屏高，与用户截图逐像素吻合）；续页壳因页高变大
     // 也因同一守卫不重冻，同样留 91px 空白。改为**不论是否溢出都冻结** ⇒ 外壳高恒 = 可用高 = 视口高 − 占位。
     // ⑤ **两个高度分开**（2026-10-13 用户真机铁证：「一页还可以上下拖动？而不是刚刚好的」「最后一行只显示一半」）：
-    // 箱高 = 可用高（铺满、不可拖、页脚贴底）；可见窗口 = 整行对齐高（由 padding-bottom 吃残量 ⇒ 不裁字、不丢内容）。
+    // 箱高 = 可用高（铺满、不可拖、页脚贴底）；可见窗口 = 整行对齐高（由 `clip-path` 把渲染面
+    // 裁在整行边界 ⇒ 不裁字、不丢内容；**不能**只靠 padding-bottom，理由见 [freezePagedSlot]）。
     var visible = freezePagedSlot(slot, box);
     // ⚠️ 贴底校正（2026-10-12 真机铁证）：占位是**注入前估算**（模板装饰多为 vh 单位 SVG，
     // 注入后最终布局可能与估算差一截）⇒ 冻结后必须用**布局事实**（根壳底 vs 视口底）再校一次，
@@ -594,9 +595,19 @@
    *
    * 两个高度**必须分开**（2026-10-13 用户真机铁证「一页还可以上下拖动？而不是刚刚好的」）：
    * - **箱高 = 可用高**：页框铺满视口 ⇒ 页脚恒贴视口底、外壳不可上下拖（观感"刚刚好一屏"）；
-   * - **可见窗口 = 整行对齐高**：由 `padding-bottom` 吃掉"不到一行的残量" ⇒ 裁切边界落在行与行之间，
-   *   末行**完整显示**（不裁字）、**不丢内容**（下一屏从该行起）。
+   * - **可见窗口 = 整行对齐高**：裁切边界必须落在行与行之间 ⇒ 末行**完整显示**（不裁字）、
+   *   **不丢内容**（下一屏从该行起）。
    * 若把两者混用（箱高 = 整行高），箱体就比视口矮一截 —— 正是"能上下扒拉一截"的根因。
+   *
+   * ⚠️ 裁切**必须用 `clip-path`，不能用 `padding-bottom`**（2026-10-14 真机铁证，行带剖面实测）：
+   * 正文是**溢出**的（滚动容器）⇒ 溢出内容会**画进内边距区**，而 `overflow:hidden` 的裁切边是
+   * **内边距盒**（= 箱底），并非内容盒底 ⇒ 只加 `padding-bottom` 时正文可见区实际是
+   * 「箱高 − 上内边距」（star-chart 实测 646.46px = 23.47 行）⇒ 第 24 行被裁掉大半
+   * （截图行带剖面：末行只剩 6px 高的字形顶）。
+   * `clip-path: inset(0 0 <残量> 0)` 把**渲染面**裁在「上内边距 + 整行窗口」处，且**不改布局**
+   * ⇒ 不参与"按壳占位 / 贴底校正"的迭代（若改用 margin/gap 补偿，占位的下沿含该补偿 ⇒
+   * 形成 `箱高 ← f(补偿) ← f(箱高)` 的反馈环，收敛点不再铺满视口）。旧内核不支持时静默降级为
+   * "仅 padding-bottom"（即改造前行为），不会破坏可用性。
    *
    * @returns 可见窗口高（= 页步长，供翻页与页数口径使用）
    */
@@ -605,8 +616,11 @@
     slot.style.height = Math.floor(boxHeight) + 'px';
     slot.style.overflow = 'hidden';
     var windowHeight = alignToWholeLines(slot, boxHeight);
-    var gutter = boxHeight - slotPaddingTop(slot) - windowHeight;
-    slot.style.paddingBottom = Math.max(0, Math.floor(gutter)) + 'px';
+    var gutter = Math.max(0, Math.floor(boxHeight - slotPaddingTop(slot) - windowHeight));
+    slot.style.paddingBottom = gutter + 'px';
+    var clip = 'inset(0 0 ' + gutter + 'px 0)';
+    slot.style.clipPath = clip;
+    slot.style.webkitClipPath = clip;
     return windowHeight;
   }
 
