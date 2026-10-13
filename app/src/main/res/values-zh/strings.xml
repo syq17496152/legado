@@ -2281,9 +2281,9 @@ bookUrl：%7$s
     <string name="ai_skill_default_name">导入的 Skill</string>
     <string name="ai_remove_skill_confirm">删除这个 Skill？</string>
 <string name="epub_read_engine">EPUB阅读引擎</string>
-<string name="epub_read_engine_summary">默认转换为纯文本阅读；EPUB引擎为实验性功能，可能存在排版或性能问题。</string>
+<string name="epub_read_engine_summary">默认使用 EPUB 引擎（保留出版方排版：标题/加粗/斜体/引用等）；遇到排版或性能问题可切回纯文本转换。</string>
 <string name="epub_read_engine_text">转换为纯文本</string>
-<string name="epub_read_engine_core">EPUB引擎（实验性）</string>
+<string name="epub_read_engine_core">EPUB引擎（保真排版）</string>
 <string name="update_acceleration_manage">加速管理</string>
 
 <string name="rss_search_hint">搜索订阅内容</string>

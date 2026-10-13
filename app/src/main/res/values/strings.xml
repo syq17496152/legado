@@ -2683,9 +2683,9 @@ Selected text or question:
     <string name="ai_skill_default_name">Imported Skill</string>
     <string name="ai_remove_skill_confirm">Remove this skill?</string>
 <string name="epub_read_engine">EPUB read engine</string>
-<string name="epub_read_engine_summary">Default to plain text conversion; EPUB engine is experimental and may have layout or performance issues.</string>
+<string name="epub_read_engine_summary">Uses the EPUB engine by default (keeps publisher layout: headings, bold, italic, quotes). Switch back to plain text if you hit layout or performance issues.</string>
 <string name="epub_read_engine_text">Convert to plain text</string>
-<string name="epub_read_engine_core">EPUB engine (experimental)</string>
+<string name="epub_read_engine_core">EPUB engine (fidelity)</string>
 <string name="update_acceleration_manage">加速管理</string>
 
 <string name="rss_search_hint">Search subscription content</string>

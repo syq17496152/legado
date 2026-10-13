@@ -2585,12 +2585,22 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val doublePageHorizontal: String?
         get() = appCtx.getPrefString(PreferKey.doublePageHorizontal)
 
+    /**
+     * EPUB 阅读引擎。
+     *
+     * **默认 `core`（2026-10-13 起，epub-md-rich-rendering 阶段 5.1）**：富管线（离屏 WebView 保真布局
+     * → canvas 上屏）保留出版方样式（标题/加粗/斜体/字色/引用/列表/缩进/图片）并让阅读器字号、
+     * 行高、左右安全区生效；`text`（纯文本转换，出版方样式全丢）保留为**一键回退**。
+     * 切换依据：①分类误判与布局 NPE 两个阻断缺陷已修（`issues-found.md` 第 15 条）；
+     * ②12 本多样化/异常 EPUB 的 L3 语料 **12/12 PASS**（零 FATAL、零降级、五态分类全对）；
+     * ③XB.2 性能预算：内存与冷启动劣化均 ≤10%（无性能理由留在旧引擎）。
+     */
     var epubReadEngine: String
-        get() = appCtx.getPrefString(PreferKey.epubReadEngine, "text") ?: "text"
+        get() = appCtx.getPrefString(PreferKey.epubReadEngine, EPUB_READ_ENGINE_CORE) ?: EPUB_READ_ENGINE_CORE
         set(value) = appCtx.putPrefString(PreferKey.epubReadEngine, value)
 
     val useExperimentalEpubCore: Boolean
-        get() = epubReadEngine == "core"
+        get() = epubReadEngine == EPUB_READ_ENGINE_CORE
 
     var epubCoreScheduleMode: String
         get() = appCtx.getPrefString(PreferKey.epubCoreScheduleMode, "normal") ?: "normal"
@@ -3167,4 +3177,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) {
             appCtx.putPrefInt("rssSearchType", value)
         }
+
+    /** EPUB 引擎取值：纯文本转换（旧行为，保留为一键回退）。 */
+    const val EPUB_READ_ENGINE_TEXT = "text"
+
+    /** EPUB 引擎取值：富管线（保真排版；阶段 5.1 起为默认）。 */
+    const val EPUB_READ_ENGINE_CORE = "core"
 }

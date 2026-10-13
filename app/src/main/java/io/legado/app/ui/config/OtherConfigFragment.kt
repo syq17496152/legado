@@ -232,7 +232,7 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 summary = epubReadEngineSummary(),
                 entriesRes = R.array.epub_read_engine_entries,
                 valuesRes = R.array.epub_read_engine_values,
-                defaultValue = "text"
+                defaultValue = AppConfig.EPUB_READ_ENGINE_CORE
             ),
             SettingActionSpec(
                 key = KEY_LOCAL_PASSWORD,
@@ -641,8 +641,8 @@ class OtherConfigFragment : ComposeSettingFragment() {
 
     private fun epubReadEngineSummary(): String {
         val current = when (AppConfig.epubReadEngine) {
-            "core" -> getString(R.string.epub_read_engine_core)
-            else -> getString(R.string.epub_read_engine_text)
+            AppConfig.EPUB_READ_ENGINE_TEXT -> getString(R.string.epub_read_engine_text)
+            else -> getString(R.string.epub_read_engine_core)
         }
         return "${getString(R.string.epub_read_engine_summary)}\n$current"
     }
