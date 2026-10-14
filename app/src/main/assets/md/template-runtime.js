@@ -61,6 +61,8 @@
     decodedSrcs: {},
     // 字段派生（C2）：电量文本（由 Battery Status API 异步填充，取不到则保持空）
     battery: '',
+    // 作者 JS 是否已执行（**每份文档只执行一次**；重复执行会重复注册钩子）
+    authorScriptMounted: false,
     clockTimer: null
   };
 
@@ -354,6 +356,38 @@
     return (state.template && state.template.firstPageHtml) || '';
   }
 
+  /**
+   * 作者 JS 执行（archive 契约的关键一环，**2026-10-14 补齐**）。
+   *
+   * 为什么必须有：archive 主题的**动效 / 段落语义 / 页脚同步全在 `javascript` 字段里** ——
+   * 用 `readerTemplate.on('beforeLayout'|'afterLayout'|'pageChange'|'motionChange'|'dispose')`
+   * 注册钩子，并在 `event.pages` / `event.page`（页元素）上用 Web Animations 起"每页动图"。
+   * 此前我方**从未执行该字段**（`template.javascript` 全文零引用）⇒ 主题 JS 一行不跑 ⇒
+   * 观感与 archive 的「每页元素有变化 / 有动图效果」差一大截（用户实测：「适配过来就是一个死图」）。
+   *
+   * 为什么用 `new Function(code)()` 而不是"插入 `<script>` 元素"：
+   * 动态插入的经典脚本按规范是**异步执行**的 ⇒ 作者的 `readerTemplate.on(...)` 注册可能晚于
+   * 首个 `beforeLayout`/`afterLayout` ⇒ 首屏装饰与动效**永久丢失**（跨源、只有真机能看出来）。
+   * `new Function` 是**同步**执行、顺序完全可控；`window.readerTemplate` 已在模块顶层暴露。
+   *
+   * 安全：作者代码依旧只跑在**沙箱文档**内（不同源、无宿主对象、无 `addJavascriptInterface`），
+   * 抛错只留痕（`template-script-failed`）并继续渲染 —— 绝不因作者代码把阅读页打死。
+   * 执行次数：**每份文档一次**（失败也不重试，重复执行会重复注册钩子 ⇒ 事件被放大）。
+   */
+  function mountAuthorScript() {
+    var code = (state.template && state.template.javascript) || '';
+    if (!code.trim() || state.authorScriptMounted) return;
+    state.authorScriptMounted = true;
+    try {
+      (new Function(code))();
+      // 自证：作者脚本是否真的执行过（跨源、无调试器时这是唯一凭据）
+      send('renderState', { state: 'author-script,ok=1,chars=' + code.length });
+    } catch (error) {
+      send('renderState', { state: 'author-script,ok=0,chars=' + code.length });
+      reportError('template-script-failed', error);
+    }
+  }
+
   /** 续页结构（paged 的 `otherPageHtml`）；空则退回首页结构（作者只写一套时按一套渲染）。 */
   function continuationHtml() {
     var other = (state.template && state.template.otherPageHtml) || '';
@@ -394,6 +428,8 @@
     // archive 契约：换壳后补发 `beforePage`（新页元素上的"每页逻辑"，如竖排量流/时段标记）。
     // 仅在正文已注入时发：首次 `renderShell()` 时正文尚未到达，那次由 continueInit 统一补发。
     if (state.bodyHtml) emitHook('beforePage', pageEvent(target));
+    // 钩子会改 DOM（段落语义类/量取写变量）⇒ 网格必须**在钩子之后**再补一次（同 continueInit 的理由）
+    applyLineGrid();
     return true;
   }
 
@@ -1168,6 +1204,9 @@
       reportError('template-render-failed', error);
       return;
     }
+    // 作者 JS 必须在**首次钩子之前**同步执行（见 [mountAuthorScript]）：它的 `readerTemplate.on(...)`
+    // 注册若晚于首个 `beforeLayout`/`afterLayout`，首屏装饰与动效就永久丢失（跨源、仅真机可见）。
+    mountAuthorScript();
     // 整行网格（分页正确性前提）必须最先：它改的是正文槽的内边距/段距 ⇒ 之后再量占位与分页
     applyLineGrid();
     // 响应式断点（C9）必须在**页眉/页脚占位量取之前**刷新：`--rp-vp-w/h` 与 `data-rp-narrow/landscape`
@@ -1198,6 +1237,10 @@
     emitHook('beforeLayout', { generation: 0, viewport: authorApi.viewport });
     // archive 契约：`beforePage`（本页每页逻辑）—— 必须在首次结算之前，作者的量取才参与分页
     emitHook('beforePage', pageEvent(currentPageShell()));
+    // ⚠️ 两个钩子**会改 DOM**（主题在 beforeLayout 给段落打语义类、在 beforePage 量取并写变量）
+    // ⇒ 网格必须**在钩子之后**再补一次：否则语义类带来的高度差会把其后每一行推出网格
+    // （症状与 data-stream 同源：分页裁切边界落到行中间、末行被裁半）。
+    applyLineGrid();
     // 素材治理（C11）：图片按需解码 + 去重，**解码就绪后才提交可翻阅页面**；
     // 无图（纯文字章节）时同步回调 ⇒ 保持"立即结算一次"的语义不变。
     // 这一次结算是 `stable` 的唯一来源：章节不含富渲染元素时不会有后续 `remeasure`，
