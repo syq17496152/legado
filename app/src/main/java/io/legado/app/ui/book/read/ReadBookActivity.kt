@@ -151,6 +151,7 @@ import io.legado.app.ui.book.read.textweb.AssetTextReader
 import io.legado.app.ui.book.read.textweb.TextRichContentProbe
 import io.legado.app.ui.book.read.textweb.TextRichHtmlComposer
 import io.legado.app.ui.book.read.textweb.TemplateRenderBackend
+import io.legado.app.ui.book.read.textweb.TemplateTurnMotion
 import io.legado.app.ui.book.read.textweb.TextRichRenderBackend
 import io.legado.app.model.localBook.epubcore.layout.EpubCoreLayoutConfig
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionAction
@@ -2207,6 +2208,18 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
+    /**
+     * 模板面**带过渡**地翻一页（4.20；用户报「页面动画呢？」）。
+     *
+     * 过渡形态由用户档位决定（`TemplateTurnMotion.specOf(ReadBook.pageAnim())` ⇒ `cover`/`slide`/
+     * `linkedCover`/无动画），水墨屏档位已由 `ReadBook.pageAnim()` 收敛 ⇒ 此处无需再判 EInk。
+     * 容器（`textRichReadView`）负责快照与移出动画；容器不支持（API<24）时内部直接执行 [action]。
+     */
+    private fun turnTemplatePage(direction: Int, action: () -> Unit) {
+        val spec = TemplateTurnMotion.specOf(ReadBook.pageAnim())
+        binding.textRichReadView.turnWithSnapshot(direction, spec, action)
+    }
+
     private fun keyPage(direction: PageDirection) {
         if (epubCoreActive) {
             when (direction) {
@@ -2217,21 +2230,23 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         if (templateActive) {
-            // 模板沙箱跨源 ⇒ 翻页必须下指令给沙箱（宿主改不了它的滚动），边界判据用沙箱回发的页码
+            // 模板沙箱跨源 ⇒ 翻页必须下指令给沙箱（宿主改不了它的滚动），边界判据用沙箱回发的页码。
+            // ⚠️ 翻页要走**带过渡**的通路（用户报「页面动画呢？」）：模板面只有一层可绘内容，
+            // 过渡由"旧页快照移出 + 换页"做出来，形态按用户档位决定（见 `TemplateTurnMotion`）。
             val backend = templateBackend
             when (direction) {
                 PageDirection.NEXT ->
                     if (backend == null || backend.edge().atBottom) {
                         ReadBook.moveToNextChapter(true)
                     } else {
-                        backend.pageNext()
+                        turnTemplatePage(1) { backend.pageNext() }
                     }
 
                 PageDirection.PREV ->
                     if (backend == null || backend.edge().atTop) {
                         ReadBook.moveToPrevChapter(true)
                     } else {
-                        backend.pagePrev()
+                        turnTemplatePage(-1) { backend.pagePrev() }
                     }
 
                 else -> Unit
