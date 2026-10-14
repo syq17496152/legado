@@ -686,8 +686,52 @@
       // 代价：C1 双结构换壳会整块替换根壳 innerHTML ⇒ 槽上的变量会随新壳丢失，因此
       // [applyPageShell] 换壳后必须**重新写入**（否则续页段距回落 1em、网格失效、末行被裁半）。
       slot.style.setProperty('--rp-line-height', lh + 'px');
+      roundChildHeights(slot, lh);
     } catch (error) {
       // 取不到就不写：基线回落 0px 内边距 / 1em 段距，分页仍可用（仅可能半行裁切）
+    }
+  }
+
+  /** 网格残量容差（CSS px）：小于它的"不足一行"视为浮点噪声，不补。 */
+  var GRID_RESIDUE_EPSILON = 0.02;
+  /** 补齐的最小视在残量（相对行高）：太小就不补（否则每块都多出一条缝）。 */
+  var GRID_RESIDUE_MIN_RATIO = 0.08;
+
+  /**
+   * 把每个**直接子块**的总占位向上补齐到**整行**（分页正确性的第二半）。
+   *
+   * 为什么光有"段距归一到整行"不够（2026-10-14 真机铁证，data-stream）：
+   * 章名（`h1`/`.reader-chapter-title`）与图片/代码块的行盒高**不是正文行高的整数倍**
+   * （章名字号更大 ⇒ 行盒 = 1.34 × 行高）⇒ 它们之后的每一行都被推移了这段非整行残量，
+   * 分页裁切边界（按"整行倍数"算出的）就落到某一行中间 ⇒ **末行被裁半**
+   * （实测 data-stream 末行只剩约 40% 高度；star-chart 只是残量恰好落在界外才没露出来）。
+   *
+   * 处理：对每个子块量其**已渲染盒高**，把"盒高 + 既有下边距"补到整行倍数。
+   * ⚠️ 必须**叠加**在既有下边距上（不是改写）：段距由布局基线统一到一行（`!important`），
+   * 直接改写会把段落间距清零；且必须用 `!important` 写内联（否则被布局基线的 `!important` 压回）。
+   * 末块不补：它下面没有内容，补了只会凭空多出一页空白。
+   */
+  function roundChildHeights(slot, lh) {
+    var children = slot.children;
+    if (!children || children.length === 0) return;
+    var last = children.length - 1;
+    for (var i = 0; i < children.length; i++) {
+      var el = children[i];
+      // 先撤上一轮的补齐：本函数会在换壳/重测/重排时重复调用，不撤会累积
+      try { el.style.removeProperty('margin-bottom'); } catch (error) { /* 旧内核 */ }
+      if (i === last) continue;
+      var box = 0;
+      try { box = el.getBoundingClientRect().height; } catch (error) { box = 0; }
+      if (!(box > 0)) continue;
+      var lines = Math.ceil(box / lh - GRID_RESIDUE_EPSILON);
+      var extra = lines * lh - box;
+      if (!(extra > lh * GRID_RESIDUE_MIN_RATIO)) continue;
+      var base = 0;
+      try { base = parseFloat(window.getComputedStyle(el).marginBottom); } catch (error) { base = 0; }
+      if (!isFinite(base) || base < 0) base = 0;
+      try {
+        el.style.setProperty('margin-bottom', (base + extra) + 'px', 'important');
+      } catch (error) { /* 旧内核：不补，退化为改造前行为 */ }
     }
   }
 
@@ -1135,6 +1179,10 @@
     flow.initialize(config.flow);
     applyFields(config.fields);
     applyBody(config.bodyHtml);
+    // 整行网格必须**在正文注入之后**再补一次（2026-10-14 真机铁证：data-stream 末行仍被裁半）：
+    // 上面的第一次 `applyLineGrid` 时槽里还没有正文 ⇒ 无法对子块（章名/图片/代码块）做整行补齐
+    // ⇒ 章名之后的每一行都被推移非整行残量，分页裁切边界落到行中间。此处补齐后立即结算，首屏即正确。
+    applyLineGrid();
     // 装饰强度/动效闸门 + 装饰自动分层（4.8d）：在结算之前完成，
     // 让首个 `stable` 就带上最终外观（否则会先按默认档位闪一帧，再等下一次重测）
     applyDecoration(config);
