@@ -1,0 +1,88 @@
+/*
+ * template-archive-base.css —— **archive 页基线等价物**（2026-10-14）
+ *
+ * 为什么需要：archive 侧由 `EpubTemplateDocument.baseCss(config, density)` 给每个模板文档注入一套
+ * **页基线**；我方此前只注入了 `--reader-*` **变量值**，却从未注入这套基线 ⇒ 主题"外壳铺不满视口、
+ * 页根安全区缺失、段落基线缺失"，真机表现为（用户实测，与 archive 原版同判据对照）：
+ *   · 纸面（正文面板）从 x=42 起，而 archive 是 x=16 ⇒ 左右各多缩进约 25 物理 px（观感"左右黑边"）；
+ *   · 四角露出**非主题底色**（archive 四角是主题底色铺满）；
+ *   · 纸面底部比 archive 少约 42 物理 px（观感"下面展示不全"）。
+ *
+ * 注入顺序（由 `TemplateRenderBackend.sandboxScripts` 保证）：**`md-reader.css` 之后、
+ * `template-layout.css` 之前** —— 后者的整行网格用 `!important` 统一正文段距，分页正确性优先。
+ *
+ * 与作者 CSS 的关系：作者规则**后加载**，同特异性即胜出 ⇒ archive 主题自己声明的
+ * `html,body{background:…}` 等照常生效；本文件只是把"作者没声明时"的兜底口径补齐。
+ */
+
+html {
+  height: 100%;
+}
+
+/* ⚠️ body 无内边距 = **archive 口径**（archive 原版 body 无 padding，真机基准：纸面左距 16px）。
+   真机实测（2026-10-14）本沙箱文档里 body 的 computed `padding-left/right = 14.6px`，而仓内所有
+   CSS 都声明 `padding:0`、CSSOM 反查也只命中那条 ⇒ 有第三方/通配规则在加内边距。
+   无论来源为何，**按 archive 口径强制清零**才是正确终态（否则根壳恒比视口窄 ~29px ⇒ 左右露出
+   非主题底色带，即用户报的"左右黑边"）。用 `!important` 是**有意**的：该值属版面兜底口径，
+   与 archive `baseCss` 的 body 声明同级，作者若确需 body 内边距会在页根上另行声明。 */
+html,
+body {
+  padding: 0 !important;
+  padding-inline: 0 !important;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--reader-text-color);
+  background: var(--reader-page-background);
+  font-size: var(--reader-font-size);
+  line-height: var(--reader-line-height);
+  font-family: var(--reader-font-family);
+  overflow-wrap: break-word;
+}
+
+/* 页根安全区：archive 用它在刘海/圆角屏上留出安全边距（我方此前完全缺这一条） */
+[data-reader-page] {
+  padding: var(--reader-safe-top) var(--reader-safe-right) var(--reader-safe-bottom)
+    var(--reader-safe-left);
+}
+
+/* 正文段落基线：archive 的 `.reader-paragraph` 契约（段距/首行缩进/孤寡行）。
+   ⚠️ 我方 `template-layout.css` 会用 `!important` 把段距改为"整行"（分页网格前提），
+   故本条的段距只在**未被网格覆盖的块级元素**上生效。 */
+.reader-paragraph {
+  margin: 0 0 var(--reader-paragraph-spacing);
+  text-indent: var(--reader-paragraph-indent);
+  orphans: 2;
+  widows: 2;
+}
+
+/* 跨页接排片段不重复首行缩进（archive 同款） */
+[data-reader-continuation] {
+  text-indent: 0;
+}
+
+figure {
+  margin: 0 0 var(--reader-paragraph-spacing);
+  text-align: center;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+img {
+  height: auto;
+}
+
+pre,
+code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

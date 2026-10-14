@@ -499,12 +499,9 @@ class TemplateRenderBackend(
         val wantHighlight = options.highlightCode && !highlightJs.isNullOrBlank()
         val any = wantMermaid || wantMath || wantHighlight
         val css = buildString {
-            // 正文排版基线（模板 CSS 是外观层，md-reader.css 提供正文元素基线）
-            append(assetReader.read(MdRichRenderInjector.MdReaderCssAsset).orEmpty())
-            // 装饰层基线（4.8d）：按 <html data-rp-decoration> / data-reader-motion 施加强度与动效闸门
-            append(assetReader.read(MdRichRenderInjector.TemplateDecorationCssAsset).orEmpty())
-            // 布局层基线（4.15）：响应式收紧（C9）+ 竖排规格（C10），由运行时写在 <html> 上的状态开关驱动
-            append(assetReader.read(MdRichRenderInjector.TemplateLayoutCssAsset).orEmpty())
+            // 模板基线 CSS（**顺序单源**，见 `MdRichRenderInjector.TemplateBaselineCssAssets`：
+            // md-reader → archive-base → decoration → layout；layout 的整行网格 `!important` 必须最后）
+            MdRichRenderInjector.TemplateBaselineCssAssets.forEach { append(assetReader.read(it).orEmpty()) }
             if (wantMath) append(katexCss.orEmpty())
             if (wantHighlight) append(highlightCss.orEmpty())
         }

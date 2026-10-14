@@ -305,6 +305,40 @@
     }
   }
 
+  /**
+   * 动效**可见性**自证（2026-10-14 用户报「动图不展示」）。
+   *
+   * 只报"动画对象在跑"是不够的：用户看的是**屏幕**。跨源宿主读不到沙箱 DOM ⇒ 只能由沙箱回发
+   * **动画目标的实际几何**（是否在视口内、有无尺寸、计算后的不透明度）。
+   * 判读：`animVis` 远小于 `animTotal` ⇒ 动画打在不可见/零尺寸/被裁掉的元素上（观感＝动画没动）；
+   * `animY` 落在视口外 ⇒ 动效发生在屏幕之外。
+   */
+  function animationFacts() {
+    try {
+      if (typeof document.getAnimations !== 'function') return ',animVis=na';
+      var list = document.getAnimations();
+      var vis = 0, y0 = 1e9, y1 = -1, opMin = 2;
+      for (var i = 0; i < list.length; i++) {
+        var target = list[i].effect && list[i].effect.target;
+        if (!target || !target.getBoundingClientRect) continue;
+        var rect = target.getBoundingClientRect();
+        var opacity = parseFloat(window.getComputedStyle(target).opacity);
+        if (!isFinite(opacity)) opacity = 1;
+        if (opacity < 1) opMin = Math.min(opMin, opacity);
+        if (rect.width > 0 && rect.height > 0 && opacity > 0.02) {
+          vis++;
+          y0 = Math.min(y0, rect.top);
+          y1 = Math.max(y1, rect.bottom);
+        }
+      }
+      return ',animTotal=' + list.length + ',animVis=' + vis +
+        ',animY=' + (y1 > 0 ? Math.round(y0) + '..' + Math.round(y1) : '-') +
+        ',animOpMin=' + (opMin < 2 ? opMin.toFixed(2) : '-');
+    } catch (error) {
+      return ',animVis=err';
+    }
+  }
+
   function reportError(code, error) {
     send('error', { code: code, message: String((error && error.message) || error || code) });
   }
@@ -957,7 +991,62 @@
     } catch (error) {
       nodes = -1;
     }
-    return ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes +
+    // 布局盒宽自证（2026-10-14 用户报「屏幕左右有黑边」）：`window.innerWidth` **含**竖向滚动条、
+    // `documentElement.clientWidth` **不含** ⇒ 两者之差 > 0 即"沙箱文档出现了竖向滚动条"（它会挤压
+    // 主题可用宽 ~15px，从而在右侧露出引擎底色带 ⇒ 深色主题下观感即"黑边"）。同时给出根壳/正文槽
+    // 的实际宽，直接定位"是谁窄了"，不必再靠截图反推。
+    var winW = -1, docW = -1, rootW = -1, slotW = -1, bodyW = -1, bodyPad = '-';
+    var bodyStyleAttr = '-', safeVars = '-', htmlPad = '-', padRules = '-';
+    try {
+      winW = window.innerWidth;
+      docW = document.documentElement.clientWidth;
+      var rootEl = document.getElementById('reader-template-root');
+      if (rootEl) rootW = Math.round(rootEl.getBoundingClientRect().width);
+      if (slots.length) slotW = Math.round(slots[0].getBoundingClientRect().width);
+      // `bodyW` 与 `bodyPad(L/R/mL/mR)` 用来定位"根壳比视口窄"的差额来源（用户报「左右黑边」）
+      var bodyCs = window.getComputedStyle(document.body);
+      bodyW = Math.round(document.body.getBoundingClientRect().width);
+      bodyPad = parseFloat(bodyCs.paddingLeft).toFixed(1) + '/' + parseFloat(bodyCs.paddingRight).toFixed(1) +
+        '/' + parseFloat(bodyCs.marginLeft).toFixed(1) + '/' + parseFloat(bodyCs.marginRight).toFixed(1);
+      // 决定性自证（2026-10-14）：body 实测有左右内边距、而仓内 CSS/JS 均未声明 ⇒ 必须把
+      // ①body 的**内联样式**（谁写的）、②四个 `--reader-safe-*` 的**实际计算值**、
+      // ③html 自身的 padding 一并回发，才能定位到具体来源而不是继续猜。
+      var rootCs2 = window.getComputedStyle(document.documentElement);
+      bodyStyleAttr = String(document.body.getAttribute('style') || '(none)');
+      safeVars = ['--reader-safe-left', '--reader-safe-right', '--reader-safe-top', '--reader-safe-bottom']
+        .map(function (name) { return String(rootCs2.getPropertyValue(name)).trim() || '(empty)'; })
+        .join('/');
+      htmlPad = parseFloat(rootCs2.paddingLeft).toFixed(1) + '/' + parseFloat(rootCs2.paddingRight).toFixed(1);
+      // CSSOM 反查（决定性）：直接在沙箱里枚举**所有样式表规则**，报出"选择器命中 body 且声明了 padding"
+      // 的那几条 —— 静态扫描已排除我方基线与作者 CSS，只剩运行时/第三方样式表这一可能。
+      try {
+        var hits = [];
+        var sheets = document.styleSheets;
+        for (var si = 0; si < sheets.length; si++) {
+          var rules = sheets[si].cssRules || [];
+          for (var ri = 0; ri < rules.length; ri++) {
+            var rule = rules[ri];
+            var selText = rule.selectorText || '';
+            var ruleText = String(rule.cssText || '').replace(/\s+/g, ' ');
+            if (ruleText.indexOf('padding') < 0 || !selText) continue;
+            var hit = false;
+            try {
+              // 用**实际匹配**判定（`body.matches(sel)`）：这样 `*` / `:root` / 复杂选择器一律不漏
+              hit = document.body.matches(selText);
+            } catch (error) { hit = false; }
+            if (hit) hits.push(selText + '=>' + ruleText.slice(0, 90));
+          }
+        }
+        padRules = hits.length ? hits.slice(0, 3).join(' || ') : '(none)';
+      } catch (error) {
+        padRules = 'err:' + String((error && error.message) || error).slice(0, 40);
+      }
+    } catch (error) { /* 取不到不冒写假值 */ }
+    return ',iw=' + winW + '/' + docW + ',rootW=' + rootW + ',slotW=' + slotW +
+      ',bodyW=' + bodyW + ',bodyPad(L/R/mL/mR)=' + bodyPad +
+      ',bodyStyle=' + bodyStyleAttr + ',safe=' + safeVars + ',htmlPad=' + htmlPad +
+      ',padRules=' + padRules +
+      ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes +
       // 装饰自证（4.8d）：装饰档位与实际被标记的装饰元素数 —— 缺了它"选了档位却看不出差别"
       // 无法区分"沙箱没收到档位"与"模板本来就没有装饰"
       ',decor=' + state.decorCount + ',decorLevel=' + state.decoration +
@@ -1252,7 +1341,7 @@
         reportError('template-flow-failed', error);
       }
       // ready 携带 DOM 事实：正文是否真的进了槽位，在"就绪"这一刻即可判定
-      send('renderState', { state: 'ready' + domFacts() });
+      send('renderState', { state: 'ready' + domFacts() + animationFacts() });
     });
   }
 

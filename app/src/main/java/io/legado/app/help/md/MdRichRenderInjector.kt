@@ -22,6 +22,29 @@ object MdRichRenderInjector {
 
     /** 资产路径（相对 `assets/`），与阶段 0 导入的 vendor 目录保持一致。 */
     const val MdReaderCssAsset = "md/md-reader.css"
+
+    /**
+     * **archive 页基线等价物**（2026-10-14）：对齐 archive `EpubTemplateDocument.baseCss` 的三块口径 ——
+     * ①画布铺满（`html/body` 撑满视口 + `--reader-page-background` 兜底）；
+     * ②页根安全区（`[data-reader-page]` 消费 `--reader-safe-*`）；③段落基线（`.reader-paragraph`）。
+     * 此前我方只注入了 `--reader-*` **变量值**、缺这套**基线规则** ⇒ 导入主题在外壳铺满/左右内缩/
+     * 段落缩进上与 archive 不一致（真机基准对照：纸面左距 42px vs archive 16px）。
+     * 注入顺序：`md-reader.css` 之后、`template-layout.css` 之前（整行网格的 `!important` 优先）。
+     */
+    const val ArchiveBaseCssAsset = "md/template-archive-base.css"
+
+    /**
+     * 模板沙箱的**基线 CSS 顺序（单源）**：`md-reader` → `archive-base` → `decoration` → `layout`。
+     *
+     * **顺序即正确性**：`template-layout.css` 的整行网格用 `!important` 统一正文段距（分页前提），
+     * 必须**最后**注入才能压过 `archive-base` 的段落基线；把顺序收在这里可避免各处再各写一份。
+     */
+    val TemplateBaselineCssAssets = listOf(
+        MdReaderCssAsset,
+        ArchiveBaseCssAsset,
+        TemplateDecorationCssAsset,
+        TemplateLayoutCssAsset
+    )
     const val MermaidAsset = "md/vendor/mermaid.min.js"
     const val KatexAsset = "md/vendor/katex.min.js"
     const val KatexCssAsset = "md/vendor/katex.min.css"
