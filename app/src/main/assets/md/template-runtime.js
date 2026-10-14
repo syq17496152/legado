@@ -1126,6 +1126,17 @@
             shellParts.push(' >' + shortCls(gk[hi]) + '=' + boxOf(gk[hi]));
           }
         }
+        // **装饰层清单**（2026-10-14 用户报「我们自己的少元素」）：作者主题把纯装饰节点统一标
+        // `aria-hidden="true"`（asuka 的 grain/hero-rules/portrait/orbit/sync-track/wave/... 都是），
+        // 这是**与主题无关的通用信号** ⇒ 回发其数量与逐个 rect，才能证明"装饰层一个都没少"，
+        // 而不是只能靠肉眼比截图（"少元素"正是这么被发现的，也必须这么被证明已修）。
+        var deco = pageEl.querySelectorAll('[aria-hidden="true"]');
+        var decoParts = ['n=' + deco.length];
+        for (var di = 0; di < deco.length && di < 10; di++) {
+          decoParts.push(shortCls(deco[di]) + ':' + Math.round(deco[di].getBoundingClientRect().width) +
+            'x' + Math.round(deco[di].getBoundingClientRect().height));
+        }
+        shellParts.push('deco=' + decoParts.join(','));
       } else {
         shellParts.push('page=(absent)');
       }
