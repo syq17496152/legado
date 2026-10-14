@@ -168,8 +168,19 @@ object MdRichRenderInjector {
         append("window.$StatusGlobal=status;")
         append("function markFallback(el,kind){")
         append("if(!el||!el.classList)return;")
+        // ⚠️ **绝不在整页根（body/html）上打降级外观类**（2026-10-14 真机铁证）：本类的
+        // `border-left: 3px solid var(--md-border-color)` 与 `background: var(--md-code-bg)`
+        // 会**改写整页几何与画布底色** —— 在模板主题下表现为"左右露出异色带（黑边）+ 底色不对"，
+        // 且 `border` 在 content-box 下会吃掉内容盒宽度（实测 body.borderLeftWidth=2.7px ⇒ 页根
+        // 由 480 塌到 477、左移 3px）。"库缺失"属**全局状态**（没有对应的失败块），只需记入
+        // `status.error`，不应在页面上留下任何视觉痕迹。
+        append("if(el===document.body||el===document.documentElement){status.error=status.error||kind;return;}")
         append("el.classList.add('md-rich-fallback');")
         append("el.setAttribute('data-md-fallback',kind);")
+        append("}")
+        // 库缺失时的**可见降级落点**：标在真正的目标节点（图/公式/代码块）上，而非整页根
+        append("function markFallbackTargets(sel,kind){")
+        append("try{Array.prototype.forEach.call(document.querySelectorAll(sel),function(n){markFallback(n,kind);});}catch(e){}")
         append("}")
         if (wantMermaid) append(buildMermaidRuntime(options))
         if (wantMath) append(buildKatexRuntime(options))
@@ -194,7 +205,7 @@ object MdRichRenderInjector {
 
     private fun buildMermaidRuntime(options: Options): String = buildString {
         append("function runMermaid(){")
-        append("if(!window.mermaid){markFallback(document.body,'mermaid-missing');return Promise.resolve();}")
+        append("if(!window.mermaid){status.error='mermaid-missing';markFallbackTargets('pre.mermaid,div.mermaid','mermaid-missing');return Promise.resolve();}")
         append("try{")
         append("mermaid.initialize({")
         append("startOnLoad:false,")
@@ -204,7 +215,7 @@ object MdRichRenderInjector {
         append("theme:'").append(sanitizeTheme(options.mermaidTheme)).append("',")
         append("fontFamily:getComputedStyle(document.body).fontFamily")
         append("});")
-        append("}catch(e){status.error=String(e);markFallback(document.body,'mermaid-init');return Promise.resolve();}")
+        append("}catch(e){status.error=String(e);markFallbackTargets('pre.mermaid,div.mermaid','mermaid-init');return Promise.resolve();}")
         append("var nodes=Array.prototype.slice.call(document.querySelectorAll('pre.mermaid,div.mermaid'))")
         append(".filter(function(n){return !n.getAttribute('").append(RenderedAttribute).append("');});")
         append("if(!nodes.length)return Promise.resolve();")
@@ -223,7 +234,7 @@ object MdRichRenderInjector {
         append("maxExpand:").append(options.katexMaxExpand.coerceAtLeast(1))
         append("};")
         append("function renderMathIn(root){")
-        append("if(!window.katex){markFallback(root,'katex-missing');return 0;}")
+        append("if(!window.katex){status.error='katex-missing';return 0;}")
         append("var count=0;")
         append("var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false);")
         append("var targets=[];")
@@ -262,7 +273,7 @@ object MdRichRenderInjector {
 
     private fun buildHighlightRuntime(): String = buildString {
         append("function runHighlight(){")
-        append("if(!window.hljs){markFallback(document.body,'hljs-missing');return 0;}")
+        append("if(!window.hljs){status.error='hljs-missing';markFallbackTargets('pre code','hljs-missing');return 0;}")
         append("var blocks=Array.prototype.slice.call(document.querySelectorAll('pre code'))")
         append(".filter(function(b){return !b.getAttribute('").append(RenderedAttribute).append("');});")
         append("blocks.forEach(function(block){")

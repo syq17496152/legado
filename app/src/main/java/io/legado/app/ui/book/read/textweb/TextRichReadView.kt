@@ -1,10 +1,19 @@
 package io.legado.app.ui.book.read.textweb
 
+import android.app.Activity
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
+import android.view.PixelCopy
 import android.view.ViewConfiguration
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
 import kotlin.math.abs
 
 /**
@@ -77,6 +86,79 @@ class TextRichReadView @JvmOverloads constructor(
             super.dispatchTouchEvent(cancel)
             cancel.recycle()
         }
+    }
+
+    /**
+     * **带过渡地换页**（4.20；用户报「页面动画呢？」）。
+     *
+     * 模板面只有**一层**可绘内容（跨源 WebView），所以过渡只能用"旧页快照盖在上层 → 换页 → 快照移出"
+     * 的方式做出来；过渡形态由 [TemplateTurnMotion] 按用户档位决定（见其档位映射表）。
+     *
+     * ⚠️ 快照必须走 `PixelCopy`：WebView 内容由 Chromium 合成层渲染，`view.draw(canvas)` 只能拿到
+     * 背景（实测为空白）⇒ 那条路做出来的动画是"整块底色滑过"，比硬切更糟。`PixelCopy` 需要 API 24，
+     * 以下版本**直接换页**（退化为修复前行为，不引入新缺陷）。
+     *
+     * @param direction `+1` 下一页（旧页向左移出）/ `-1` 上一页（向右移出）
+     * @param spec 过渡规格（含形态与时长；`NONE` 时立即执行）
+     * @param action 真正的内容切换（沙箱 `goto-page` 下发等）
+     */
+    fun turnWithSnapshot(direction: Int, spec: TemplateTurnMotion.Spec, action: () -> Unit) {
+        val window = (context as? Activity)?.window
+        if (!spec.hasOverlay || width <= 0 || height <= 0 ||
+            window == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N
+        ) {
+            action()
+            return
+        }
+        val snapshot = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val location = IntArray(2)
+        getLocationInWindow(location)
+        val rect = Rect(location[0], location[1], location[0] + width, location[1] + height)
+        runCatching {
+            PixelCopy.request(window, rect, snapshot, { result ->
+                // 快照失败（窗口不可拷/被遮挡）⇒ 直接换页，绝不把用户卡在"点了没反应"上
+                if (result != PixelCopy.SUCCESS) {
+                    snapshot.recycle()
+                    action()
+                } else {
+                    playSnapshotTurn(snapshot, direction, spec, action)
+                }
+            }, Handler(Looper.getMainLooper()))
+        }.onFailure {
+            snapshot.recycle()
+            action()
+        }
+    }
+
+    /** 快照已就绪：垫在上层 → 执行换页 → 按形态把快照移出（结束后回收位图与临时位移）。 */
+    private fun playSnapshotTurn(
+        snapshot: Bitmap,
+        direction: Int,
+        spec: TemplateTurnMotion.Spec,
+        action: () -> Unit
+    ) {
+        val content = getChildAt(0)
+        val overlay = ImageView(context).apply {
+            setImageBitmap(snapshot)
+            scaleType = ImageView.ScaleType.FIT_XY
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        }
+        addView(overlay)
+        // SLIDE：旧页滑出的同时把下层新页从反方向推入（两者位移差即 archive 的"联动"观感）
+        val slide = spec.style == TemplateTurnMotion.Style.SLIDE
+        if (slide && content != null) content.translationX = -direction * width.toFloat()
+        action()
+        overlay.animate()
+            .translationX(direction * width.toFloat())
+            .setDuration(spec.durationMs)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                removeView(overlay)
+                overlay.setImageBitmap(null)
+                if (!snapshot.isRecycled) snapshot.recycle()
+                content?.translationX = 0f
+            }
+            .start()
     }
 
     companion object {

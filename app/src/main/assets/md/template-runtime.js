@@ -504,11 +504,22 @@
   function derivedField(key) {
     switch (key) {
       case 'page': return String(state.pageIndex + 1);
-      // archive 契约页脚口径：`pageIndex` 为 **0 基**页号（archive 主题写 `PAGE {pageIndex}`）
-      case 'pageIndex': return String(state.pageIndex);
+      case 'pageIndex':
+        // **1 基页码**（2026-10-14 双端截图铁证）：archive 页脚实测显示 `PAGE 1 / 6`（第 1 页）、
+        // `PAGE 2 / 6`（第 2 页）⇒ archive 的 `pageIndex` 字段是**从 1 起**，不是 0 基。
+        // ⚠️ 与**事件载荷**区分：给作者 JS 的 `pageChange.pageIndex` 仍为 **0 基**（archive 主题
+        // 自己用 `(index + 1) / count` 算进度 —— asuka JS 即如此）⇒ 这里只改"展示派生"，
+        // 不动 `state.pageIndex` 与事件口径（否则作者 JS 的进度会整体偏一页）。
+        return String(state.pageIndex + 1);
       case 'pageCount': return String(state.pageCount);
       case 'percent':
         return typeof state.fields.progress === 'number' ? String(state.fields.progress) : null;
+      // `progress` 页脚口径：**页进度百分比**（archive 同口径 —— 第 1 页 16.7% / 第 2 页 33.3%，
+        // 与其页码同源）。宿主给的是"整书章节进度"，两者不同源，故该字段由沙箱权威给出。
+      case 'progress': {
+        var total = state.pageCount > 0 ? state.pageCount : 1;
+        return (((state.pageIndex + 1) / total) * 100).toFixed(1) + '%';
+      }
       case 'time': return localTime();
       case 'battery': return state.battery || null;   // 取不到电量不冒写假值
       default: return null;
@@ -524,7 +535,11 @@
     for (var i = 0; i < nodes.length; i++) {
       var key = nodes[i].getAttribute('data-reader-field');
       var supplied = state.fields[key];
-      var value = (supplied === undefined || supplied === null) ? derivedField(key) : String(supplied);
+      var derived = derivedField(key);
+      // `progress` 例外：宿主的"整书进度"与 archive 的"页进度"是**两个不同量**
+      // ⇒ 该槽位一律取派生值（否则页脚百分比与旁边的页码自相矛盾）
+      var value = (key === 'progress' && derived !== null) ? derived
+        : ((supplied === undefined || supplied === null) ? derived : String(supplied));
       if (value === null) continue;
       nodes[i].textContent = value;
     }
@@ -997,6 +1012,7 @@
     // 的实际宽，直接定位"是谁窄了"，不必再靠截图反推。
     var winW = -1, docW = -1, rootW = -1, slotW = -1, bodyW = -1, bodyPad = '-';
     var bodyStyleAttr = '-', safeVars = '-', htmlPad = '-', padRules = '-';
+    var bodyBorder = '-', rootGap = '-';
     try {
       winW = window.innerWidth;
       docW = document.documentElement.clientWidth;
@@ -1028,7 +1044,7 @@
             var rule = rules[ri];
             var selText = rule.selectorText || '';
             var ruleText = String(rule.cssText || '').replace(/\s+/g, ' ');
-            if (ruleText.indexOf('padding') < 0 || !selText) continue;
+            if (!/(padding|border|margin|inline-size|block-size|width|height)/.test(ruleText) || !selText) continue;
             var hit = false;
             try {
               // 用**实际匹配**判定（`body.matches(sel)`）：这样 `*` / `:root` / 复杂选择器一律不漏
@@ -1037,15 +1053,89 @@
             if (hit) hits.push(selText + '=>' + ruleText.slice(0, 90));
           }
         }
-        padRules = hits.length ? hits.slice(0, 3).join(' || ') : '(none)';
+        // 命中 body 且声明几何的规则（2026-10-14 扩展）：页根实测 left=3/宽 477 而 body 的
+        // computed padding/margin 全为 0 ⇒ 缺口只可能来自 **border**（border 会吃掉内容盒宽度，
+        // 且 border-box 下 rect 宽仍报 480，与自证完全吻合）或未登记的第三方规则 ⇒ 一并回发。
+        bodyBorder = [
+          'L' + parseFloat(bodyCs.borderLeftWidth).toFixed(1),
+          'R' + parseFloat(bodyCs.borderRightWidth).toFixed(1),
+          'T' + parseFloat(bodyCs.borderTopWidth).toFixed(1),
+          'B' + parseFloat(bodyCs.borderBottomWidth).toFixed(1)
+        ].join('/');
+        rootGap = (function () {
+          var rootEl = document.getElementById('reader-template-root');
+          if (!rootEl) return '-';
+          var rr = rootEl.getBoundingClientRect();
+          var rcs = window.getComputedStyle(rootEl);
+          return 'L' + parseFloat(rcs.marginLeft).toFixed(1) + '/W' + Math.round(rr.width) +
+            '/ML' + Math.round(rr.left) + ',box=' + rcs.boxSizing;
+        })();
+        padRules = hits.length ? hits.slice(0, 5).join(' || ') : '(none)';
       } catch (error) {
         padRules = 'err:' + String((error && error.message) || error).slice(0, 40);
       }
     } catch (error) { /* 取不到不冒写假值 */ }
-    return ',iw=' + winW + '/' + docW + ',rootW=' + rootW + ',slotW=' + slotW +
+    // 模板外壳几何自证（2026-10-14 用户报「下面展示不全」）：真机截图上页脚**只露出第一行**
+    // （`CHAPTER SYNC`），而模板 JSON 的页脚明明含 sync-track / footer-console 三段结构；同时
+    // 页面底边与屏幕底之间还有一段空白。只有把"`html`/`body` 的计算高、页根与页根各子块（含页脚
+    // 自身的子块）的 rect + display + height"一并回发，才能区分「内容确实没生成」「生成了但被裁」
+    // 「百分比高度链断了（父级只有 min-height ⇒ 子 `height:100%` 落回 auto）」这三种完全不同的病因。
+    var shellFacts = '-';
+    try {
+      var pageEl = document.querySelector('[data-reader-page]');
+      var shellParts = [];
+      function shortCls(node) {
+        var name = String((node && node.className) || (node && node.tagName) || '?');
+        return name.slice(0, 24);
+      }
+      function boxOf(node) {
+        if (!node) return 'none';
+        var r = node.getBoundingClientRect();
+        var cs = window.getComputedStyle(node);
+        // 同时回发 left/top 与 width：只报 top/height 时无法判断"页根是偏了还是窄了"
+        // （左右各留 3 CSS px 与页根整体右移 3px 在截图上完全同形，但修法不同）
+        return Math.round(r.left) + ',' + Math.round(r.top) + ',' +
+          Math.round(r.width) + 'x' + Math.round(r.height) + ',h=' + cs.height +
+          ',' + cs.display + ',op=' + (+cs.opacity);
+      }
+      shellParts.push('html=' + boxOf(document.documentElement));
+      shellParts.push('body=' + boxOf(document.body));
+      if (pageEl) {
+        shellParts.push('page=' + boxOf(pageEl));
+        // 正文槽与其**容器**的 rect（2026-10-14 用户报「续页正文下面大片空白」）：只有同时拿到
+        // "槽实际高"与"容器实际高"，才能判定是"容器没被 1fr 拉伸"还是"内容不足一屏" ——
+        // 前者是引擎/CSS 缺陷（可修），后者是分页范式固有限制（不该乱改）。
+        var slotEl = slots.length ? slots[0] : null;
+        if (slotEl) {
+          shellParts.push('slot=' + boxOf(slotEl));
+          var paperEl = slotEl.parentElement;
+          if (paperEl) shellParts.push('paper=' + shortCls(paperEl) + ':' + boxOf(paperEl));
+        }
+        var pageKids = pageEl.children;
+        for (var pi = 0; pi < pageKids.length && pi < 6; pi++) {
+          shellParts.push(shortCls(pageKids[pi]) + '=' + boxOf(pageKids[pi]));
+        }
+        // 页眉/页脚等"非正文"块（archive 用 `data-reader-text-ignore` 标记，见 R4 契约）：
+        // 逐个下钻一层 —— 真机截图上页脚**三段结构只露出第一段**，必须量到每段的 rect/display
+        // 才能判定是"没生成""被裁"还是"高度为 0"，而不是继续靠截图猜。
+        var ignored = pageEl.querySelectorAll('[data-reader-text-ignore]');
+        for (var gi = 0; gi < ignored.length && gi < 4; gi++) {
+          shellParts.push('ign[' + gi + ']=' + shortCls(ignored[gi]) + ':' + boxOf(ignored[gi]));
+          var gk = ignored[gi].children;
+          for (var hi = 0; hi < gk.length && hi < 6; hi++) {
+            shellParts.push(' >' + shortCls(gk[hi]) + '=' + boxOf(gk[hi]));
+          }
+        }
+      } else {
+        shellParts.push('page=(absent)');
+      }
+      shellFacts = shellParts.join('|');
+    } catch (error) { shellFacts = 'err:' + String((error && error.message) || error).slice(0, 40); }
+    return ',iw=' + winW + '/' + docW + ',shell=' + shellFacts +
+      ',rootW=' + rootW + ',slotW=' + slotW +
       ',bodyW=' + bodyW + ',bodyPad(L/R/mL/mR)=' + bodyPad +
       ',bodyStyle=' + bodyStyleAttr + ',safe=' + safeVars + ',htmlPad=' + htmlPad +
-      ',padRules=' + padRules +
+      ',padRules=' + padRules + ',bodyBord(L/R/T/B)=' + bodyBorder + ',rootGap=' + rootGap +
       ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes +
       // 装饰自证（4.8d）：装饰档位与实际被标记的装饰元素数 —— 缺了它"选了档位却看不出差别"
       // 无法区分"沙箱没收到档位"与"模板本来就没有装饰"

@@ -438,13 +438,13 @@ class TemplateRenderBackend(
         scheduleReadyTimeout()
     }
 
-    /** 沙箱容器按宿主文档视口以 px 定尺寸（见 `pollHostReady` 内的铁证注释）。 */
+    /**
+     * 沙箱容器按宿主文档视口以 px 定尺寸（见 `pollHostReady` 内的铁证注释）；
+     * 脚本本体与**几何自证**收口在 [ReaderTemplateHostDocument.containerSizeScript]
+     * （同处还有骨架/探针脚本），此处只负责调用与留痕。
+     */
     private fun sizeSandboxContainer(view: WebView) {
-        val script = "(function(){var f=document.getElementById('" +
-            ReaderTemplateHostDocument.ContainerId + "');if(!f)return 'no-container';" +
-            "f.style.position='absolute';f.style.left='0';f.style.top='0';" +
-            "f.style.width=document.documentElement.clientWidth+'px';" +
-            "f.style.height=document.documentElement.clientHeight+'px';return 'sized';})()"
+        val script = ReaderTemplateHostDocument.containerSizeScript()
         view.evaluateJavascript(script) { result ->
             AppLog.putDebugWithTag(
                 AppLog.TAG_READER_TEMPLATE,

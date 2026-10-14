@@ -140,6 +140,30 @@ object ReaderTemplateHostDocument {
             "return [!!f,window.ReaderTemplateHost?'1':'0'].join('|');})()"
 
     /**
+     * 容器定尺寸脚本：按宿主文档视口以 **px 显式值**定尺寸，并**回发几何自证**。
+     *
+     * 为什么用 px 而不是 `100%`/`100vh`：真机实测该 WebView（Compose `AndroidView` 承载）里两者都会塌成 0
+     * （容器自身的 vh/百分比高度也塌）⇒ 沙箱视口 0 ⇒ 页框算成负数 ⇒ "预览空白且页数恒 1"。
+     *
+     * 为什么必须回发几何（2026-10-14 用户报「屏幕左右有黑边」）：真机截图上 WebView 布局框已铺满
+     * `[0,0][720,1280]`，但画面左缘仍有 4 物理 px 露出引擎底色 ⇒ 缺口不在 WebView 而在**文档内部某层**。
+     * 只有把宿主视口宽（`clientWidth` 与 `innerWidth` 之差即滚动条占宽）、`body` 实测宽、容器与沙箱帧
+     * 各自的 `left/width` 一并回发，才能判定缺口发生在视口、容器还是帧，不必再靠截图反推
+     * （本项目已多次栽在"看起来是引擎没铺满"的误判上）。
+     */
+    fun containerSizeScript(): String =
+        "(function(){var d=document,f=d.getElementById('$ContainerId');if(!f)return 'no-container';" +
+            "f.style.position='absolute';f.style.left='0';f.style.top='0';" +
+            "f.style.width=d.documentElement.clientWidth+'px';" +
+            "f.style.height=d.documentElement.clientHeight+'px';" +
+            "var fr=f.firstElementChild,cr=f.getBoundingClientRect()," +
+            "rr=fr?fr.getBoundingClientRect():null;" +
+            "return 'sized|cw='+d.documentElement.clientWidth+'/iw='+window.innerWidth" +
+            "+',cw2='+d.body.clientWidth+'/bw='+d.body.getBoundingClientRect().width" +
+            "+',cr='+(cr.left+','+cr.width.toFixed(1))" +
+            "+',fr='+(rr?rr.left+','+rr.width.toFixed(1):'none');})()"
+
+    /**
      * 把 JSON 文本安全地内联进 JS 字面量。
      *
      * `\u2028` / `\u2029` 在 JSON 字符串里合法，但在 ES2019 之前是**行终止符** ⇒

@@ -33,6 +33,13 @@ body {
 
 body {
   margin: 0;
+  /* ⚠️ **必须给确定 `height`，不能只给 `min-height`**（2026-10-14 真机铁证）：按 CSS 规范，
+     子元素的 `height:100%` 只在父级**有确定 height 属性**时才解析；父级仅靠 `min-height` 撑开时
+     子元素会**落回 auto**。archive 主题（如 asuka）正是 `.as-page{width:100%;height:100%}` 这种写法 ⇒
+     只给 min-height 时页根塌成"内容高"（真机实测 `as-page=826px` 而视口 854px）⇒ 页脚整体下移、
+     页面底边与屏幕底之间多出 28px 空白（用户报的「下面展示不全」）。
+     `min-height` 一并保留：短章时兜住底色，且与 `template-layout.css` 的 `min-height:100vh` 不冲突。 */
+  height: 100%;
   min-height: 100%;
   color: var(--reader-text-color);
   background: var(--reader-page-background);
@@ -40,6 +47,15 @@ body {
   line-height: var(--reader-line-height);
   font-family: var(--reader-font-family);
   overflow-wrap: break-word;
+}
+
+/* 页根容器（我方运行时创建的裸 `div`）必须给出**确定的宽高**：作者 CSS（archive 的 asuka 等）
+   以它为百分比基准声明 `width:100%;height:100%`。缺失时页根按内容撑开（真机实测 477×826，
+   视口 480×854）⇒ 左右各留 3 CSS px 非主题底色（"左右黑边"）、底部多 28px 空白（"展示不全"）。
+   `width:100%` 同时兜住「父级内容盒被挤窄」的差额来源。 */
+#reader-template-root {
+  width: 100%;
+  height: 100%;
 }
 
 /* 页根安全区：archive 用它在刘海/圆角屏上留出安全边距（我方此前完全缺这一条） */

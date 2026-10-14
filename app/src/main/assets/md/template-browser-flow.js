@@ -173,6 +173,14 @@
    */
   function chromeForShell(shell, slot) {
     if (!root || !slot) return chromeHeight;
+    // ⚠️ **量取前必须先解除本槽的冻结**（2026-10-14 真机铁证，用户报「第 2 页正文下面大量空白」）：
+    // 本函数的口径是"槽以外"的占位 = 由**自然布局**的槽 rect 反推，故前提是"此刻槽尚未冻结"。
+    // 该前提在**首次结算**成立，但**同一壳内重复结算**（换页/重测）时槽仍带着上一轮写入的
+    // `height`/`padding-bottom`/`clip-path` ⇒ 量到的是"被冻结后的几何" ⇒ `占位 = f(页框)` 与
+    // `页框 = 视口 − 占位` **互为因果、自我锁死**：实测续页量到 `chromeNow=337`（＝首页壳的值），
+    // 于是页框恒 517，而续页真实占位只有 ~207（`80px 26px 1fr 76px` 的网格）⇒ 正文下方固定留白
+    // 约 130px（换算物理约 195px，与用户截图的"大量空白"一致）。
+    unfreezeSlot(slot);
     var key = shell || 'none';
     // 此刻正文槽**尚未冻结**（调用点在 freezePagedSlot 之前）⇒ 根壳内"槽以外"的占位与槽自身高无关。
     // ⚠️ 上占位必须取**槽的视口顶** `sr.top`（不是 `sr.top - rr.top`）：根壳自身离视口顶还有一段
@@ -209,6 +217,23 @@
   /** 换章/重开时清空按壳的占位缓存（结构可能整体变化）。 */
   function resetChromeCache() {
     chromeByShell = {};
+  }
+
+  /**
+   * 解除正文槽的冻结，回到"作者 CSS 的自然布局"（供 [chromeForShell] 量取占位前调用）。
+   *
+   * 为什么必须存在（2026-10-14 真机铁证）：占位与页框互为因果（`页框 = 视口 − 占位`），
+   * 只有让槽回到自然高，量出的占位才是"模板真实占位"；否则量到的是上一轮结果，二者互相锁死。
+   * 只清引擎自己写进去的四个属性（`height`/`paddingBottom`/`clipPath`/`overflow`），
+   * **不碰** `boxSizing`（`freezePagedSlot` 写入的 `border-box` 与作者口径一致，保留无害）。
+   */
+  function unfreezeSlot(slot) {
+    if (!slot || !slot.style) return;
+    slot.style.height = '';
+    slot.style.paddingBottom = '';
+    slot.style.clipPath = '';
+    slot.style.webkitClipPath = '';
+    slot.style.overflow = '';
   }
 
   /**
