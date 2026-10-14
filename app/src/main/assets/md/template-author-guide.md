@@ -70,7 +70,7 @@
 
 | 成员 | 说明 |
 |------|------|
-| `.on(name, fn)` | 注册钩子，返回注销句柄；钩子：`beforeLayout` / `afterLayout` / `pageChange` / `motionChange` / `fieldsChange` / `dispose` |
+| `.on(name, fn)` | 注册钩子，返回注销句柄；钩子：`beforeLayout` / `afterLayout` / `beforePage` / `pageChange` / `motionChange` / `fieldsChange` / `dispose` |
 | `.source` | 正文根（首个正文槽位），用于点选 `.reader-paragraph` / `.reader-chapter-title` 等段落元素 |
 | `.fields` / `.viewport` | 当前字段真值 / 阅读区尺寸 |
 | `.pageIndex` / `.pageCount` | 当前页号（0 基）/ 总页数 |
@@ -79,6 +79,10 @@
 
 > 钩子内抛异常**不会白屏**：异常并入模板错误路径并保留已渲染内容。
 > 多正文槽可用 `data-reader-order` 声明先后；`data-reader-text-ignore` 子树不参与正文抽取。
+> **页元素属性**（与 Archive 同形，换壳/换页时由宿主维护，可直接写选择器）：`data-reader-page="first|other|scroll"`、
+> `data-reader-active`、动效闸门 `data-reader-motion="running|paused"`，以及**进页状态**
+> `data-reader-entry="pending|playing|done"`（做每页进场动效用它，如 `[data-reader-entry="playing"] .hero {…}`；
+> 换壳即新的一页 ⇒ 该属性会重置回 `pending`）。
 
 ## 五、素材与合规
 

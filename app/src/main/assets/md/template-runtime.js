@@ -203,6 +203,22 @@
     return state.motion ? 'running' : 'paused';
   }
 
+  /**
+   * archive 契约 R6：页元素"进页动效"状态（`data-reader-entry`）。
+   *
+   * archive 官方 `syncMotion` 逐页维护该属性，取值 `pending` → `playing` → `done`；主题用它做
+   * **每页进场**（如 `[data-reader-entry="pending"] .hero {opacity:0}` 配合 `playing` 起的过渡）。
+   * 缺该属性 ⇒ 这类选择器**静默落空**，页眉/页脚/开篇插画只剩静态帧（用户报「页面动画呢」的一类成因）。
+   * 迁移语义与 archive 一致：动效放行时 `pending` → `playing`；动效停止时 `playing` → `done`
+   * （播完保留静态帧，而不是回落到 `pending` 让动画重播）。
+   */
+  function applyEntryAttribute(page, running) {
+    var entry = page.getAttribute('data-reader-entry') || 'pending';
+    if (running && entry === 'pending') entry = 'playing';
+    else if (!running && entry === 'playing') entry = 'done';
+    if (page.getAttribute('data-reader-entry') !== entry) page.setAttribute('data-reader-entry', entry);
+  }
+
   var lastMotionPage = null, lastMotionState = '';
 
   /**
@@ -452,6 +468,10 @@
     mountMarkup(target === 'opening' ? openingHtml() : continuationHtml());
     // archive 契约：页元素属性随换壳同步（`first` / `other`）——主题按它区分开篇页与正文页
     applyPageAttrs(target);
+    // archive 契约 R6：换壳即"新的一页" ⇒ 进页状态回到 `pending`。archive 每次新建页元素时同样重置；
+    // 不重置则续页沿用首页的 `done` ⇒ 进场动效只在首页播一次（续页静默）。
+    var shellEl = authorPage();
+    if (shellEl) shellEl.setAttribute('data-reader-entry', 'pending');
     // ⚠️ 关键：换壳会**整块替换根壳 innerHTML**（新壳里当然没有正文）⇒ 必须把正文注入回来，
     // 否则翻到续页就是"页眉页脚还在、正文全空"（2026-10-10 C1 真机实证：slot 高塌成 16px、页数 1/1）。
     // 用 `applyBody` 一并回填字段槽位（新壳里的页码/时间等占位同样需要真值）。
@@ -671,7 +691,11 @@
     document.documentElement.setAttribute('data-reader-motion', motionStateName());
     // 同步到"页元素"（archive 把动效属性放在页上；部分主题 CSS 选择器按它启停动效）。
     var shell = authorPage();
-    if (shell) shell.setAttribute('data-reader-motion', motionStateName());
+    if (shell) {
+      shell.setAttribute('data-reader-motion', motionStateName());
+      // archive 契约 R6：页元素进页状态与动效闸门同步推进（`pending` → `playing` → `done`）。
+      applyEntryAttribute(shell, next);
+    }
     // archive 契约钩子：动效状态变化（motionChange）—— 主题据此启停每页动图/波形。
     if (changed) emitHook('motionChange', motionEvent());
   }
