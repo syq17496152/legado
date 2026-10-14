@@ -144,12 +144,16 @@ class TextRichReadView @JvmOverloads constructor(
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         }
         addView(overlay)
-        // SLIDE：旧页滑出的同时把下层新页从反方向推入（两者位移差即 archive 的"联动"观感）
+        // SLIDE：旧页滑出的同时把下层新页从**对侧**推入（两者位移差即 archive 的"联动"观感）
         val slide = spec.style == TemplateTurnMotion.Style.SLIDE
-        if (slide && content != null) content.translationX = -direction * width.toFloat()
+        if (slide && content != null) {
+            content.translationX = TemplateTurnMotion.incomingShift(direction, width)
+        }
         action()
         overlay.animate()
-            .translationX(direction * width.toFloat())
+            // ⚠️ 位移符号由 [TemplateTurnMotion.overlayShift] 单源决定（下一页 ⇒ 旧页向左移出）；
+            // 写反会让"下一页"看起来像"回上一页"（2026-10-14 用户实测投诉过）
+            .translationX(TemplateTurnMotion.overlayShift(direction, width))
             .setDuration(spec.durationMs)
             .setInterpolator(DecelerateInterpolator())
             .withEndAction {

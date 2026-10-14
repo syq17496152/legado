@@ -84,12 +84,11 @@ class TemplateRenderBackend(
         val decoration: String = DecorationMedium,
         /** 装饰动效是否允许（专注模式 / reduce-motion ⇒ false ⇒ 沙箱 `<html data-reader-motion="paused">`）。 */
         val decorationMotion: Boolean = true,
-        /**
-         * 稳定随机种子（4.15 C4）：由书名 + 章节名稳定哈希得出
-         * （`ReaderTemplateSeed.of`），沙箱注入 `--rp-seed` / `data-rp-seed`。
-         * 传 0 表示"本次不注入"（作者读到 0 也不会崩）。
-         */
-        val seed: Int = 0
+        /** 稳定随机种子（4.15 C4）：`ReaderTemplateSeed.of` 得出；0 = 本次不注入（沙箱 `--rp-seed`）。 */
+        val seed: Int = 0,
+        /** 页根安全区（CSS px；archive 同口径——取值口径与真机反例见 `ReadBookActivity.safeInsets`）。 */
+        val safeLeftPx: Int = 0, val safeTopPx: Int = 0,
+        val safeRightPx: Int = 0, val safeBottomPx: Int = 0
     ) {
         val themeId: String get() = TemplateThemeId.of(dark, eink)
     }
@@ -384,10 +383,8 @@ class TemplateRenderBackend(
                 if (token.generation != generation) return@evaluateJavascript
                 if (raw?.contains(ReadyComplete) == true) {
                     sendInit(template, content)
-                    // ⚠️ 必须先按**宿主文档自身视口**以 px 定尺寸，再发 init：真机实测该 WebView
-                    // （Compose `AndroidView` 承载）里 `100vh` 与百分比高度都塌成 0px（样式表已解析、
-                    // `position:absolute` 生效，仅高度为 0）⇒ 沙箱 iframe 高 0 ⇒ 视口 0 ⇒ 页框算成负数
-                    // ⇒ "预览空白且页数恒 1"。px 尺寸来自文档自身的 clientWidth/Height（CSS px，无需换算密度）。
+                    // ⚠️ 必须先按宿主文档视口以 px 定尺寸再发 init（vh/百分比在该 WebView 里会塌成 0；
+                    // 完整铁证见 [ReaderTemplateHostDocument.containerSizeScript] 的注释）。
                     sizeSandboxContainer(view)
                 } else {
                     pollHostReady(token, template, content, attempt + 1)
@@ -407,6 +404,13 @@ class TemplateRenderBackend(
             add("fields", fieldsJson(values))
             addProperty("bodyHtml", content.html)
             addProperty("themeId", values.themeId)
+            // 页根安全区（archive 同口径）：运行时支持逐项覆盖 ⇒ 透传宿主实测的系统栏占位（默认 0）
+            add("readerVars", JsonObject().apply {
+                addProperty("--reader-safe-left", "${values.safeLeftPx}px")
+                addProperty("--reader-safe-top", "${values.safeTopPx}px")
+                addProperty("--reader-safe-right", "${values.safeRightPx}px")
+                addProperty("--reader-safe-bottom", "${values.safeBottomPx}px")
+            })
             // 装饰强度与动效闸门（4.8d）：沙箱 runtime 写到 <html> 上，由 md/template-decoration.css 执行
             addProperty("decoration", values.decoration)
             addProperty("motion", values.decorationMotion)
@@ -438,11 +442,7 @@ class TemplateRenderBackend(
         scheduleReadyTimeout()
     }
 
-    /**
-     * 沙箱容器按宿主文档视口以 px 定尺寸（见 `pollHostReady` 内的铁证注释）；
-     * 脚本本体与**几何自证**收口在 [ReaderTemplateHostDocument.containerSizeScript]
-     * （同处还有骨架/探针脚本），此处只负责调用与留痕。
-     */
+    /** 沙箱容器定尺寸：脚本与几何自证收口在 [ReaderTemplateHostDocument.containerSizeScript]，此处只调用留痕。 */
     private fun sizeSandboxContainer(view: WebView) {
         val script = ReaderTemplateHostDocument.containerSizeScript()
         view.evaluateJavascript(script) { result ->

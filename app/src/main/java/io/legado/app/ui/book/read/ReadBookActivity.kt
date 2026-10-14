@@ -22,6 +22,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.widget.CheckBox
@@ -153,6 +154,7 @@ import io.legado.app.ui.book.read.textweb.TextRichHtmlComposer
 import io.legado.app.ui.book.read.textweb.TemplateRenderBackend
 import io.legado.app.ui.book.read.textweb.TemplateTurnMotion
 import io.legado.app.ui.book.read.textweb.TextRichRenderBackend
+import kotlin.math.roundToInt
 import io.legado.app.model.localBook.epubcore.layout.EpubCoreLayoutConfig
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionAction
 import io.legado.app.model.localBook.MobiFile
@@ -2955,9 +2957,44 @@ class ReadBookActivity : BaseReadBookActivity(),
             decoration = ReaderTemplateManager.decorationCssValue(reduceMotion),
             decorationMotion = ReaderTemplateManager.decorationMotionEnabled(reduceMotion),
             // 稳定随机（4.15 C4）：同章任何时候同值 ⇒ 装饰"看似随机"但可复现（重排/回首页不重抽）
-            seed = ReaderTemplateSeed.of(bookName, chapterTitle)
+            seed = ReaderTemplateSeed.of(bookName, chapterTitle),
+            // 页根安全区（archive 同口径）：archive 用它填 `--reader-safe-*`，我方此前恒 0
+            // ⇒ 同屏对照时页眉比 archive 少一条系统栏占位（真机 mStable top=36 物理 = 24 CSS，
+            // 逐带吻合）。值取"窗口 insets 的忽略可见性"口径，见 [safeInsets]。
+            safeLeftPx = safeInsets[0],
+            safeTopPx = safeInsets[1],
+            safeRightPx = safeInsets[2],
+            safeBottomPx = safeInsets[3]
         )
     }
+
+    /**
+     * 页根安全区（CSS px；顺序 = left, top, right, bottom），**archive 同口径**。
+     *
+     * 口径 = 窗口 insets 的**忽略可见性**取值（等价于 WindowManager 的"稳定区"，沉浸态同样成立）：
+     * 真机 `mStable=[0,36]` ⇒ top=36 物理 = 24 CSS、bottom=0，与 archive 页眉带逐带吻合
+     * （196 物理 ↔ 196 物理）。
+     *
+     * ⚠️ **不能用** `android.R.dimen.status_bar_height` / `navigation_bar_height` 这类**资源**（真机反例）：
+     * 资源是 framework 默认值（`navigation_bar_height` 恒 48dp），而本设备底部**根本没有导航栏占位**
+     * ⇒ 用资源会凭空多出 48 CSS，页脚被推高、下方露主题底色（正是"下面展示不全"的复现形态）。
+     * insets 取不到时按全 0 处理（不臆造值）。
+     */
+    private val safeInsets: IntArray
+        get() = runCatching {
+            val insets = ViewCompat.getRootWindowInsets(binding.root) ?: return IntArray(4)
+            val bars = insets.getInsetsIgnoringVisibility(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val density = resources.displayMetrics.density
+            if (density <= 0f) return IntArray(4)
+            intArrayOf(
+                (bars.left / density).roundToInt(),
+                (bars.top / density).roundToInt(),
+                (bars.right / density).roundToInt(),
+                (bars.bottom / density).roundToInt()
+            )
+        }.getOrDefault(IntArray(4))
 
     /**
      * 系统"减少动效"（无障碍/开发者选项）：动画缩放为 0 ⇒ 视为 reduce-motion。

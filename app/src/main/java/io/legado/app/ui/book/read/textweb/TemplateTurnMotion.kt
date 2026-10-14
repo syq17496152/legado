@@ -54,6 +54,18 @@ object TemplateTurnMotion {
     const val LinkedDurationMillis = 400L
 
     /**
+     * 旧页快照的**移出位移**（像素）：`direction=+1`（下一页）时旧页**向左**移出。
+     *
+     * ⚠️ 方向语义必须与"翻页方向"一致（2026-10-14 用户实测投诉「点击右下角是上一页」）：
+     * 页码确实前进了，但若旧页**向右**滑出，观感就是"翻回上一页" ⇒ 用户会认定方向反了。
+     * 故本函数与 [incomingShift] 一起收口"方向→位移"的映射，使该语义可被 JVM 单测逐值钉住。
+     */
+    fun overlayShift(direction: Int, width: Int): Float = -direction * width.toFloat()
+
+    /** 联动（SLIDE）时**下层新页**的起始位移：与旧页反向（新页自对侧推入，结束归 0）。 */
+    fun incomingShift(direction: Int, width: Int): Float = direction * width.toFloat()
+
+    /**
      * 档位 → 过渡规格（**唯一映射处**）。
      *
      * @param pageAnim 取值来自 `io.legado.app.constant.PageAnim`（调用方须传已按水墨屏收敛后的档位，

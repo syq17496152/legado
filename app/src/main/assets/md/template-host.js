@@ -150,6 +150,10 @@
         decoration: config.decoration || 'medium',
         motion: config.motion !== false,
         seed: config.seed === undefined ? null : config.seed,
+        // 页根安全区（archive 同口径）**必须显式透传**：本函数是白名单转发，漏一个键 ⇒ 沙箱按
+        // 内置默认值（全 0）渲染 ⇒ 同屏对照下页眉比 archive 少一条系统栏占位且**不报错**
+        // （2026-10-14 实测：设备 mStable top=36 物理 ⇒ archive 页眉带高出 24 CSS）
+        readerVars: config.readerVars || {},
         flow: config.flow || {}
       }, '*');
     }, { once: true });
