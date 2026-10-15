@@ -190,29 +190,6 @@ internal class EpubBoxBuilder {
         }
     }
 
-    private fun String.extractBackgroundRepeat(): String? {
-        val clean = lowercase(Locale.ROOT)
-        return when {
-            clean.contains("no-repeat") -> "no-repeat"
-            clean.contains("repeat-x") -> "repeat-x"
-            clean.contains("repeat-y") -> "repeat-y"
-            clean.contains("repeat") -> "repeat"
-            else -> null
-        }
-    }
-
-    private fun String.extractBackgroundSize(): String? {
-        val slash = indexOf('/')
-        if (slash < 0) return null
-        return substring(slash + 1)
-            .split(' ', ';')
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .take(2)
-            .joinToString(" ")
-            .takeIf { it.isNotBlank() }
-    }
-
     private fun String.toNamedCssColor(): String? {
         return when (lowercase(Locale.ROOT)) {
             "black" -> "#000000"

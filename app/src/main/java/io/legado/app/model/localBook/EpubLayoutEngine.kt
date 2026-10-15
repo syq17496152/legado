@@ -1234,10 +1234,6 @@ internal class EpubLayoutEngine(
         )
     }
 
-    private fun EpubComputedStyle.inlinePadding(relativeTo: Float): InlinePadding {
-        return boxPadding(relativeTo)
-    }
-
     private fun EpubComputedStyle.boxPadding(relativeTo: Float): InlinePadding {
         val padding = lengthPx("padding", relativeTo)
         val horizontal = lengthPx("padding-left", relativeTo)
@@ -1256,13 +1252,6 @@ internal class EpubLayoutEngine(
             right = lengthPx("padding-right", relativeTo).takeIf { it > 0f } ?: horizontal,
             bottom = verticalLengthPx("padding-bottom", relativeTo).takeIf { it > 0f } ?: vertical
         )
-    }
-
-    private fun EpubComputedStyle.inlineBackgroundRadius(relativeTo: Float): Float {
-        return lengthPx("border-radius", relativeTo)
-            .takeIf { it > 0f }
-            ?: lengthPx("border-top-left-radius", relativeTo).takeIf { it > 0f }
-            ?: 0f
     }
 
     private fun EpubBorder.hasVisibleBorder(): Boolean {

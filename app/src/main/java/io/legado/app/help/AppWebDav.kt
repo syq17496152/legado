@@ -206,19 +206,6 @@ object AppWebDav {
     }
 
     /**
-     * webDav备份
-     * @param fileName 备份文件名
-     */
-    @Throws(Exception::class)
-    suspend fun backUpWebDav(fileName: String) {
-        if (!NetworkUtils.isAvailable()) return
-        authorization?.let {
-            val putUrl = "$rootWebDavUrl$fileName"
-            WebDav(putUrl, it).upload(Backup.zipFilePath)
-        }
-    }
-
-    /**
      * 获取云端所有背景名称
      */
     private suspend fun getAllBgWebDavFiles(): Result<List<WebDavFile>> {
