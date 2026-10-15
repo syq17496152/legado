@@ -36,4 +36,15 @@ object SourceCheckGroups {
     const val RSS_ARTICLES_FAIL = "列表失效"
     const val RSS_SORT_FAIL = "分类失效"
     const val RSS_CONTENT_FAIL = "正文失效"
+
+    /**
+     * 订阅源去重标记（**不属「失效」口径**）。
+     *
+     * ⚠️ 与上面所有组不同：`"重复源"` **既不含「失效」子串、也不等于「校验超时」** ⇒
+     * [io.legado.app.data.entities.RssSource.getInvalidGroupNames] **不会**把它算进待清除集，
+     * 因此它**必须由调用方在每轮校验开头显式清除**（否则同域仅剩一个源时，旧标记会永久残留，
+     * 污染用户看到的源分组标签 —— 与 NEW-23/NEW-24 同族）。当前唯一清除点＝
+     * `CheckRssSourceService.doCheckRssSource` 开头的 `removeGroup(RSS_DUPLICATE)`。
+     */
+    const val RSS_DUPLICATE = "重复源"
 }

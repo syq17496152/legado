@@ -353,38 +353,102 @@ object QualityReportApplier {
         )
     }
 
-    private fun applyRssGroups(source: RssSource, report: SourceQualityReport, checkDomain: Boolean) {
-        if (report.suspect) return
-        when (report.failureKind) {
-            FailureKind.TIMEOUT -> {
-                source.addGroup(SourceCheckGroups.CHECK_TIMEOUT)
-                return
-            }
-            FailureKind.SCRIPT -> {
-                source.addGroup(SourceCheckGroups.SCRIPT_FAIL)
-                return
-            }
-            FailureKind.NETWORK -> {
-                source.addGroup(SourceCheckGroups.SITE_FAIL)
-                return
-            }
+    private fun applyRssGroups(source: RssSource, report: SourceQualityReport, checkDomain: Boolean) =
+        applyRssGroupsFromDims(
+            source = source,
+            dims = report.dimensions.mapValues { it.value.state },
+            failureKind = report.failureKind,
+            suspect = report.suspect,
+            checkDomain = checkDomain,
+        )
+
+    /**
+     * 订阅源分组回填（**唯一编排**；先清后加由调用方保证）——与书源侧 [applyBookGroupsFromDims]
+     * 严格同构，差别仅在维度名与分组词表（订阅源无「规则为空」类诊断组，故**无清场步骤**）。
+     *
+     * 缺口2 续（订阅源侧补齐）：`CheckRssSourceService` 此前**自带一套内联 `add/removeGroup` 与归因
+     * `when`**（14 处字面量），`SourceCheckGroups` 的 `RSS_*` 常量只被体检路径消费 ⇒ 同一判定又是两处
+     * 实现。现服务侧改为「自身 `RssCheckResult` → [rssResultToDimStates] → 本函数」。
+     */
+    internal fun applyRssGroupsFromDims(
+        source: RssSource,
+        dims: Map<QualityDim, DimState?>,
+        failureKind: FailureKind,
+        suspect: Boolean,
+        checkDomain: Boolean,
+    ) {
+        if (suspect) return
+        rssFailureGroupNames(dims, failureKind, suspect, checkDomain).forEach { source.addGroup(it) }
+    }
+
+    /**
+     * 维度/归因 → 订阅源失败分组名清单（**纯函数，无副作用**；断言口径＝旧内联语义）。
+     *
+     * 与 [failureGroupNames] 的差异（必须逐条对齐旧内联，勿照搬书源口径）：
+     *  · 搜索维度用 `RSS_SEARCH`（分组名仍复用共用的「搜索失效」）；
+     *  · 列表/分类/正文分别映射 `列表失效` / `分类失效` / `正文失效`；
+     *  · 订阅源**没有**「链接规则为空 / 目录」这两类结论 ⇒ 无 `NOT_APPLICABLE` 分支产出；
+     *  · 归因短路（超时/脚本/网络）语义与书源侧一致（单一分组 + 不按维度加组）。
+     */
+    internal fun rssFailureGroupNames(
+        dims: Map<QualityDim, DimState?>,
+        failureKind: FailureKind,
+        suspect: Boolean,
+        checkDomain: Boolean,
+    ): List<String> {
+        if (suspect) return emptyList()
+        when (failureKind) {
+            FailureKind.TIMEOUT -> return listOf(SourceCheckGroups.CHECK_TIMEOUT)
+            FailureKind.SCRIPT -> return listOf(SourceCheckGroups.SCRIPT_FAIL)
+            FailureKind.NETWORK -> return listOf(SourceCheckGroups.SITE_FAIL)
             else -> Unit
         }
-        val dims = report.dimensions
-        if (checkDomain && dims[QualityDim.DOMAIN]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.DOMAIN_FAIL)
+        val names = ArrayList<String>(4)
+        if (checkDomain && dims[QualityDim.DOMAIN] == DimState.FAIL) {
+            names.add(SourceCheckGroups.DOMAIN_FAIL)
         }
-        if (dims[QualityDim.ARTICLES]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.RSS_ARTICLES_FAIL)
+        if (dims[QualityDim.ARTICLES] == DimState.FAIL) {
+            names.add(SourceCheckGroups.RSS_ARTICLES_FAIL)
         }
-        if (dims[QualityDim.RSS_SEARCH]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.SEARCH_FAIL)
+        if (dims[QualityDim.RSS_SEARCH] == DimState.FAIL) {
+            names.add(SourceCheckGroups.SEARCH_FAIL)
         }
-        if (dims[QualityDim.RSS_SORT]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.RSS_SORT_FAIL)
+        if (dims[QualityDim.RSS_SORT] == DimState.FAIL) {
+            names.add(SourceCheckGroups.RSS_SORT_FAIL)
         }
-        if (dims[QualityDim.CONTENT]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.RSS_CONTENT_FAIL)
+        if (dims[QualityDim.CONTENT] == DimState.FAIL) {
+            names.add(SourceCheckGroups.RSS_CONTENT_FAIL)
         }
+        return names
     }
+
+    /**
+     * `RssCheckResult` → 维度态映射（**订阅源侧唯一适配器**；与 [toRssCheckResult] 互逆口径）。
+     *
+     * 与书源侧适配器的关键差异：订阅源**无「规则为空」语义** —— 规则为空时服务侧整维跳过校验
+     * （`*Checked=false`）⇒ 映射为 `NOT_CHECKED`（不加组），而非 `NOT_APPLICABLE`。
+     */
+    internal fun rssResultToDimStates(result: RssCheckResult): Map<QualityDim, DimState?> = mapOf(
+        QualityDim.DOMAIN to if (result.domainReachable) DimState.PASS else DimState.FAIL,
+        QualityDim.ARTICLES to when {
+            !result.articlesChecked -> DimState.NOT_CHECKED
+            result.articlesSuccess -> DimState.PASS
+            else -> DimState.FAIL
+        },
+        QualityDim.RSS_SEARCH to when {
+            !result.searchChecked -> DimState.NOT_CHECKED
+            result.searchSuccess -> DimState.PASS
+            else -> DimState.FAIL
+        },
+        QualityDim.RSS_SORT to when {
+            !result.sortChecked -> DimState.NOT_CHECKED
+            result.sortSuccess -> DimState.PASS
+            else -> DimState.FAIL
+        },
+        QualityDim.CONTENT to when {
+            !result.contentChecked -> DimState.NOT_CHECKED
+            result.contentSuccess -> DimState.PASS
+            else -> DimState.FAIL
+        },
+    )
 }

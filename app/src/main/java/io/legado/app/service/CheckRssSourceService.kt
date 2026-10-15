@@ -3,7 +3,6 @@ package io.legado.app.service
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
-import com.script.ScriptException
 import io.legado.app.R
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppConst
@@ -19,6 +18,9 @@ import io.legado.app.help.IntentData
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.sortUrls
 import io.legado.app.model.CheckRssSource
+import io.legado.app.model.FailureKind
+import io.legado.app.model.QualityReportApplier
+import io.legado.app.model.SourceCheckGroups
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.RssCheckResult
 import io.legado.app.model.SourceWeightCalculator
@@ -33,7 +35,6 @@ import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -47,7 +48,6 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.mozilla.javascript.WrappedException
 import splitties.init.appCtx
 import splitties.systemservices.notificationManager
 import java.net.InetSocketAddress
@@ -158,10 +158,16 @@ class CheckRssSourceService : BaseService() {
             AppLog.put("订阅源校验成功: ${source.sourceUrl}")
         }.onFailure {
             currentCoroutineContext().ensureActive()
-            when (it) {
-                is TimeoutCancellationException -> source.addGroup("校验超时")
-                is ScriptException, is WrappedException -> source.addGroup("js失效")
-                !is NoStackTraceException -> source.addGroup("网站失效")
+            // 存疑源（需登录 / jsLib 依赖 / 源变量依赖 / webView 型 / 内网地址）失败时**不写失效分组** ——
+            // 与书源侧 `CheckSourceService` 及质检底座「存疑类不作为确定性失败证据（不误杀）」同口径；
+            // 否则用户按「失效」筛选订阅源时会误删这些其实可用的源
+            val suspectReasons = SourceQualityChecker.staticSuspectsOf(source)
+            if (suspectReasons.isNotEmpty()) {
+                AppLog.put("订阅源校验跳过：${suspectSkipLabel(suspectReasons)}")
+            } else {
+                // 归因口径单源（与书源侧共用 `checkFailureGroupName`）：业务异常（NoStackTraceException）
+                // 自带引擎结论，不再额外打「网站失效」
+                checkFailureGroupName(it)?.let { group -> source.addGroup(group) }
             }
             AppLog.put("订阅源校验失败: ${source.sourceUrl}", it)
         }
@@ -186,6 +192,9 @@ class CheckRssSourceService : BaseService() {
         var successCount = 0
         var realDomain: String? = null
         source.removeInvalidGroups()
+        // 「重复源」不含「失效」子串 ⇒ removeInvalidGroups() 不会清它，必须每轮显式清一次，
+        // 否则同域仅剩一个源后旧标记永久残留（与书源侧「规则为空」同族，见 SourceCheckGroups.RSS_DUPLICATE）
+        source.removeGroup(SourceCheckGroups.RSS_DUPLICATE)
 
         var result = RssCheckResult()
 
@@ -193,7 +202,8 @@ class CheckRssSourceService : BaseService() {
         if (CheckRssSource.checkDomain) {
             val domain = source.sourceUrl
             if (!domain.startsWith("http", ignoreCase = true)) {
-                source.addGroup("域名失效")
+                // 行为保持（旧内联）：打「域名失效」+ 权重归零 + 终止（组由共享编排统一回填）
+                applyRssGroupsFromResult(source, result.copy(domainReachable = false))
                 source.weight = 0
                 throw NoStackTraceException("源地址不是http链接")
             }
@@ -203,13 +213,14 @@ class CheckRssSourceService : BaseService() {
             }
             result = result.copy(domainReachable = reachable, realHost = host)
             if (reachable) {
-                source.removeGroup("域名失效")
+                // 可达无需清「域名失效」组：本轮开头 removeInvalidGroups() 已清空历史失效组
                 realDomain = host
                 // 回填真实域名到lastHost,UI分组用此字段优先于源URL截取
                 if (!host.isNullOrBlank()) source.lastHost = host
                 successCount++
             } else {
-                source.addGroup("域名失效")
+                // 「域名失效」交共享编排统一回填（与体检侧同调，缺口2 续），随后终止本轮
+                applyRssGroupsFromResult(source, result)
                 source.weight = 0
                 throw NoStackTraceException("源地址不可访问")
             }
@@ -290,48 +301,44 @@ class CheckRssSourceService : BaseService() {
             val sortResult = sortDeferred.await()
             val contentResult = contentDeferred.await()
 
-            // 串行更新分组(避免竞态) + 收集结果
+            // 收集本轮结论（分组回填与权重计算共用同一份结果）
             if (CheckRssSource.checkArticles && !source.ruleArticles.isNullOrBlank()) {
-                result = result.copy(articlesChecked = true)
-                if (articlesResult != null && articlesResult.isNotEmpty()) {
-                    source.removeGroup("列表失效")
-                    result = result.copy(articlesSuccess = true, articlesCount = articlesResult.size)
-                    successCount++
-                } else {
-                    source.addGroup("列表失效")
-                }
+                val success = articlesResult != null && articlesResult.isNotEmpty()
+                result = result.copy(
+                    articlesChecked = true,
+                    articlesSuccess = success,
+                    articlesCount = if (success) (articlesResult?.size ?: 0) else 0
+                )
+                if (success) successCount++
             }
             if (CheckRssSource.checkSearch && !source.searchUrl.isNullOrBlank()) {
-                result = result.copy(searchChecked = true)
-                if (searchResult != null && searchResult.isNotEmpty()) {
-                    source.removeGroup("搜索失效")
-                    result = result.copy(searchSuccess = true, searchResultCount = searchResult.size)
-                    successCount++
-                } else {
-                    source.addGroup("搜索失效")
-                }
+                val success = searchResult != null && searchResult.isNotEmpty()
+                result = result.copy(
+                    searchChecked = true,
+                    searchSuccess = success,
+                    searchResultCount = if (success) (searchResult?.size ?: 0) else 0
+                )
+                if (success) successCount++
             }
             if (CheckRssSource.checkSort && !source.sortUrl.isNullOrBlank()) {
-                result = result.copy(sortChecked = true)
-                if (sortResult != null && sortResult.isNotEmpty()) {
-                    source.removeGroup("分类失效")
-                    result = result.copy(sortSuccess = true, sortCount = sortResult.size)
-                    successCount++
-                } else {
-                    source.addGroup("分类失效")
-                }
+                val success = sortResult != null && sortResult.isNotEmpty()
+                result = result.copy(
+                    sortChecked = true,
+                    sortSuccess = success,
+                    sortCount = if (success) (sortResult?.size ?: 0) else 0
+                )
+                if (success) successCount++
             }
             if (CheckRssSource.checkContent && !source.ruleContent.isNullOrBlank()) {
-                result = result.copy(contentChecked = true)
-                if (contentResult == true) {
-                    source.removeGroup("正文失效")
-                    result = result.copy(contentSuccess = true)
-                    successCount++
-                } else {
-                    source.addGroup("正文失效")
-                }
+                val success = contentResult == true
+                result = result.copy(contentChecked = true, contentSuccess = success)
+                if (success) successCount++
             }
         }
+
+        // 失效分组回填：唯一编排＝QualityReportApplier（与体检侧同源同调，缺口2 续）。
+        // 旧写法此处有 14 处内联 add/removeGroup，靠"与体检侧逐字一致"维系 ⇒ 已收口。
+        applyRssGroupsFromResult(source, result)
 
         // 权重计算（基于关键元素获取结果，Phase 6 重构）
         source.weight = SourceWeightCalculator.calculateRssWeightFromResult(
@@ -341,7 +348,26 @@ class CheckRssSourceService : BaseService() {
     }
 
     /**
-     * 去重逻辑：按真实域名+type多维度分组，保留维度成功多的源，其余标记"重复源"
+     * 本轮探测结果 → 失效分组回填（**共享编排入口**，与书源侧 `applyGroupsFromResult` 同构）。
+     *
+     * `RssCheckResult` 经唯一适配器 [QualityReportApplier.rssResultToDimStates] 映射为维度态，
+     * 再交 [QualityReportApplier.applyRssGroupsFromDims] 写组 —— 与体检侧
+     * （`QualityReportApplier.applyRssReports`）走同一实现，杜绝"加组规则"两处漂移。
+     * `failureKind = NONE`：本阶段是维度判定路径，异常归因由 `checkRssSource` 的 onFailure 处理。
+     */
+    private fun applyRssGroupsFromResult(source: RssSource, result: RssCheckResult) {
+        QualityReportApplier.applyRssGroupsFromDims(
+            source = source,
+            dims = QualityReportApplier.rssResultToDimStates(result),
+            failureKind = FailureKind.NONE,
+            suspect = false,
+            checkDomain = CheckRssSource.checkDomain,
+        )
+    }
+
+    /**
+     * 去重逻辑：按真实域名+type多维度分组，保留维度成功多的源，其余标记 [SourceCheckGroups.RSS_DUPLICATE]
+     * （该标记每轮校验开头会被显式清除，见 doCheckRssSource，避免旧标记残留）
      */
     private suspend fun dedupSources(results: List<CheckResult>) {
         if (!CheckRssSource.enableDedup) return
@@ -356,7 +382,7 @@ class CheckRssSourceService : BaseService() {
                 if (sameTypeList.size > 1) {
                     val sorted = sameTypeList.sortedByDescending { it.successCount }
                     sorted.drop(1).forEach { result ->
-                        result.source.addGroup("重复源")
+                        result.source.addGroup(SourceCheckGroups.RSS_DUPLICATE)
                         toUpdate.add(result.source)
                     }
                 }

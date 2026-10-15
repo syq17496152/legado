@@ -307,6 +307,25 @@ object SourceQualityChecker {
     }
 
     /**
+     * 静态存疑判定（订阅源侧**对外单源入口**；口径与 [staticSuspectsOf] 书源版一致）。
+     *
+     * 复用 `l1StaticCheckRssSource` 的同一入参序列（`sortUrl/jsLib/loginUrl/loginCheckJs/loginUi` +
+     * `isRss` 以启用 webView 型判定），并补**内网地址**（订阅源主地址字段是 `sourceUrl`）。零网络成本。
+     */
+    internal fun staticSuspectsOf(source: RssSource): List<SuspectReason> {
+        val reasons = detectStaticSuspects(
+            source.sortUrl, source.jsLib, source.loginUrl, source.loginCheckJs, source.loginUi,
+            isRss = source
+        ).toMutableList()
+        if (isPrivateAddress(source.sourceUrl) &&
+            !reasons.contains(SuspectReason.PRIVATE_ADDRESS)
+        ) {
+            reasons.add(SuspectReason.PRIVATE_ADDRESS)
+        }
+        return reasons
+    }
+
+    /**
      * 静态 suspect 检测（登录/jsLib/源变量/webView 四类；内网地址在探测时判定）
      */
     private fun detectStaticSuspects(
