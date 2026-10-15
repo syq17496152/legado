@@ -598,29 +598,13 @@ object NavigationBarIconConfig {
         return addOrUpdate(config, entry)
     }
 
-    fun saveBottomWallpaperToPackage(
-        context: Context,
-        sourcePath: String,
-        entry: Entry
-    ): Entry {
-        if (entry.dirName == DEFAULT_DIR_NAME) {
-            throw IllegalArgumentException(context.getString(R.string.navigation_bar_default_readonly))
-        }
-        val source = File(sourcePath)
-        if (!source.exists() || !source.isFile) {
-            throw IllegalArgumentException(
-                context.getString(R.string.image_crop_failed, context.getString(R.string.unknown))
-            )
-        }
-        val dirName = entry.dirName.ifBlank {
-            entry.config.name.normalizeFileName().ifBlank { "navigation_${System.currentTimeMillis()}" }
-        }
-        val dir = entry.localDir ?: localDir(entry.config.isNightMode, dirName).apply { mkdirs() }
-        val wallpaperName = copyBottomWallpaperIntoPackage(source, dir)
-        val config = entry.config.copy(icons = entry.config.icons.toMutableMap())
-        config.wallpaperPath = wallpaperName
-        return addOrUpdate(config, entry.copy(dirName = dirName, localDir = dir))
-    }
+    // B30 死码清理（2026-10-16）：`saveBottomWallpaperToPackage` 整条退役 —— 零调用（连族内亦无），
+    // 其能力（把壁纸复制进包目录 + 默认包只读拦截）已被**活路径**完整覆盖：
+    // UI 写绝对路径 → `addOrUpdate` 内 `normalizeWallpaperPath`（本文件 :1314）复制进包，
+    // 以及 UI 侧默认包只读校验（`NavigationBarManageActivity` :497/:893/:1228）。
+    // **成对核对（B25 教训）**：同族 `clearBottomWallpaper` **保留** —— 它含「物理删除包内壁纸」
+    // 独有能力（活路径置 null 时 normalise 不清理 ⇒ 无活替代者）。
+    // 守卫：`ThemeConfigChainTest.retiredBottomWallpaperSaveEntryStaysDeletedAndLivePathRemains`（双侧）。
 
     fun clearBottomWallpaper(entry: Entry): Entry {
         if (entry.dirName == DEFAULT_DIR_NAME) return entry
