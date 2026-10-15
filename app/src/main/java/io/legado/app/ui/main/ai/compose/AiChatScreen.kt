@@ -1720,29 +1720,6 @@ private fun AiUserAvatar(
 }
 
 @Composable
-private fun AiFallbackAvatar(
-    iconRes: Int,
-    style: AiComposeStyle,
-    sizeDp: Int,
-    accent: Boolean
-) {
-    Box(
-        modifier = Modifier
-            .size(sizeDp.dp)
-            .clip(CircleShape)
-            .background(if (accent) style.colors.accent.copy(alpha = 0.12f) else style.colors.toolSurface),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = if (accent) style.colors.accent else style.colors.secondaryText,
-            modifier = Modifier.size((sizeDp * 0.56f).dp)
-        )
-    }
-}
-
-@Composable
 private fun AiProcessPart(
     part: AiMessagePartUi.ProcessChain,
     style: AiComposeStyle,
