@@ -13,9 +13,14 @@ class RuleAnalyzer(data: String, code: Boolean = false) {
     var elementsType = "" //当前分割字符串
 
     fun trim() { // 修剪当前规则之前的"@"或者空白符
+        // BUG-2 修复（core-flow-test-coverage 2.5）：空串 / 全空白 / 仅"@"时
+        // 原实现 `queue[pos]` 会越界抛 StringIndexOutOfBoundsException
+        // （经 AnalyzeByJSoup 的 splitRule 产出尾空段后可达）。加边界守卫：
+        // 越界即停，start/startX 指向末尾，后续 substring(startX) 安全返回空串
+        if (pos >= queue.length) return
         if (queue[pos] == '@' || queue[pos] < '!') { //在while里重复设置start和startX会拖慢执行速度，所以先来个判断是否存在需要修剪的字段，最后再一次性设置start和startX
             pos++
-            while (queue[pos] == '@' || queue[pos] < '!') pos++
+            while (pos < queue.length && (queue[pos] == '@' || queue[pos] < '!')) pos++
             start = pos //开始点推移
             startX = pos //规则起始点推移
         }

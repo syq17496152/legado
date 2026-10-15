@@ -733,8 +733,18 @@ object Backup {
         }
     }
 
-    fun clearCache() {
-        FileUtils.delete(backupPath)
-        FileUtils.delete(zipFilePath)
+    /**
+     * 清理备份/恢复工作目录（core-flow-test-coverage BUG-3 修复）。
+     *
+     * 必须与备份/恢复互斥：[BackupRestoreLock] KDoc 铁律「所有『清空 / 写入 backupPath』
+     * 的入口必须经 withStorageLock」。原先无锁清空，却在 App 启动期（App.kt 的 launch 体）
+     * 被调用 ⇒ 与进行中的 [backupLocked] / [Restore] 竞争，ZIP 静默丢文件
+     * （辞晨以 fbc0492 修复过同款缺陷，我方同存）。
+     */
+    suspend fun clearCache() {
+        BackupRestoreLock.withStorageLock {
+            FileUtils.delete(backupPath)
+            FileUtils.delete(zipFilePath)
+        }
     }
 }

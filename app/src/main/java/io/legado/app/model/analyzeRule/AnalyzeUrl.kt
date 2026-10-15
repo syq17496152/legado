@@ -266,6 +266,9 @@ class AnalyzeUrl(
             }
             urlOption?.let { option ->
                 option.getMethod()?.let {
+                    // core-flow-test-coverage §八 #2 新发现：本项目 okhttp 的 `RequestMethod`
+                    // 枚举**仅 GET/POST/HEAD**（PUT/PATCH/DELETE 不存在）⇒ "PUT" 落 else 被当作 GET。
+                    // 完整 PUT 支持需替换 method 表述类型（约 10 处），已登记为独立后续项（issues-found）。
                     method = when (it.uppercase()) {
                         "POST" -> RequestMethod.POST
                         "HEAD" -> RequestMethod.HEAD

@@ -28,7 +28,10 @@ object AnalyzeByRegex {
             // 新建容器
             val info = arrayListOf<String>()
             for (groupIndex in 0..resM.groupCount()) {
-                info.add(resM.group(groupIndex)!!)
+                // BUG-1 修复（core-flow-test-coverage 2.2）：可选捕获组未参与匹配时
+                // `resM.group(i)` 为 null，原先的 `!!` 会抛 NPE；与 getElements 的
+                // `?: ""` 口径对齐，统一回落空串
+                info.add(resM.group(groupIndex) ?: "")
             }
             info
         } else {
