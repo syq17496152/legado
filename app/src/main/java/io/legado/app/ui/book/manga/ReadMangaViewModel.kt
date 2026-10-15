@@ -20,6 +20,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.model.MediaTocRefresh
 import io.legado.app.model.ReadManga
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
@@ -90,6 +91,11 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             return
         }
 
+        // NEW-59 接线：媒体书籍（漫画/图片）当前章节地址为「占位」（空或等于章名）时，打开即需
+        // 刷新目录取真实地址；此前 `MediaTocRefresh` 整族零调用 ⇒ 设置项「自动刷新媒体目录」
+        //（默认开启）形同虚设。刷新失败保留旧目录，不打断阅读。
+        maybeRefreshMediaTocAwait(book)
+
         //开始加载内容
         if (!isSameBook) {
             ReadManga.loadContent()
@@ -139,6 +145,29 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             return false
         }
         return true
+    }
+
+    /**
+     * 媒体目录「占位地址」自动刷新（NEW-59，`MediaTocRefresh` 的首个生产调用点）。
+     *
+     * 命中 [MediaTocRefresh.shouldRefresh]（设置开 + 非卷 + 地址空/等于章名）才刷新；
+     * 刷新结果由 [MediaTocRefresh.refresh] 内部校验（空目录、丢当前章、条目腰斩一律抛异常）
+     * ⇒ 失败时仅记日志并**保留旧目录**，避免把本来能读的书打断。
+     */
+    private suspend fun maybeRefreshMediaTocAwait(book: Book) {
+        if (book.isLocal || ReadManga.chapterSize <= 0) return
+        val bookSource = ReadManga.bookSource ?: return
+        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadManga.durChapterIndex) ?: return
+        if (!MediaTocRefresh.shouldRefresh(chapter)) return
+        kotlin.runCatching {
+            MediaTocRefresh.refresh(bookSource, book, ReadManga.durChapterIndex)
+        }.onSuccess {
+            AppLog.put("媒体目录已按占位地址自动刷新")
+            ReadManga.onChapterListUpdated(book)
+        }.onFailure {
+            currentCoroutineContext().ensureActive()
+            AppLog.put("媒体目录自动刷新失败，保留旧目录：${it.localizedMessage}")
+        }
     }
 
     /**

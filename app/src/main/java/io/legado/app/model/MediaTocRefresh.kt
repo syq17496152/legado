@@ -11,11 +11,22 @@ import io.legado.app.model.webBook.WebBook
 
 object MediaTocRefresh {
 
-    fun shouldRefresh(chapter: BookChapter): Boolean {
-        if (!AppConfig.autoRefreshMediaToc) return false
+    /**
+     * 章节地址是否属「占位」——源侧按章名动态给出（`url` 为空或就是章名本身）时，
+     * 目录必须重新获取才能拿到真实地址。
+     *
+     * 纯判定（不读设置、不联网）⇒ JVM 可测（[io.legado.app.model.MediaTocRefreshTest]）。
+     * 判据口径与 [BookChapter.getAbsoluteURL] 的占位分支（`url.startsWith(title)`）一致。
+     */
+    fun isPlaceholderUrl(chapter: BookChapter): Boolean {
         if (chapter.isVolume) return false
         val url = chapter.url.trim()
         return url.isBlank() || url.startsWith(chapter.title)
+    }
+
+    fun shouldRefresh(chapter: BookChapter): Boolean {
+        if (!AppConfig.autoRefreshMediaToc) return false
+        return isPlaceholderUrl(chapter)
     }
 
     suspend fun refresh(
