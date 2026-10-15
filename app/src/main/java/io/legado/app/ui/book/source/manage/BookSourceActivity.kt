@@ -58,6 +58,7 @@ import io.legado.app.model.Debug
 import io.legado.app.model.ImportCheck
 import io.legado.app.model.QualityCheckSession
 import io.legado.app.model.bannerText
+import io.legado.app.model.formatCheckSourceReportCsv
 import io.legado.app.model.runningStageText
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.showShibbolethDialog
@@ -107,6 +108,7 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
+import java.io.File
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -456,6 +458,10 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
             AppManagementMenuAction(getString(R.string.quality_report_title)) {
                 showQualityReportScopeDialog()
             },
+            // 缺口4：巡检结果导出（结构化任务态 ⇒ CSV ⇒ 系统分享）
+            AppManagementMenuAction(getString(R.string.export_check_report)) {
+                exportCheckReport()
+            },
             AppManagementMenuAction(getString(R.string.group_sources_by_domain)) {
                 setGroupSourcesByDomain(!groupSourcesByDomain)
             },
@@ -787,6 +793,23 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
 
     private fun bottomSelected() {
         viewModel.bottomSource(*getSelectedSources().toTypedArray())
+    }
+
+    /**
+     * 导出最近一次巡检结果为 CSV 并走系统分享（缺口4：巡检结果此前只能看横幅/单源行文案，无法留存/上报）。
+     *
+     * 数据源＝结构化任务态 [CheckSourceTaskStore.state]（与页内横幅、单源行文案**同一份状态**）
+     * ⇒ 导出内容与界面一致；导出的是用户**自己的**源名/地址原文（打码只作用于 HTTP/MCP 出参边界）。
+     */
+    private fun exportCheckReport() {
+        val state = CheckSourceTaskStore.state.value
+        val file = File(cacheDir, "check-report-${System.currentTimeMillis()}.csv")
+        kotlin.runCatching { file.writeText(formatCheckSourceReportCsv(state)) }.onFailure { e ->
+            AppLog.put("导出校验报告失败\n${e.localizedMessage}", e)
+            toastOnUi(getString(R.string.export_check_report_failed))
+        }.onSuccess {
+            share(file)
+        }
     }
 
     private fun exportSelected() {

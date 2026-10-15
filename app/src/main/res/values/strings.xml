@@ -1116,6 +1116,9 @@
     <string name="import_check_state_untested">Untested</string>
     <string name="import_check_low_score">Low score</string>
     <string name="quality_report_title">Source quality report</string>
+    <!-- check source report export（缺口4：巡检结果一键导出 CSV） -->
+    <string name="export_check_report">Export check report</string>
+    <string name="export_check_report_failed">Failed to export check report</string>
     <string name="quality_report_scope_all">All sources</string>
     <string name="quality_report_scope_group">Current group</string>
     <string name="quality_report_scope_selected">Selected sources</string>

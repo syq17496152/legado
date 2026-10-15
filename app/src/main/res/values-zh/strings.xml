@@ -1063,6 +1063,9 @@
     <string name="import_check_state_untested">未测</string>
     <string name="import_check_low_score">低分</string>
     <string name="quality_report_title">源质量体检</string>
+    <!-- 巡检结果导出（缺口4） -->
+    <string name="export_check_report">导出校验报告</string>
+    <string name="export_check_report_failed">导出校验报告失败</string>
     <string name="quality_report_scope_all">全部源</string>
     <string name="quality_report_scope_group">当前分组</string>
     <string name="quality_report_scope_selected">选中源</string>
