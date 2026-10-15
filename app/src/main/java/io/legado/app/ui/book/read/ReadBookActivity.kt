@@ -2556,8 +2556,17 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 的早退闸 ⇒ 不带上版本号就会被闸住（用户观感＝"改完规则没反应"）。
      */
     private var templateHighlightVersion = -1
+    /**
+     * 本次模板正文是按哪一版**手动划线**装饰的（与 [templateHighlightVersion] 同理）。
+     *
+     * 划线是用户数据、与规则是两条独立变更源：不单列版本 ⇒ 划一条线后早退闸把重渲染挡掉，
+     * 用户看到"划了没反应"（模板面此前更是压根不消费手动划线，见 HL-3）。
+     */
+    private var templateManualVersion = -1
     /** 本次模板正文实际被高亮装饰的规则条数（仅诊断/自证用；0 = 无规则或无命中）。 */
     private var templateDecoratedRules = 0
+    /** 本次模板正文实际被装饰的**手动划线**条数（仅诊断/自证用）。 */
+    private var templateDecoratedManual = 0
     private var textRichChapterRef: ChapterRef? = null
     private var textRichChapterStart: Long? = null
     private var textRichChapterEnd: Long? = null
@@ -3120,9 +3129,18 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         if (templateLoading ||
-            // R7：高亮规则版本也必须参与闸门——规则变了要重装饰重渲染（否则"改规则没反应"）
-            (templateActive && textRichPreparedIndex == index && templateBackend != null &&
-                templateHighlightVersion == ReadBook.highlightRulesVersion)
+            // R7 + HL-3：规则与**手动划线**是两条独立变更源，两者版本都必须参与闸门
+            // （判据抽出为纯函数，见 `TemplateReuseGate`，可单测）
+            TemplateReuseGate.shouldReuse(
+                templateActive = templateActive,
+                preparedIndex = textRichPreparedIndex,
+                chapterIndex = index,
+                backendPresent = templateBackend != null,
+                decoratedRulesVersion = templateHighlightVersion,
+                currentRulesVersion = ReadBook.highlightRulesVersion,
+                decoratedManualVersion = templateManualVersion,
+                currentManualVersion = ReadBook.highlightsVersion
+            )
         ) {
             if (relativePosition == 0) upSeekBarProgress()
             loadStates = false
@@ -3146,14 +3164,27 @@ class ReadBookActivity : BaseReadBookActivity(),
                         // R7 高亮接线：在宿主侧把启用规则装饰进正文 HTML。
                         // 必须在**交给沙箱之前**完成 —— archive 官方口径是"高亮加入正文后再测量布局"，
                         // 沙箱的分页/换壳以装饰后的版式为准（晚一步会先按无高亮版式分页再跳变）。
+                        // HL-3：**手动划线**同样在这里进正文（此前模板面只吃规则 ⇒ 用户划的线一条都看不见）；
+                        // 其偏移口径与 canvas 不同 ⇒ 装饰器按 `bookText` 做空白无关文本定位（老数据无文本则跳过）。
                         val decorated = HighlightHtmlDecorator.decorate(
                             content.html,
                             ReadBook.highlightMatcherRules(),
                             // 阅读器三态（日/夜/水墨屏）与整章匹配预算均与 canvas 路径同源
                             tone = HighlightPalette.currentTone(),
-                            budgetMs = AppConfig.highlightMatchBudgetMs.toLong()
+                            budgetMs = AppConfig.highlightMatchBudgetMs.toLong(),
+                            manual = ReadBook.highlightsOfChapter(index)
+                                .filter { it.bookText.isNotBlank() }
+                                .map { h ->
+                                    HighlightHtmlDecorator.ManualHighlight(
+                                        text = h.bookText,
+                                        start = h.chapterPos,
+                                        end = h.chapterPosEnd,
+                                        style = h.styleObj()
+                                    )
+                                }
                         )
                         templateDecoratedRules = decorated.matchedRules
+                        templateDecoratedManual = decorated.matchedManual
                         content.copy(html = decorated.html)
                     }
                 }
@@ -3172,7 +3203,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 AppLog.TAG_READER_TEMPLATE,
                 "prepare: chapter=$index, mermaid=${prepared.hasMermaid}, math=${prepared.hasMath}, " +
                         "htmlLen=${prepared.html.length}, hl=${templateDecoratedRules}, " +
-                        "template=${templateResolved?.id}"
+                        "manual=${templateDecoratedManual}, template=${templateResolved?.id}"
             )
             textRichPrepared = prepared
             textRichPreparedIndex = index
@@ -3189,6 +3220,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             switchTemplate(true)
             // R7：记录本次正文是按哪一版高亮规则装饰的（闸门据此判断"规则变了要不要重渲染"）
             templateHighlightVersion = ReadBook.highlightRulesVersion
+            // HL-3：划线版本一并记录（闸门据此判断"划线增删改要不要重渲染"）
+            templateManualVersion = ReadBook.highlightsVersion
             // S11：模板面开局（书级后端 DIRECT_WEB）⇒ 后续失败经治理层**整书**降级；
             // 同书重复调用保持书级粘性（不会把已降级的书又拉回模板面）。
             renderGovernor.startBook(book.bookUrl, BackendSelectionPolicy.Backend.DIRECT_WEB)

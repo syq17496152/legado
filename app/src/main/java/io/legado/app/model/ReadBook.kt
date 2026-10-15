@@ -131,6 +131,16 @@ object ReadBook : CoroutineScope by MainScope() {
     @Volatile
     private var highlightLoadGeneration = 0
 
+    /**
+     * 划线版本：载入 / 新增 / 修改 / 删除时自增。
+     *
+     * 模板面（WebView）据此判断「**手动划线**变了要不要重装饰重渲染」—— [highlightRulesVersion]
+     * 只覆盖**规则**变化，若不单列本版本，划一条线后模板正文不会重绘（用户看到"划了没反应"）。
+     */
+    @Volatile
+    var highlightsVersion = 0
+        private set
+
     @Volatile
     var highlightRules: List<HighlightRule> = emptyList()
         private set
@@ -433,6 +443,7 @@ object ReadBook : CoroutineScope by MainScope() {
         }.onSuccess { stored ->
             if (generation != highlightLoadGeneration) return@onSuccess
             highlights = stored
+            highlightsVersion++
             callBack?.get()?.upContent(resetPageOffset = false)
         }.onError {
             AppLog.put("载入划线失败", it)
@@ -544,6 +555,7 @@ object ReadBook : CoroutineScope by MainScope() {
      */
     fun addHighlight(highlight: BookHighlight) {
         highlights = highlights + highlight
+        highlightsVersion++
         callBack?.get()?.upContent(resetPageOffset = false)
         Coroutine.async {
             val bookUrl = book?.bookUrl
@@ -561,12 +573,14 @@ object ReadBook : CoroutineScope by MainScope() {
     fun updateHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.update(highlight)
         highlights = highlights.map { if (it.time == highlight.time) highlight else it }
+        highlightsVersion++
         callBack?.get()?.upContent(resetPageOffset = false)
     }
 
     fun removeHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.delete(highlight)
         highlights = highlights.filter { it.time != highlight.time }
+        highlightsVersion++
         callBack?.get()?.upContent(resetPageOffset = false)
     }
 

@@ -40,8 +40,25 @@ import java.util.Locale
  */
 object HighlightHtmlDecorator {
 
-    /** 装饰结果：`html` 为改写后的正文（无命中即原样）；`matchedRules` 供日志/自证。 */
-    data class Result(val html: String, val matchedRules: Int)
+    /** 装饰结果：`html` 为改写后的正文（无命中即原样）；规则/手动命中数供日志与自证。 */
+    data class Result(val html: String, val matchedRules: Int, val matchedManual: Int = 0)
+
+    /**
+     * 手动划线（`BookHighlight`）→ 模板面输入。
+     *
+     * ⚠️ `start`/`end` 是 **canvas 章内字符口径**，只作**位置提示**（多命中择近用），
+     * **不作为最终锚**：模板面的正文文本口径与 canvas 不同（块间补 `\n`、去标签等），
+     * 直接用 canvas 偏移会落到错位置 ⇒ 真正的定位靠 [locateByText]（按 [text] 做空白无关匹配）。
+     */
+    data class ManualHighlight(
+        val text: String,
+        val start: Int,
+        val end: Int,
+        val style: HighlightStyle
+    )
+
+    /** 手动划线在命中表里的保留 id（不计入 `matchedRules`）。 */
+    const val ManualRuleId = "manual-highlight"
 
     /** 整章文本预算（与 `MdDocumentBuilder.MaxChapterChars` 同口径，此处避免跨包常量耦合）。 */
     private const val MaxTextChars = 2 * 1024 * 1024
@@ -79,12 +96,13 @@ object HighlightHtmlDecorator {
         html: String,
         rules: List<HighlightRuleMatcher.Rule>,
         tone: HighlightPalette.Tone,
-        budgetMs: Long = DefaultMatchBudgetMs
+        budgetMs: Long = DefaultMatchBudgetMs,
+        manual: List<ManualHighlight> = emptyList()
     ): Result {
-        if (html.isBlank() || rules.isEmpty()) return Result(html, 0)
+        if (html.isBlank()) return Result(html, 0)
         // 有效规则：有 pattern 且样式非空（空样式命中等于"无高亮"，白白包一层 span）
         val effective = rules.filter { it.pattern.isNotEmpty() && !it.style.sanitized().isEmpty }
-        if (effective.isEmpty()) return Result(html, 0)
+        if (effective.isEmpty() && manual.isEmpty()) return Result(html, 0)
         val document = runCatching { Jsoup.parseBodyFragment(html) }.getOrNull()
             ?: return Result(html, 0)
         document.outputSettings().prettyPrint(false)
@@ -102,27 +120,46 @@ object HighlightHtmlDecorator {
             for (i in from until to) titleFlags[i] = true
         }
 
-        val outcome = HighlightRuleMatcher.matchWithBudget(
-            chapterText.toString(),
-            effective,
-            titleFlags,
-            // 与 canvas 路径**同一**整章预算；超预算按 truncated 语义放弃装饰（不阻断渲染）
-            deadlineMs = System.currentTimeMillis() + budgetMs,
-            withTemplate = true
+        val textSnapshot = chapterText.toString()
+        val matches = ArrayList<HighlightRuleMatcher.RuleMatch>(
+            // 手动划线命中与规则命中同表：后续"逐块裁切 + span 切分"因此只有一套实现
+            manual.size + effective.size * 2
         )
-        if (outcome.matches.isEmpty()) return Result(html, 0)
-        // B15 捕获组子样式：展开为额外命中段（后写覆盖前写 ⇒ 组内样式在段内生效）
-        val matches = ArrayList<HighlightRuleMatcher.RuleMatch>(outcome.matches.size * 2)
-        outcome.matches.forEach { match ->
-            matches.add(match)
-            match.subSpans.forEach { span ->
-                matches.add(
-                    HighlightRuleMatcher.RuleMatch(span.start, span.end, match.ruleId, span.style)
+        // 手动划线：按**文本**定位到模板面的章内偏移（canvas 偏移只作择近提示）
+        manual.forEachIndexed { order, item ->
+            if (item.style.sanitized().isEmpty) return@forEachIndexed
+            val range = locateByText(textSnapshot, item.text, item.start) ?: return@forEachIndexed
+            matches.add(
+                HighlightRuleMatcher.RuleMatch(
+                    // 带上序号：跨块被切开时同一划线会产生多个段，靠 id 去重才能按「条数」计数
+                    range.first, range.last + 1, "$ManualRuleId#$order", item.style
                 )
+            )
+        }
+        if (effective.isNotEmpty()) {
+            val outcome = HighlightRuleMatcher.matchWithBudget(
+                textSnapshot,
+                effective,
+                titleFlags,
+                // 与 canvas 路径**同一**整章预算；超预算按 truncated 语义放弃装饰（不阻断渲染）
+                deadlineMs = System.currentTimeMillis() + budgetMs,
+                withTemplate = true
+            )
+            // B15 捕获组子样式：展开为额外命中段（后写覆盖前写 ⇒ 组内样式在段内生效）
+            outcome.matches.forEach { match ->
+                matches.add(match)
+                match.subSpans.forEach { span ->
+                    matches.add(
+                        HighlightRuleMatcher.RuleMatch(span.start, span.end, match.ruleId, span.style)
+                    )
+                }
             }
         }
+        if (matches.isEmpty()) return Result(html, 0)
 
         val usedRules = HashSet<String>()
+        // 按 id 去重：一条划线跨块被切开会产出多个段，计数要按**条数**而非段数
+        val usedManual = HashSet<String>()
         for (block in blocks) {
             val length = block.text.length
             // 与本块相交的命中，裁到块内（跨块命中被块边界切开，与 archive 同处理）
@@ -138,7 +175,7 @@ object HighlightHtmlDecorator {
             val entireParent = block.nodes.size == block.parent.childNodes().size
             val wholeBlock = local.all { it.start == 0 && it.end == length }
             if (entireParent && wholeBlock && block.parent.normalName() != "body") {
-                local.forEach { usedRules.add(it.ruleId) }
+                local.forEach { if (it.ruleId.startsWith(ManualRuleId)) usedManual.add(it.ruleId) else usedRules.add(it.ruleId) }
                 block.parent.attr("style", mergeDeclarations(local.map { it.style }, tone, block.parent.attr("style")))
                 continue
             }
@@ -156,7 +193,7 @@ object HighlightHtmlDecorator {
                     replacement.addAll(nodes)
                     continue
                 }
-                active.forEach { usedRules.add(it.ruleId) }
+                active.forEach { if (it.ruleId.startsWith(ManualRuleId)) usedManual.add(it.ruleId) else usedRules.add(it.ruleId) }
                 val span = Element("span")
                 span.attr("style", mergeDeclarations(active.map { it.style }, tone, ""))
                 nodes.forEach(span::appendChild)
@@ -166,8 +203,50 @@ object HighlightHtmlDecorator {
             replacement.forEach { first.before(it) }
             block.nodes.forEach(Node::remove)
         }
-        if (usedRules.isEmpty()) return Result(html, 0)
-        return Result(document.body().html(), usedRules.size)
+        if (usedRules.isEmpty() && usedManual.isEmpty()) return Result(html, 0)
+        return Result(document.body().html(), usedRules.size, usedManual.size)
+    }
+
+    /**
+     * 在模板面正文文本里按**文本内容**定位手动划线（空白无关匹配）。
+     *
+     * 为什么必须按文本：canvas 与本面的正文口径不同（后者块间补 `\n`、去标签、`br` 记换行），
+     * 直接套 canvas 的 `chapterPos` 会把划线画到别的句子上去。
+     *
+     * @param hintStart canvas 章内起点（多个命中时择近；仅作提示，不决定正确性）
+     * @return 原文本（**含空白**）中的半开区间 `[start, end)`；零命中/文本为空 ⇒ null（**跳过不误锚**）
+     */
+    fun locateByText(chapterText: String, needle: String, hintStart: Int): IntRange? {
+        if (chapterText.isEmpty() || needle.isBlank()) return null
+        // ① 归一化章节文本（去空白），并记录「归一化下标 → 原下标」映射
+        val map = ArrayList<Int>(chapterText.length)
+        val flat = StringBuilder(chapterText.length)
+        chapterText.forEachIndexed { index, ch ->
+            if (!ch.isWhitespace()) {
+                map.add(index)
+                flat.append(ch)
+            }
+        }
+        val target = needle.filterNot { it.isWhitespace() }
+        if (target.isEmpty() || target.length > flat.length) return null
+        val flatText = flat.toString()
+        // ② 扫描全部命中，择「原起点离 hintStart 最近」的一处
+        var bestFlat = -1
+        var bestDistance = Int.MAX_VALUE
+        var cursor = flatText.indexOf(target)
+        while (cursor >= 0) {
+            val distance = kotlin.math.abs(map[cursor] - hintStart)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestFlat = cursor
+            }
+            cursor = flatText.indexOf(target, cursor + 1)
+        }
+        if (bestFlat < 0) return null
+        // ③ 归一化区间 → 原文本区间（含两端之间的空白）
+        val start = map[bestFlat]
+        val end = map[bestFlat + target.length - 1] + 1
+        return start until end
     }
 
     // === 块采集（与 archive HighlightDocument.collect 同构） ===
