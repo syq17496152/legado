@@ -137,8 +137,20 @@ object Restore {
 
     /**
      * 未加锁的落库实现：仅供 [restoreAll] / [restoreLocked] 在持有共享锁时调用。
+     *
+     * R10（本轮）：落库**前置校验**包完整性 —— 否则缺文件的包会走"逐条目静默跳过"，
+     * 用户拿到「恢复成功」却是半恢复（书架等主数据没进来，且无从判断少了什么）。
+     * 校验不通过直接中止（**不动库**），给用户可读回执以便换包重试。
      */
-    private suspend fun restoreUnlocked(path: String) = restore(path)
+    private suspend fun restoreUnlocked(path: String) {
+        val report = BackupPackageValidator.validate(File(path))
+        if (!report.ok) {
+            appCtx.toastOnUi("备份包不完整（${report.describe()}），已中止恢复以免数据半恢复")
+            AppLog.put("备份包校验未通过，中止恢复：缺失=${report.missing} 损坏=${report.malformed}")
+            return
+        }
+        restore(path)
+    }
 
     private suspend fun restore(path: String) {
         val aes = BackupAES()
