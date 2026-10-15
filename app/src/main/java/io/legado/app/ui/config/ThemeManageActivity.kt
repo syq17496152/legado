@@ -297,38 +297,39 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
     @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
-                LegadoTheme {
+            // G-37（K1/AD-01）：LegadoTheme 上提为宿主内容根（原仅裹顶栏 ⇒ 内容区回落 M3 默认色板/字号）
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
                     GlassTopAppBar(
                         title = topBarTitle,
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { finish() },
                         actions = { TopBarActionRow(topBarActions) }
                     )
-                }
-                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                ThemePackageManageScreen(
-                    entries = entriesState,
-                    isNightTheme = isNightTheme,
-                    summaryText = summaryTextState,
-                    onSwitchDayNight = { night ->
-                        if (night != isNightTheme) {
-                            isNightTheme = night
-                            loadThemes()
-                        }
-                    },
-                    onAdd = ::showAddDialog,
-                    onApply = ::applyTheme,
-                    onEdit = { entry -> showEditDialog(entry) },
-                    isApplied = ::isApplied,
-                    entryInfo = ::entryInfo,
-                    entryActions = ::entryActions,
-                    previewData = ::previewData,
-                    loading = entriesLoading,
-                    loadError = entriesLoadError,
-                    onRetryLoad = ::loadThemes
-                )
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        ThemePackageManageScreen(
+                            entries = entriesState,
+                            isNightTheme = isNightTheme,
+                            summaryText = summaryTextState,
+                            onSwitchDayNight = { night ->
+                                if (night != isNightTheme) {
+                                    isNightTheme = night
+                                    loadThemes()
+                                }
+                            },
+                            onAdd = ::showAddDialog,
+                            onApply = ::applyTheme,
+                            onEdit = { entry -> showEditDialog(entry) },
+                            isApplied = ::isApplied,
+                            entryInfo = ::entryInfo,
+                            entryActions = ::entryActions,
+                            previewData = ::previewData,
+                            loading = entriesLoading,
+                            loadError = entriesLoadError,
+                            onRetryLoad = ::loadThemes
+                        )
+                    }
                 }
             }
         }
@@ -564,12 +565,6 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
 
     private fun defaultFontDemoColor(): Int {
         return defaultThemeTextColor(isNightTheme)
-    }
-
-    private fun String?.toThemeManageColorOrNull(): Int? {
-        return normalizeOptionalColor(this)?.let { normalized ->
-            kotlin.runCatching { normalized.toColorInt() }.getOrNull()
-        }
     }
 
 

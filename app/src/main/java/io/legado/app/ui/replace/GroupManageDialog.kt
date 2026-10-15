@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.activityViewModels
 import io.legado.app.R
 import io.legado.app.data.appDb
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.ComposeGroupManageDialogContent
 import io.legado.app.ui.widget.compose.AppDialogSize
@@ -28,16 +29,19 @@ class GroupManageDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val groups by appDb.replaceRuleDao.flowGroups()
-                    .conflate()
-                    .collectAsState(initial = emptyList())
-                ComposeGroupManageDialogContent(
-                    groups = groups,
-                    onAddGroup = viewModel::addGroup,
-                    onRenameGroup = { old, new -> viewModel.upGroup(old, new) },
-                    onDeleteGroup = viewModel::delGroup,
-                    onDismiss = { dismissAllowingStateLoss() }
-                )
+                // G-37（K1/AD-01）：宿主内容根须为 LegadoTheme（否则主题包/夜间下回落 M3 默认色板/字号）
+                LegadoTheme {
+                    val groups by appDb.replaceRuleDao.flowGroups()
+                        .conflate()
+                        .collectAsState(initial = emptyList())
+                    ComposeGroupManageDialogContent(
+                        groups = groups,
+                        onAddGroup = viewModel::addGroup,
+                        onRenameGroup = { old, new -> viewModel.upGroup(old, new) },
+                        onDeleteGroup = viewModel::delGroup,
+                        onDismiss = { dismissAllowingStateLoss() }
+                    )
+                }
             }
         }
     }
