@@ -181,6 +181,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlin.math.roundToInt
 import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.theme.labelXSmall
 import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.theme.bodySecondary
@@ -402,35 +403,39 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         )
         composeView.setContent {
-            ReadAloudPlayerContent(
-                state = uiState,
-                onClose = ::closeByUser,
-                onExpand = { openFromBottom(force = true) },
-                onStop = ::stopReadAloud,
-                onPlayPause = { callBack?.onClickReadAloud() },
-                onModeChange = ::setMode,
-                onOpenChapterList = {
-                    callBack?.openChapterList()
-                },
-                onPreviousChapter = { moveChapterFromPanel(-1) },
-                onNextChapter = { moveChapterFromPanel(1) },
-                onChapterSelect = ::selectChapterFromPanel,
-                onOpenSettings = ::openReadAloudSetting,
-                onTimerChange = ::setTimer,
-                onEngineSelect = ::selectTtsEngine,
-                onEngineSheetOpen = ::refreshTtsEngineOptions,
-                onProgressSeek = ::seekToParagraphProgress,
-                onCueSelect = ::seekToChapterPosition,
-                capsulePosition = capsulePosition,
-                onCapsulePositionChange = ::updateCapsulePosition,
-                onCapsuleBounds = ::updateCapsuleBounds,
-                onOpenCharacters = { callBack?.openBookCharacters() },
-                onHideRoleDetail = ::hideRoleDetail,
-                onOpenRoleDetail = ::openRoleDetail,
-                onDismissRoleStatus = ::dismissRoleStatus,
-                onRetryRoleAssignment = ::retryRoleAssignment,
-                onRoleSegmentAssign = ::updateRoleSegmentAssignment
-            )
+            // G-37（K1/AD-01）：LegadoTheme 必须上提为宿主入口顶层作用域，
+            // 仅包内容子树会让面板在主题包/夜间下回落 M3 默认色板
+            LegadoTheme {
+                ReadAloudPlayerContent(
+                    state = uiState,
+                    onClose = ::closeByUser,
+                    onExpand = { openFromBottom(force = true) },
+                    onStop = ::stopReadAloud,
+                    onPlayPause = { callBack?.onClickReadAloud() },
+                    onModeChange = ::setMode,
+                    onOpenChapterList = {
+                        callBack?.openChapterList()
+                    },
+                    onPreviousChapter = { moveChapterFromPanel(-1) },
+                    onNextChapter = { moveChapterFromPanel(1) },
+                    onChapterSelect = ::selectChapterFromPanel,
+                    onOpenSettings = ::openReadAloudSetting,
+                    onTimerChange = ::setTimer,
+                    onEngineSelect = ::selectTtsEngine,
+                    onEngineSheetOpen = ::refreshTtsEngineOptions,
+                    onProgressSeek = ::seekToParagraphProgress,
+                    onCueSelect = ::seekToChapterPosition,
+                    capsulePosition = capsulePosition,
+                    onCapsulePositionChange = ::updateCapsulePosition,
+                    onCapsuleBounds = ::updateCapsuleBounds,
+                    onOpenCharacters = { callBack?.openBookCharacters() },
+                    onHideRoleDetail = ::hideRoleDetail,
+                    onOpenRoleDetail = ::openRoleDetail,
+                    onDismissRoleStatus = ::dismissRoleStatus,
+                    onRetryRoleAssignment = ::retryRoleAssignment,
+                    onRoleSegmentAssign = ::updateRoleSegmentAssignment
+                )
+            }
         }
     }
 
@@ -1006,11 +1011,6 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
         }
     }
 
-    private fun closeFromAction() {
-        dismissedForCurrentRun = BaseReadAloudService.isRun
-        hidePanel()
-    }
-
     private fun stopReadAloud() {
         ReadAloud.stop(context)
         dismissedForCurrentRun = false
@@ -1082,27 +1082,6 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
                     putExtra("key", httpTts.id.toString())
                 }
             }
-        uiState = buildState(uiState.mode)
-    }
-
-    private fun setSpeechRate(value: Int) {
-        val rate = value.coerceIn(0, 45)
-        AppConfig.ttsSpeechRate = rate
-        ReadAloud.upTtsSpeechRate(context)
-        if (!BaseReadAloudService.pause) {
-            ReadAloud.pause(context)
-            ReadAloud.resume(context)
-        }
-        uiState = buildState(uiState.mode)
-    }
-
-    private fun setFollowSystemSpeechRate(value: Boolean) {
-        AppConfig.ttsFlowSys = value
-        ReadAloud.upTtsSpeechRate(context)
-        if (!BaseReadAloudService.pause) {
-            ReadAloud.pause(context)
-            ReadAloud.resume(context)
-        }
         uiState = buildState(uiState.mode)
     }
 
@@ -1500,26 +1479,6 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
                 text = paragraph.text.cleanReadAloudText(),
                 current = index == currentIndex,
                 key = "$chapterKey:${paragraph.chapterPosition}:${paragraph.realNum}",
-                sequence = chapterSequence * 100_000 + index
-            )
-        }
-    }
-
-    private fun List<ReadAloudCue>.nearbyCueParagraphs(
-        currentIndex: Int,
-        chapterKey: String,
-        chapterSequence: Int
-    ): List<ParagraphUi> {
-        if (isEmpty() || currentIndex !in indices) return emptyList()
-        val start = (currentIndex - 4).coerceAtLeast(0)
-        val end = (currentIndex + 4).coerceAtMost(lastIndex)
-        return (start..end).map { index ->
-            val cue = this[index]
-            ParagraphUi(
-                index = index + 1,
-                text = cue.text.cleanReadAloudText(),
-                current = index == currentIndex,
-                key = "$chapterKey:${cue.chapterPosition}:${cue.key}",
                 sequence = chapterSequence * 100_000 + index
             )
         }
