@@ -97,8 +97,8 @@ fun HttpDebugScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
-    // OkHttp客户端
-    val client = remember { OkHttpClient.Builder().build() }
+    // 进程级单例（见 DebugHttpClient）：原为每次进入本屏新建 OkHttpClient ⇒ 线程池/连接池反复重建且旧的不回收
+    val client = debugHttpClient
     val uaValues = remember { getUaValues() }
     
     // 请求参数状态

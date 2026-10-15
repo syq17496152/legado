@@ -52,7 +52,8 @@ fun CurlTestScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
-    val client = remember { OkHttpClient.Builder().build() }
+    // 进程级单例（见 DebugHttpClient）：原为每次进入本屏新建 OkHttpClient ⇒ 线程池/连接池反复重建且旧的不回收
+    val client = debugHttpClient
     
     var curlCommand by remember { mutableStateOf("") }
     var parsedCurl by remember { mutableStateOf<ParsedCurl?>(null) }
