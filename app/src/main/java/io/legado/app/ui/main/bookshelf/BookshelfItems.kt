@@ -1,6 +1,5 @@
 package io.legado.app.ui.main.bookshelf
 
-import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -27,7 +26,6 @@ import io.legado.app.utils.ColorUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isImage
@@ -36,29 +34,36 @@ import io.legado.app.help.book.isPdf
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
 import io.legado.app.model.BookCover
+import io.legado.app.ui.widget.compose.BookCoverImage as ComposeBookCoverImage
+import io.legado.app.ui.widget.image.CoverImageView
 
 /**
- * 封面：AndroidView + ImageView，复用 BookCover.load（Glide + placeholder + centerCrop）。
+ * 封面：**Compose 原生位图渲染**（同 `compose/BookshelfComposeCover` 一条路）。
+ *
+ * 2026-10-15 改（真机量测见 issues-found NEW-18）：原实现是 `AndroidView + ImageView`，
+ * 即**每个可见书目项都要创建一个传统 View**，并在滚动进出屏幕时反复创建/销毁 —— 在懒加载网格里
+ * 这是持续的重负担（同机同手势对照：书架 90 分位 73ms / 慢 UI 线程 234 帧，而 Compose 对照屏
+ * 仅 5ms / 1 帧）。改为调用既有的原生实现后，滚动不再有 View 互操作开销。
+ *
+ * 视觉与调用方语义保持不变：`fillBounds = true`（沿用父级给定尺寸，不额外套 aspectRatio）、
+ * `preferThumb = true`（用缩略图规格解码，与小尺寸网格项匹配）、`forcePath = false`
+ * （尊重"使用默认封面"设置，与旧实现一致）。
  */
 @Composable
 internal fun BookCoverImage(
     book: Book,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    AndroidView(
+    ComposeBookCoverImage(
+        path = book.getDisplayCover(),
+        name = book.name,
+        author = book.author,
+        sourceOrigin = book.origin,
         modifier = modifier,
-        factory = { ctx ->
-            ImageView(ctx).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-            }
-        },
-        update = { view ->
-            BookCover.load(
-                context,
-                book.getDisplayCover(),
-            ).into(view)
-        },
+        style = CoverImageView.CoverStyle.GRID,
+        preferThumb = true,
+        forcePath = false,
+        fillBounds = true,
     )
 }
 
