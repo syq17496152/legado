@@ -12,6 +12,7 @@ import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
+import io.legado.app.help.source.SourceRecycleBinHelp
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 
@@ -85,6 +86,8 @@ object TtsKernel {
     /** `http_tts_delete`：按 id 删除 HTTP TTS。 */
     suspend fun httpTtsDelete(id: Long): Map<String, Any?> = withContext(IO) {
         val exist = appDb.httpTTSDao.get(id) ?: throw NoSuchElementException("HTTP TTS 不存在：$id")
+        // NEW-64 回收站：删除前回收（开关关闭时 recycle 内部直接 return，不影响原行为；runCatching 防回收异常阻断删除）
+        kotlin.runCatching { SourceRecycleBinHelp.recycleHttpTtsRules(listOf(exist)) }
         appDb.httpTTSDao.delete(exist)
         mapOf("deleted" to id, "name" to exist.name)
     }

@@ -53,6 +53,7 @@ import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechRouteSanitizer
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.help.readaloud.speech.SpeechVoiceEngineGroup
+import io.legado.app.help.source.SourceRecycleBinHelp
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.model.ReadAloud
@@ -203,6 +204,8 @@ class SpeakEngineDialog() : ComposeDialogFragment(), SpeakEngineDialogActions {
             onPositive = {
                 val appContext = requireContext().applicationContext
                 lifecycleScope.launch(IO) {
+                    // NEW-64 回收站：删除前回收（开关关闭时 recycle 内部直接 return，不影响原行为；runCatching 防回收异常阻断删除）
+                    kotlin.runCatching { SourceRecycleBinHelp.recycleHttpTtsRules(listOf(httpTTS)) }
                     appDb.httpTTSDao.delete(httpTTS)
                     val result = SpeechRouteSanitizer.cleanDeletedHttpTts(httpTTS)
                     if (result.changed) {
