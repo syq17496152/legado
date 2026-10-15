@@ -13,21 +13,27 @@ import java.io.File
  * 判定口径（**刻意宽容，只拦"确定坏了"的包**）：
  *  ① **缺项不算错**：备份选择器（`BackupSelectorConfig.allItems`）允许用户只勾部分类别
  *     （例如「只备份书源」）⇒ 包内必然缺其他文件，**不能因此拒绝恢复**；
- *  ② 但包里若**一条已知条目都没有** ⇒ 判为空包/坏包（恢复等于什么都没做）；
- *  ③ 已知条目**存在**时：若内容看起来是明文 JSON（以 `[` / `{` 开头）却**解析失败** ⇒ 判损坏
- *     （截断 / 半写 / 非法字符）；
- *  ④ 内容不以 `[` / `{` 开头者**不参与解析判定** —— 备份里存在**加密**条目（如 `servers.json`）
- *     与二进制/配置 XML 混放，强判会把合法包误杀。
+ *  ② 包里若**一条已知条目都没有** ⇒ 判为空包/坏包（恢复等于什么都没做）。
+ *     ⚠️「已知条目」含**全部类别** —— `.json` 数据、目录（`bg` / `book_cache` / 封面图集）、
+ *     XML 配置（`config.xml` / `videoConfig.xml`）**都计入存在性**；只统计 `.json` 会让
+ *     「仅勾非 JSON 类目」的合法包被误判成空包（本轮已实测该边界）。
+ *  ③ **仅对 `.json` 文件**做内容判定：内容看起来是明文 JSON（以 `[` / `{` 开头）却**解析失败**
+ *     ⇒ 判损坏（截断 / 半写 / 非法字符）；
+ *  ④ 内容不以 `[` / `{` 开头者（备份里有**加密**条目如 `servers.json`）**不参与解析判定**；
+ *     目录条目亦不解析（`readText` 对目录会抛，若强判会误杀）。
  *
  * ⚠️ 本对象保持**纯 JVM**（只碰 `File` + Gson），便于单测；已知条目清单由调用方传入
  * （`Restore` 从 `BackupSelectorConfig.allItems` 派生，单源防漂移）。
  */
 object BackupPackageValidator {
 
+    /** 参与"内容解析判定"的扩展名；其余类型（目录 / XML）只计入存在性 */
+    private const val JSON_SUFFIX = ".json"
+
     /**
      * 校验结果。
      *
-     * @param present 包内**实际存在**的已知条目（仅文件名）
+     * @param present 包内**实际存在**的已知条目（仅文件名，含目录/XML）
      * @param malformed 存在的已知条目中，疑似明文 JSON 但解析失败的项（仅文件名）
      */
     data class Report(val present: List<String>, val malformed: List<String>) {
@@ -46,16 +52,18 @@ object BackupPackageValidator {
     /**
      * 校验 [root]（已解压的备份工作目录）是否可用于恢复。
      *
-     * @param knownFiles 已知条目清单（由调用方派生，见类注释）
+     * @param knownEntries 已知条目清单（含目录与 XML；由调用方从备份选择器配置派生）
      */
-    fun validate(root: File, knownFiles: List<String>): Report {
-        val present = ArrayList<String>(knownFiles.size)
-        val malformed = ArrayList<String>(knownFiles.size)
-        knownFiles.forEach { name ->
+    fun validate(root: File, knownEntries: List<String>): Report {
+        val present = ArrayList<String>(knownEntries.size)
+        val malformed = ArrayList<String>(knownEntries.size)
+        knownEntries.forEach { name ->
             val file = File(root, name)
-            // ⚠️ 缺项合法：选择性备份（只勾部分类别）本就不会写出其余文件
+            // ⚠️ 缺项合法：选择性备份本就不会写出其余条目
             if (!file.exists()) return@forEach
             present.add(name)
+            // 目录 / XML 配置只计存在性，不做 JSON 内容判定
+            if (!name.endsWith(JSON_SUFFIX) || !file.isFile) return@forEach
             val text = runCatching { file.readText() }.getOrNull()
             if (text == null || (looksLikePlainJson(text) && !isParsable(text))) {
                 malformed.add(name)

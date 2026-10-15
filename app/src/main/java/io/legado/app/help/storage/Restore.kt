@@ -83,14 +83,16 @@ object Restore {
     private const val TAG = "Restore"
 
     /**
-     * 备份包「已知 JSON 条目」清单（单源＝`BackupSelectorConfig.allItems`）。
+     * 备份包「已知条目」清单（单源＝`BackupSelectorConfig.allItems`）。
      *
      * 供 [BackupPackageValidator] 判断包内出现的条目是否被写坏 —— 从配置**派生**而非另抄一份，
      * 避免与「备份写出清单 / 恢复读取清单」形成三处漂移（本项目已多次踩过该类隐性缺陷）。
-     * 只取 `.json` 条目：目录类（`bg` / `book_cache` / 封面图集）与 XML 配置不参与 JSON 判定。
+     * ⚠️ 必须含**全部类别**（`.json` 数据 + 目录 `bg`/`book_cache`/封面图集 + XML 配置）：
+     * 若只取 `.json`，则"用户只勾非 JSON 类目"的合法包会因"一条已知条目都没有"被判空包而**整体拒绝**
+     * （[BackupPackageValidator] 内部再按扩展名决定是否做内容解析判定）。
      */
-    private val knownBackupJsonFiles: List<String> by lazy {
-        BackupSelectorConfig.allItems.map { it.fileName }.filter { it.endsWith(".json") }
+    private val knownBackupEntries: List<String> by lazy {
+        BackupSelectorConfig.allItems.map { it.fileName }
     }
 
     /**
@@ -154,7 +156,7 @@ object Restore {
      * 校验不通过直接中止（**不动库**），给用户可读回执以便换包重试。
      */
     private suspend fun restoreUnlocked(path: String) {
-        val report = BackupPackageValidator.validate(File(path), knownBackupJsonFiles)
+        val report = BackupPackageValidator.validate(File(path), knownBackupEntries)
         if (!report.ok) {
             appCtx.toastOnUi("备份包异常（${report.describe()}），已中止恢复以免数据半恢复")
             AppLog.put(
