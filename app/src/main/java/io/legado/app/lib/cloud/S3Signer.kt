@@ -108,12 +108,6 @@ object S3Signer {
         return hmacSha256(key, data).joinToString("") { "%02x".format(it) }
     }
 
-    private fun String.encodeAwsPath(): String {
-        return URLEncoder.encode(this, "UTF-8")
-            .replace("+", "%20")
-            .replace("%7E", "~")
-    }
-
     private fun String.encodeAwsQuery(): String {
         return URLEncoder.encode(this, "UTF-8")
             .replace("+", "%20")
