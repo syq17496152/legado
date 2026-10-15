@@ -245,11 +245,19 @@ object ShareNoteImageRenderer {
         capture.copy(width = width, height = height)
     }
 
-    // B29 死码清理（2026-10-16）：`exportMountedWebView`（把已挂载 WebView 自绘为缓存 PNG）整条退役 ——
-    // 零调用，且能力被活路径 `renderHtmlToPngFileWithFallback`（经 `renderMountedWebView` / `renderPreview`）
-    // 完整覆盖：同样走 `drawWebViewToBitmap` + `writeBitmapToCache`（两个 helper 仍由活路径第 367/370 行使用
-    // ⇒ 未产生新孤儿）。同族先例：B15 已退役的 `renderShareImage`（自建 WebView 的旧渲染入口）。
-    // 守卫：`ShareNoteDeadPathRetiredTest.deadShareNotePathStaysDeleted`（防回潮 + 活链路单源仍在）。
+    // B29 **更正**（2026-10-16）：`exportMountedWebView` 曾按「被取代」退役，复核后同为**误判** ——
+    // 活路径 `renderHtmlToPngFileWithFallback`（经 `renderMountedWebView` / `renderPreview`）**必然先加载
+    // 模板 HTML**（其入参含 `entry` + `payload`）⇒ 与本函数「**不重新加载、直接导出当前已挂载视图**」
+    // 属**不同语义**，非「同语义活替代」⇒ 按项目判据（被取代才删 / 无同语义替代 ⇒ 登记保留）应**保留**。
+    // 删前已证两 helper（`drawWebViewToBitmap` / `writeBitmapToCache`）仍由活路径使用 —— 此点仍成立，
+    // 但**不足以**支撑删除（「未产生新孤儿」只证"删了不出错"，不证"该删"）。
+    // 守卫：`ShareNoteDeadPathRetiredTest.liveOverlaySingleSourceRemainsTheOnlyPath` 系列（见其断言）。
+    suspend fun exportMountedWebView(context: Context, webView: WebView): File = renderMutex.withLock {
+        val bitmap = withContext(Dispatchers.Main) {
+            drawWebViewToBitmap(webView)
+        }
+        writeBitmapToCache(context, bitmap)
+    }
 
     suspend fun savePngToGallery(context: Context, pngFile: File): Uri = withContext(Dispatchers.IO) {
         val albumName = context.shareNoteAlbumName()
