@@ -9,13 +9,12 @@ import androidx.room.Transaction
 import androidx.room.Update
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.data.entities.BookCharacterRelation
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BookCharacterDao {
 
-    @Query("SELECT * FROM book_characters WHERE bookUrl = :bookUrl ORDER BY roleLevel DESC, sortOrder ASC, id ASC")
-    fun flowCharacters(bookUrl: String): Flow<List<BookCharacter>>
+    // B25 退役（2026-10-16）：Flow 版 `flowCharacters` 零调用 ⇒ 与下方 `characters()`（SQL 逐字相同、
+    // List 版）构成「同一查询两处实现」，退役 Flow 版；角色管理/关系页/卡片页均走 `characters()`。
 
     @Query("SELECT * FROM book_characters WHERE bookUrl = :bookUrl ORDER BY roleLevel DESC, sortOrder ASC, id ASC")
     fun characters(bookUrl: String): List<BookCharacter>
@@ -41,11 +40,8 @@ interface BookCharacterDao {
     @Delete
     fun deleteCharacter(character: BookCharacter)
 
-    @Query("DELETE FROM book_characters WHERE id = :id")
-    fun deleteCharacterById(id: Long)
-
-    @Query("SELECT * FROM book_character_relations WHERE bookUrl = :bookUrl ORDER BY sortOrder ASC, id ASC")
-    fun flowRelations(bookUrl: String): Flow<List<BookCharacterRelation>>
+    // B25 退役（2026-10-16）：`deleteCharacterById` 零调用 ⇒ 活路径＝下方 `deleteCharacterWithRelations`
+    // （@Transaction，且 `deleteCharacter` 由 @Delete 实体删除）——按 id 裸删会留下孤儿关系。
 
     @Query("SELECT * FROM book_character_relations WHERE bookUrl = :bookUrl ORDER BY sortOrder ASC, id ASC")
     fun relations(bookUrl: String): List<BookCharacterRelation>

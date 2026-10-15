@@ -15,21 +15,8 @@ interface AiReadAloudRoleCacheDao {
     @Query("SELECT * FROM ai_read_aloud_role_caches WHERE bookUrl = :bookUrl")
     fun listByBook(bookUrl: String): List<AiReadAloudRoleCache>
 
-    @Query(
-        """
-        SELECT * FROM ai_read_aloud_role_caches
-        WHERE bookUrl = :bookUrl
-          AND chapterIndex = :chapterIndex
-          AND status = :status
-        ORDER BY updatedAt DESC
-        LIMIT 1
-        """
-    )
-    fun latestByChapter(
-        bookUrl: String,
-        chapterIndex: Int,
-        status: String = AiReadAloudRoleCache.STATUS_SUCCESS
-    ): AiReadAloudRoleCache?
+    // B25 退役（2026-10-16）：`latestByChapter`（按 status 取最近一条）零调用，
+    // 活替代＝`latestUsableByChapter`（同章节、口径更宽：非 success 也回退可用缓存）。
 
     @Query(
         """
@@ -48,25 +35,8 @@ interface AiReadAloudRoleCacheDao {
         chapterIndex: Int
     ): AiReadAloudRoleCache?
 
-    @Query(
-        """
-        SELECT * FROM ai_read_aloud_role_caches
-        WHERE bookUrl = :bookUrl
-          AND chapterIndex = :chapterIndex
-          AND contentHash = :contentHash
-          AND status = 'success'
-          AND segmentsJson != ''
-          AND mode LIKE '%' || :preprocessVersion || '%'
-        ORDER BY updatedAt DESC
-        LIMIT 1
-        """
-    )
-    fun latestSuccessByChapterContent(
-        bookUrl: String,
-        chapterIndex: Int,
-        contentHash: String,
-        preprocessVersion: String
-    ): AiReadAloudRoleCache?
+    // B25 退役（2026-10-16）：`latestSuccessByChapterContent`（同条件 `LIMIT 1`）零调用，
+    // 活替代＝下方 `successCandidatesByChapterContent`（同筛选条件，`LIMIT 20` 供上层择优）。
 
     @Query(
         """

@@ -23,22 +23,9 @@ interface UrlRecordDao {
     )
     fun flowSearch(keyword: String): Flow<List<UrlRecord>>
 
-    @Query("select * from url_records where domain = :domain order by timestamp desc limit 2000")
-    fun flowByDomain(domain: String): Flow<List<UrlRecord>>
-
-    @Query("select * from url_records where sourceName = :sourceName order by timestamp desc limit 2000")
-    fun flowBySourceName(sourceName: String): Flow<List<UrlRecord>>
-
-    @Query("select * from url_records where method = :method order by timestamp desc limit 2000")
-    fun flowByMethod(method: String): Flow<List<UrlRecord>>
-
-    @Query(
-        """select * from url_records
-        where (:success = 1 and responseCode between 200 and 299)
-           or (:success = 0 and (responseCode < 200 or responseCode >= 300))
-        order by timestamp desc limit 2000"""
-    )
-    fun flowByStatus(success: Boolean): Flow<List<UrlRecord>>
+    // B25 退役（2026-10-16）：`flowByDomain`/`flowBySourceName`/`flowByMethod`/`flowByStatus` 四个窄查询
+    // 全仓零调用（含 test/androidTest），活替代＝`flowFilter`（同表 + 同 `limit 2000` 的超集，
+    // `UrlRecordActivity` 统一走它做组合筛选）；保留四个窄查询只会形成「同一筛选两处实现」。
 
     @Query("select distinct domain from url_records order by domain")
     fun flowAllDomains(): Flow<List<String>>
@@ -71,9 +58,6 @@ interface UrlRecordDao {
 
     @Query("select * from url_records where domain = :domain order by timestamp desc")
     fun getByDomain(domain: String): List<UrlRecord>
-
-    @Query("select * from url_records where sourceName = :sourceName order by timestamp desc")
-    fun getBySourceName(sourceName: String): List<UrlRecord>
 
     @Query(
         """select * from url_records
