@@ -696,11 +696,6 @@ class AnalyzeUrl(
         }
     }
 
-    private fun extractHostFromUrl(url: String): String? {
-        return AppPattern.domainRegex.find(url)?.groupValues?.getOrNull(1)
-    }
-
-
     fun getResponse(): Response {
         return runBlocking(coroutineContext) {
             getResponseAwait()
@@ -811,22 +806,6 @@ class AnalyzeUrl(
             headerMap[CookieManager.cookieJarHeader] = "1"
         } else {
             headerMap.remove(CookieManager.cookieJarHeader)
-        }
-    }
-
-    /**
-     * 保存cookieJar中的cookie在访问结束时就保存,不等到下次访问
-     */
-    private fun saveCookie() {
-        //书源启用保存cookie时 添加内存中的cookie到数据库
-        if (enabledCookieJar) {
-            val key = "${domain}_cookieJar"
-            CacheManager.getFromMemory(key)?.let {
-                if (it is String) {
-                    CookieStore.replaceCookie(domain, it)
-                    CacheManager.deleteMemory(key)
-                }
-            }
         }
     }
 

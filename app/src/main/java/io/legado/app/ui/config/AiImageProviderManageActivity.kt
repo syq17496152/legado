@@ -15,6 +15,7 @@ import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.ai.AiImageProviderConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -75,18 +76,21 @@ class AiImageProviderManageActivity : BaseActivity<ViewBinding>() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.root.attachComposeContent {
-            AiImageProviderManageScreen(
-                providers = providersState.value,
-                currentProviderId = currentProviderIdState.value,
-                onBack = { finish() },
-                onImportRules = { showImportActions() },
-                onExportRules = { exportAllRules() },
-                onAdd = { showAddSelector() },
-                onOpenProvider = { provider ->
-                    openEdit(AiImageProviderEditActivity.newIntent(this, provider.id, provider.type))
-                },
-                providerActions = ::providerActions
-            )
+            // G-37/K1：宿主入口内容必须在应用主题作用域内（此前顶层无作用域，取色会脱离主题体系）
+            LegadoTheme {
+                AiImageProviderManageScreen(
+                    providers = providersState.value,
+                    currentProviderId = currentProviderIdState.value,
+                    onBack = { finish() },
+                    onImportRules = { showImportActions() },
+                    onExportRules = { exportAllRules() },
+                    onAdd = { showAddSelector() },
+                    onOpenProvider = { provider ->
+                        openEdit(AiImageProviderEditActivity.newIntent(this, provider.id, provider.type))
+                    },
+                    providerActions = ::providerActions
+                )
+            }
         }
     }
 
@@ -182,54 +186,6 @@ class AiImageProviderManageActivity : BaseActivity<ViewBinding>() {
                     onClick = { confirmDelete(provider) }
                 )
             )
-        }
-    }
-
-    private fun showActions(provider: AiImageProviderConfig) {
-        val isJsRule = provider.type == AiImageProviderConfig.TYPE_JS
-        val isCurrent = provider.id == AppConfig.aiCurrentImageProviderId
-        val actions = buildList {
-            if (!isCurrent) add("设为当前生图模型")
-            add(getString(if (provider.enabled) R.string.disable else R.string.enable))
-            add(getString(R.string.edit))
-            if (isJsRule) {
-                add("导出规则")
-                add("复制规则")
-            }
-            add(getString(R.string.delete))
-        }
-        showComposeActionListDialog(
-            title = provider.displayName(),
-            labels = actions,
-            dangerIndices = setOf(actions.lastIndex)
-        ) { index ->
-            when (actions.getOrNull(index)) {
-                "设为当前生图模型" -> {
-                    if (!provider.enabled) {
-                        toastOnUi("请先启用该生图模型")
-                    } else {
-                        AppConfig.aiCurrentImageProviderId = provider.id
-                        notifyAiConfigChanged()
-                        reload()
-                        toastOnUi("已设为当前生图模型")
-                    }
-                }
-                getString(if (provider.enabled) R.string.disable else R.string.enable) -> {
-                    AppConfig.aiImageProviderList = AppConfig.aiImageProviderList.map {
-                        if (it.id == provider.id) it.copy(enabled = !it.enabled) else it
-                    }
-                    notifyAiConfigChanged()
-                    reload()
-                }
-                getString(R.string.edit) ->
-                    openEdit(AiImageProviderEditActivity.newIntent(this, provider.id, provider.type))
-                "导出规则" -> exportRule(provider)
-                "复制规则" -> {
-                    sendToClip(serializeRule(provider))
-                    toastOnUi(R.string.copy_complete)
-                }
-                getString(R.string.delete) -> confirmDelete(provider)
-            }
         }
     }
 

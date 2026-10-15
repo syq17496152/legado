@@ -1782,17 +1782,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         )
     }
 
-    private fun showShareNoteTemplateDialog(selection: String) {
-        val text = selection.trim()
-        if (text.isBlank()) return
-        showDialogFragment(
-            ShareNoteTemplateSelectDialog.create(
-                onSelected = { entry -> shareSelectionAsNoteImage(text, entry) },
-                onManage = { startActivity<ShareNoteTemplateManageActivity>() }
-            )
-        )
-    }
-
     private fun showShareNotePreviewOverlay(selection: String) {
         val text = selection.trim()
         if (text.isBlank()) return
@@ -1987,28 +1976,6 @@ class ReadBookActivity : BaseReadBookActivity(),
                 isLocal -> getString(R.string.local)
                 else -> ""
             }
-    }
-
-    private fun shareSelectionAsNoteImage(
-        text: String,
-        entry: ShareNoteTemplateManager.Entry
-    ) {
-        val payload = buildShareNotePayload(text)
-        lifecycleScope.launch {
-            toastOnUi("正在生成分享图片")
-            kotlin.runCatching {
-                ShareNoteImageRenderer.renderShareImage(this@ReadBookActivity, entry, payload)
-            }.onSuccess { file ->
-                kotlin.runCatching {
-                    share(file, "image/png")
-                }.onFailure {
-                    toastOnUi(it.localizedMessage ?: getString(R.string.error))
-                }
-            }.onFailure {
-                AppLog.put("摘录分享图片生成失败\n${it.localizedMessage}", it, true)
-                toastOnUi(it.localizedMessage ?: getString(R.string.error))
-            }
-        }
     }
 
     private fun currentShareNoteChapterTitle(): String {

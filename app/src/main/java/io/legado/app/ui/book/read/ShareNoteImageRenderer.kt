@@ -146,55 +146,6 @@ object ShareNoteImageRenderer {
         val height: Int
     )
 
-    suspend fun renderShareImage(
-        context: Context,
-        entry: ShareNoteTemplateManager.Entry,
-        payload: Payload,
-        style: ShareNoteTemplateManager.ShareStyle = ShareNoteTemplateManager.currentStyle()
-    ): File = renderMutex.withLock {
-        runCatching {
-            val result = withContext(Dispatchers.Main) {
-                val webView = WebView(context).apply {
-                    configureWebView(this)
-                    visibility = View.VISIBLE
-                }
-                try {
-                    renderHtmlToPngFileWithFallback(
-                        context = context,
-                        webView = webView,
-                        entry = entry,
-                        payload = payload,
-                        targetWidth = initialWidth(entry),
-                        style = style
-                    )
-                } finally {
-                    webView.stopLoading()
-                    webView.destroy()
-                }
-            }
-            return@withLock result.file
-        }.onFailure {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
-            if (it is VirtualMachineError || it is ThreadDeath || it is LinkageError) throw it
-        }
-
-        val bitmap = withContext(Dispatchers.Main) {
-            val width = initialWidth(entry)
-            val webView = WebView(context).apply {
-                configureWebView(this)
-                visibility = View.VISIBLE
-            }
-            try {
-                loadInto(webView, entry, payload, width, style)
-                drawWebViewToBitmap(webView, MAX_FALLBACK_EXPORT_PIXELS)
-            } finally {
-                webView.stopLoading()
-                webView.destroy()
-            }
-        }
-        writeBitmapToCache(context, bitmap)
-    }
-
     suspend fun renderMountedWebView(
         context: Context,
         webView: WebView,

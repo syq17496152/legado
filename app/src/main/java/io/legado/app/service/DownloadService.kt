@@ -705,8 +705,6 @@ class DownloadService : BaseService() {
         }
     }
 
-    private fun sanitizeFileName(name: String): String = sanitizeDownloadName(name)
-
     private fun resolveFileName(raw: String?, url: String, taskType: DownloadTaskType): String =
         resolveVideoFileName(raw, url, DOWNLOAD_VIDEO_EXTS)
 

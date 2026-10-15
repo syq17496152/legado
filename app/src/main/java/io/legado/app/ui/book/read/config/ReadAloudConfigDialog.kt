@@ -65,6 +65,7 @@ import io.legado.app.ui.config.compose.SettingChoiceSpec
 import io.legado.app.ui.config.compose.SettingItemSpec
 import io.legado.app.ui.config.compose.SettingSliderSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
@@ -209,8 +210,11 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
-                    ReadAloudConfigPanel()
+                // G-37/K1：宿主入口内容必须在应用主题作用域内（LegadoComposeTheme 只透传字体，不算作用域）
+                LegadoTheme {
+                    LegadoComposeTheme {
+                        ReadAloudConfigPanel()
+                    }
                 }
             }
         }
@@ -1018,32 +1022,6 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         return modelLabel(AppConfig.aiModelConfigList.firstOrNull { it.id == modelId })
     }
 
-    private fun showAiRoleModelDialog() {
-        val models = AppConfig.aiModelConfigList
-        if (models.isEmpty()) {
-            toastOnUi(R.string.ai_no_models)
-            return
-        }
-        val providerNameMap = AppConfig.aiProviderList.associateBy({ it.id }, { it.name })
-        val labels = models.map { model ->
-            val label = providerNameMap[model.providerId]?.takeIf { it.isNotBlank() }
-                ?.let { "${model.modelId} - $it" }
-                ?: model.modelId
-            if (model.id == AppConfig.aiReadAloudRoleModelId) "$label ✓" else label
-        }
-        showComposeChoiceListDialog(
-            title = "多角色模型",
-            labels = labels,
-            selectedIndex = models.indexOfFirst { it.id == AppConfig.aiReadAloudRoleModelId }
-        ) { index ->
-            models.getOrNull(index)?.let { model ->
-                AppConfig.aiReadAloudRoleModelId = model.id
-                updateAiRolePreferences()
-                selectGroup(selectedGroup)
-            }
-        }
-    }
-
     private fun modelLabel(model: io.legado.app.ui.main.ai.AiModelConfig?): String {
         model ?: return "未配置"
         val providerName = AppConfig.aiProviderList.firstOrNull { it.id == model.providerId }
@@ -1456,10 +1434,6 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             .filter { it.isNotBlank() }
             .distinct()
             .toList()
-    }
-
-    private fun showAiRolePromptDialog() {
-        showMultiRolePromptDialog()
     }
 
     @Composable
