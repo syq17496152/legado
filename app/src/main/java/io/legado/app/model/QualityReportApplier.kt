@@ -111,7 +111,38 @@ object QualityReportApplier {
         suspect: Boolean,
         checkDomain: Boolean,
     ) {
+        if (suspect) return
+        // 先清本轮"自有结论但非失效口径"的诊断组，再加本轮失败组（顺序即语义，见 groupsToClear）
+        groupsToClear(dims).forEach { source.removeGroup(it) }
         failureGroupNames(dims, failureKind, suspect, checkDomain).forEach { source.addGroup(it) }
+    }
+
+    /**
+     * 本轮判定的**待清空诊断组**（纯函数，JVM 可测）。
+     *
+     * 为什么单列：`BookSource.getInvalidGroupNames()` 只认「失效」子串与「校验超时」，故
+     * [SourceCheckGroups.SEARCH_URL_EMPTY] / [SourceCheckGroups.DISCOVERY_RULE_EMPTY]（"…规则为空"）
+     * **不在** `removeInvalidGroups()` 的清除范围内。而它们同样是"每轮结论"（规则补齐后必须消失），
+     * 否则会作为**分组标签**永久残留 —— 既污染用户在源列表/分组筛选里看到的标签（"失效"筛选键
+     * 与自定义分组词表同池），也让下一轮按分组口径做的统计把陈旧"规则为空"当真。
+     *
+     * 收敛背景（缺口2）：旧 `CheckSourceService` 内联曾在自己分支里显式 `removeGroup` 这两组，
+     * 换成共享编排后若不带此步即为**行为回归**；本函数把该语义并入唯一编排，服务侧与体检侧一致受益。
+     *
+     * 口径（严格对齐旧内联）：仅当该维度**本轮已检且规则非空**（`PASS`/`FAIL`）才清；
+     * 未校验（校验开关关闭 ⇒ `NOT_CHECKED`）或本身规则为空（⇒ `NOT_APPLICABLE`）时保持原位。
+     */
+    internal fun groupsToClear(dims: Map<QualityDim, DimState?>): List<String> {
+        val names = ArrayList<String>(2)
+        val search = dims[QualityDim.SEARCH]
+        if (search == DimState.PASS || search == DimState.FAIL) {
+            names.add(SourceCheckGroups.SEARCH_URL_EMPTY)
+        }
+        val discovery = dims[QualityDim.DISCOVERY]
+        if (discovery == DimState.PASS || discovery == DimState.FAIL) {
+            names.add(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
+        }
+        return names
     }
 
     /**

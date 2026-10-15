@@ -29,7 +29,7 @@ import io.legado.app.model.Debug
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
 import io.legado.app.model.QualityReportApplier
-import io.legado.app.model.SourceCheckGroups
+import io.legado.app.model.FailureKind
 import io.legado.app.model.SuspectReason
 import io.legado.app.model.sampleProbeChapters
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -181,6 +181,10 @@ class CheckSourceService : BaseService() {
             // 否则用户按「失败/失效」筛选时会误删这些其实可用的源
             val skipLabel = suspectSkipLabel(SourceQualityChecker.staticSuspectsOf(source))
             if (skipLabel != null) {
+                // 存疑放行须**同时清掉本轮已写下的失效分组**：探测中已按维度写过组（如域名不可达 / 搜索失效
+                // 恰为最终 throw 触发点）后，本轮会被判「跳过·存疑」，若不清则源上残留"失效"标签，
+                // 与「存疑不写失效分组」的判定自相矛盾（用户按「失效」筛选时会误删可用源）
+                source.removeInvalidGroups()
                 Debug.updateFinalMessage(
                     source.bookSourceUrl,
                     "跳过:$skipLabel ${it.localizedMessage.orEmpty()}".trim()
@@ -253,11 +257,12 @@ class CheckSourceService : BaseService() {
             }
             result = result.copy(domainReachable = reachable, realHost = host)
             if (reachable) {
-                source.removeGroup(SourceCheckGroups.DOMAIN_FAIL)
                 // 回填真实域名到lastHost,UI分组用此字段优先于源URL截取
+                // （可达无需清「域名失效」组：本轮开头 removeInvalidGroups() 已清空历史失效组）
                 if (!host.isNullOrBlank()) source.lastHost = host
             } else {
-                source.addGroup(SourceCheckGroups.DOMAIN_FAIL)
+                // 域名失效分组交共享编排统一回填（与体检侧同调，缺口2 收敛），随后终止本轮
+                applyGroupsFromResult(source, result)
                 source.weight = 0
                 throw NoStackTraceException("源地址不可访问")
             }
@@ -324,56 +329,7 @@ class CheckSourceService : BaseService() {
             val searchResult = searchDeferred.await()
             val discoveryResult = discoveryDeferred.await()
 
-            // 串行更新分组(避免竞态) - 搜索维度
-            if (searchResult.searchChecked) {
-                if (searchResult.searchUrlEmpty) {
-                    source.addGroup(SourceCheckGroups.SEARCH_URL_EMPTY)
-                } else {
-                    source.removeGroup(SourceCheckGroups.SEARCH_URL_EMPTY)
-                    if (searchResult.searchSuccess) {
-                        source.removeGroup(SourceCheckGroups.SEARCH_FAIL)
-                        // checkBook 结果分组（搜索来源）
-                        if (searchResult.searchCategorySuccess) {
-                            source.removeGroup(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
-                        } else {
-                            source.addGroup(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
-                        }
-                        if (searchResult.searchContentSuccess) {
-                            source.removeGroup(SourceCheckGroups.SEARCH_CONTENT_FAIL)
-                        } else {
-                            source.addGroup(SourceCheckGroups.SEARCH_CONTENT_FAIL)
-                        }
-                    } else {
-                        source.addGroup(SourceCheckGroups.SEARCH_FAIL)
-                    }
-                }
-            }
-            // 串行更新分组 - 发现维度
-            if (discoveryResult.discoveryChecked) {
-                if (discoveryResult.discoveryRuleEmpty) {
-                    source.addGroup(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
-                } else {
-                    source.removeGroup(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
-                    if (discoveryResult.discoverySuccess) {
-                        source.removeGroup(SourceCheckGroups.DISCOVERY_FAIL)
-                        // checkBook 结果分组（发现来源）
-                        if (discoveryResult.discoveryCategorySuccess) {
-                            source.removeGroup(SourceCheckGroups.DISCOVERY_CATEGORY_FAIL)
-                        } else {
-                            source.addGroup(SourceCheckGroups.DISCOVERY_CATEGORY_FAIL)
-                        }
-                        if (discoveryResult.discoveryContentSuccess) {
-                            source.removeGroup(SourceCheckGroups.DISCOVERY_CONTENT_FAIL)
-                        } else {
-                            source.addGroup(SourceCheckGroups.DISCOVERY_CONTENT_FAIL)
-                        }
-                    } else {
-                        source.addGroup(SourceCheckGroups.DISCOVERY_FAIL)
-                    }
-                }
-            }
-
-            // 合并结果用于权重计算
+            // 合并结果：分组回填（下一段）与权重计算共用同一份结果
             result = result.copy(
                 searchChecked = searchResult.searchChecked,
                 searchUrlEmpty = searchResult.searchUrlEmpty,
@@ -392,6 +348,10 @@ class CheckSourceService : BaseService() {
             )
         }
 
+        // 失效分组回填：唯一编排＝QualityReportApplier（与体检侧同源同调，缺口2 收敛）。
+        // 旧写法此处有约 50 行内联 add/removeGroup，靠"与体检侧逐字一致"维系 ⇒ 已收口。
+        applyGroupsFromResult(source, result)
+
         // 权重计算（基于关键元素获取结果，Phase 6 重构）
         source.weight = SourceWeightCalculator.calculateBookWeightFromResult(
             result, CheckSource.checkDomain
@@ -400,6 +360,26 @@ class CheckSourceService : BaseService() {
         if (finalCheckMessage.isNotBlank()) {
             throw NoStackTraceException(finalCheckMessage)
         }
+    }
+
+    /**
+     * 本轮探测结果 → 失效分组回填（**共享编排入口**）。
+     *
+     * 结论形态（`BookCheckResult`）经唯一适配器 [QualityReportApplier.bookResultToDimStates] 映射为
+     * 维度态，再交 [QualityReportApplier.applyBookGroupsFromDims] 写组 —— 与体检侧
+     * （`QualityReportApplier.applyBookReports`）走同一实现，杜绝两份"加组规则"漂移。
+     *
+     * `failureKind = NONE`：本阶段是"维度判定"路径，非异常归因路径（异常归因由 `checkSource` 的
+     * onFailure 分支用 [checkFailureGroupName] 处理）。
+     */
+    private fun applyGroupsFromResult(source: BookSource, result: BookCheckResult) {
+        QualityReportApplier.applyBookGroupsFromDims(
+            source = source,
+            dims = QualityReportApplier.bookResultToDimStates(result),
+            failureKind = FailureKind.NONE,
+            suspect = false,
+            checkDomain = CheckSource.checkDomain,
+        )
     }
 
     /**
