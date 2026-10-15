@@ -1605,65 +1605,6 @@ object AiChatService {
         ).any { content.contains(it) }
     }
 
-    private fun parseAssistantTurn(response: JSONObject): AiAgentAssistantTurn {
-        val message = response.optJSONArray("choices")
-            ?.optJSONObject(0)
-            ?.optJSONObject("message")
-            ?: JSONObject()
-        val content = extractContentText(message.opt("content"))
-        val reasoningContent = extractContentText(message.opt("reasoning_content"))
-            .ifBlank { extractContentText(message.opt("reasoning")) }
-            .ifBlank { extractContentText(message.opt("thinking")) }
-        val toolCalls = buildList {
-            val array = message.optJSONArray("tool_calls") ?: JSONArray()
-            for (index in 0 until array.length()) {
-                val toolCall = array.optJSONObject(index) ?: continue
-                val function = toolCall.optJSONObject("function") ?: continue
-                add(
-                    AiAgentToolCall(
-                        id = toolCall.optJsonString("id").ifBlank { "call_$index" },
-                        name = function.optJsonString("name"),
-                        arguments = extractToolArguments(function.opt("arguments"))
-                    )
-                )
-            }
-        }
-        return AiAgentAssistantTurn(
-            content = content,
-            toolCalls = toolCalls,
-            rawMessage = JSONObject().apply {
-                put("role", "assistant")
-                put("content", if (content.isBlank()) JSONObject.NULL else content)
-                if (reasoningContent.isNotBlank()) {
-                    put("reasoning_content", reasoningContent)
-                }
-                if (toolCalls.isNotEmpty()) {
-                    put(
-                        "tool_calls",
-                        JSONArray().apply {
-                            toolCalls.forEach { toolCall ->
-                                put(
-                                    JSONObject().apply {
-                                        put("id", toolCall.id)
-                                        put("type", "function")
-                                        put(
-                                            "function",
-                                            JSONObject().apply {
-                                                put("name", toolCall.name)
-                                                put("arguments", toolCall.arguments)
-                                            }
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                    )
-                }
-            },
-            reasoningContent = reasoningContent
-        )
-    }
-
     fun parseCustomHeaders(rawHeaders: String): Map<String, String> {
         val text = rawHeaders.trim()
         if (text.isBlank()) return emptyMap()
