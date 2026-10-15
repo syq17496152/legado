@@ -6,6 +6,9 @@ import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
 import io.legado.app.exception.NoStackTraceException
+import kotlinx.coroutines.TimeoutCancellationException
+import com.script.ScriptException
+import org.mozilla.javascript.WrappedException
 
 /**
  * quality-check-unify：体检报告 → 旧"校验所选"结果落库桥接层
@@ -92,48 +95,79 @@ object QualityReportApplier {
     }
 
     /**
-     * 分组回填（先清后加由调用方保证）：按维度 FAIL 加旧分组名
-     * failureKind 细分优先（超时/js/网站），与旧服务 catch 分类一致
+     * 分组回填（**唯一编排**；先清后加由调用方保证）：由**维度态 + 失败归因**驱动。
+     *
+     * 服务侧（`CheckSourceService`）与体检侧（本层 report 路径）共用同一实现 —— 缺口2 收敛：
+     * 旧服务曾自带一份等价 but 独立维护的分组回填逻辑，两侧靠"逐字一致"维系。
+     *
+     * @param dims 各维度结论态（缺项/`NOT_CHECKED` 一律不加组）
+     * @param failureKind 例外路径归因（`TIMEOUT/SCRIPT/NETWORK` 短路为单一分组；`NONE` 走维度判定）
+     * @param suspect 存疑放行（宽松档）：**不写任何失效分组**，防误伤
      */
-    private fun applyBookGroups(source: BookSource, report: SourceQualityReport, checkDomain: Boolean) {
-        if (report.suspect) return // 存疑放行：宽松档不误伤
-        when (report.failureKind) {
-            FailureKind.TIMEOUT -> {
-                source.addGroup(SourceCheckGroups.CHECK_TIMEOUT)
-                return
-            }
-            FailureKind.SCRIPT -> {
-                source.addGroup(SourceCheckGroups.SCRIPT_FAIL)
-                return
-            }
-            FailureKind.NETWORK -> {
-                source.addGroup(SourceCheckGroups.SITE_FAIL)
-                return
-            }
+    internal fun applyBookGroupsFromDims(
+        source: BookSource,
+        dims: Map<QualityDim, DimState?>,
+        failureKind: FailureKind,
+        suspect: Boolean,
+        checkDomain: Boolean,
+    ) {
+        failureGroupNames(dims, failureKind, suspect, checkDomain).forEach { source.addGroup(it) }
+    }
+
+    /**
+     * 维度/归因 → 失败分组名清单（**纯函数，无副作用**）—— 编排的可测内核。
+     *
+     * `applyBookGroupsFromDims` 仅负责把本函数结果逐个 `addGroup`；把"算名字"与"写库"拆开，
+     * 使判定可在 JVM 直接断言（旧写法把名字计算埋在 `source.addGroup` 副作用里，测试构型下
+     * 分组字段的多组累积语义不可靠 ⇒ 断言不稳）。
+     *
+     * 顺序即写入顺序（调用方按序 addGroup），suspect/无失败一律空清单。
+     */
+    internal fun failureGroupNames(
+        dims: Map<QualityDim, DimState?>,
+        failureKind: FailureKind,
+        suspect: Boolean,
+        checkDomain: Boolean,
+    ): List<String> {
+        if (suspect) return emptyList()
+        when (failureKind) {
+            FailureKind.TIMEOUT -> return listOf(SourceCheckGroups.CHECK_TIMEOUT)
+            FailureKind.SCRIPT -> return listOf(SourceCheckGroups.SCRIPT_FAIL)
+            FailureKind.NETWORK -> return listOf(SourceCheckGroups.SITE_FAIL)
             else -> Unit
         }
-        val dims = report.dimensions
-        if (checkDomain && dims[QualityDim.DOMAIN]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.DOMAIN_FAIL)
+        val names = ArrayList<String>(4)
+        if (checkDomain && dims[QualityDim.DOMAIN] == DimState.FAIL) {
+            names.add(SourceCheckGroups.DOMAIN_FAIL)
         }
-        when (dims[QualityDim.SEARCH]?.state) {
-            DimState.NOT_APPLICABLE -> source.addGroup(SourceCheckGroups.SEARCH_URL_EMPTY)
-            DimState.FAIL -> source.addGroup(SourceCheckGroups.SEARCH_FAIL)
+        when (dims[QualityDim.SEARCH]) {
+            DimState.NOT_APPLICABLE -> names.add(SourceCheckGroups.SEARCH_URL_EMPTY)
+            DimState.FAIL -> names.add(SourceCheckGroups.SEARCH_FAIL)
             else -> Unit
         }
-        if (dims[QualityDim.DISCOVERY]?.state == DimState.NOT_APPLICABLE) {
-            source.addGroup(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
-        } else if (dims[QualityDim.DISCOVERY]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.DISCOVERY_FAIL)
+        when (dims[QualityDim.DISCOVERY]) {
+            DimState.NOT_APPLICABLE -> names.add(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
+            DimState.FAIL -> names.add(SourceCheckGroups.DISCOVERY_FAIL)
+            else -> Unit
         }
         // 目录/正文维度来自搜索来源首本书（体检探测形态），对应旧服务"搜索目录/正文失效"
-        if (dims[QualityDim.CATEGORY]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
+        if (dims[QualityDim.CATEGORY] == DimState.FAIL) {
+            names.add(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
         }
-        if (dims[QualityDim.CONTENT]?.state == DimState.FAIL) {
-            source.addGroup(SourceCheckGroups.SEARCH_CONTENT_FAIL)
+        if (dims[QualityDim.CONTENT] == DimState.FAIL) {
+            names.add(SourceCheckGroups.SEARCH_CONTENT_FAIL)
         }
+        return names
     }
+
+    private fun applyBookGroups(source: BookSource, report: SourceQualityReport, checkDomain: Boolean) =
+        applyBookGroupsFromDims(
+            source = source,
+            dims = report.dimensions.mapValues { it.value.state },
+            failureKind = report.failureKind,
+            suspect = report.suspect,
+            checkDomain = checkDomain,
+        )
 
     /** 失败注释：复用旧服务注释格式（// Error: 前缀），证据取失败维度 evidence */
     private fun appendBookErrorComment(source: BookSource, report: SourceQualityReport) {
@@ -146,10 +180,28 @@ object QualityReportApplier {
         source.addErrorComment(NoStackTraceException(evidence))
     }
 
-    private fun failureKindText(kind: FailureKind): String? = when (kind) {
-        FailureKind.TIMEOUT -> "校验超时"
-        FailureKind.SCRIPT -> "js失效"
-        FailureKind.NETWORK -> "网站失效"
+    /** 归因 → 证据文案：**与分组名同源**（三态词表唯一），避免两处各写一份 */
+    private fun failureKindText(kind: FailureKind): String? = failureKindGroup(kind)
+
+    /**
+     * 失败归因**唯一分类器**（纯函数，JVM 可测；服务侧与体检侧共用 —— 缺口2 收敛）。
+     *
+     * 口径：超时 → `TIMEOUT`；脚本异常（`ScriptException`/Rhino `WrappedException`）→ `SCRIPT`；
+     * **业务异常（`NoStackTraceException` 家族）→ `NONE`**（引擎侧已给明确结论，不能再打"网站失效"）；
+     * 其余（网络/解析）→ `NETWORK`。
+     */
+    internal fun failureKindOf(e: Throwable): FailureKind = when (e) {
+        is TimeoutCancellationException -> FailureKind.TIMEOUT
+        is ScriptException, is WrappedException -> FailureKind.SCRIPT
+        !is NoStackTraceException -> FailureKind.NETWORK
+        else -> FailureKind.NONE
+    }
+
+    /** 归因 → 失效分组名（`null` = 不加分组）：分组名取自单源 [SourceCheckGroups] */
+    internal fun failureKindGroup(kind: FailureKind): String? = when (kind) {
+        FailureKind.TIMEOUT -> SourceCheckGroups.CHECK_TIMEOUT
+        FailureKind.SCRIPT -> SourceCheckGroups.SCRIPT_FAIL
+        FailureKind.NETWORK -> SourceCheckGroups.SITE_FAIL
         else -> null
     }
 

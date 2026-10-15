@@ -28,6 +28,7 @@ import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
+import io.legado.app.model.QualityReportApplier
 import io.legado.app.model.SourceCheckGroups
 import io.legado.app.model.SuspectReason
 import io.legado.app.model.sampleProbeChapters
@@ -511,12 +512,8 @@ class CheckSourceService : BaseService() {
  *    此处若再打「网站失效」会把可用源误标成死站（NEW-21 同族误判）
  *  · 其余（网络/解析类）→ 「网站失效」
  */
-internal fun checkFailureGroupName(e: Throwable): String? = when (e) {
-    is TimeoutCancellationException -> SourceCheckGroups.CHECK_TIMEOUT
-    is ScriptException, is WrappedException -> SourceCheckGroups.SCRIPT_FAIL
-    !is NoStackTraceException -> SourceCheckGroups.SITE_FAIL
-    else -> null
-}
+internal fun checkFailureGroupName(e: Throwable): String? =
+    QualityReportApplier.failureKindGroup(QualityReportApplier.failureKindOf(e))
 
 /**
  * 「存疑源」跳过口径（**与质检底座 [SuspectReason] 同源**，纯函数、JVM 可测）。
