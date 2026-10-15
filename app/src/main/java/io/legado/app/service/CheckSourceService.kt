@@ -28,6 +28,7 @@ import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
+import io.legado.app.model.sampleProbeChapters
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.model.webBook.WebBook
@@ -414,10 +415,19 @@ class CheckSourceService : BaseService() {
             }
             // 校验目录
             markStage(source, CheckSourceStage.CATALOG)
-            val toc = WebBook.getChapterListAwait(source, book).getOrThrow().asSequence()
-                .filter { !(it.isVolume && it.url.startsWith(it.title)) }
-                .take(2)
-                .toList()
+            val toc = sampleProbeChapters(
+                WebBook.getChapterListAwait(source, book).getOrThrow()
+            )
+            if (toc.isEmpty()) {
+                // NEW-21：目录条目**全为卷标题占位**时取样为空 ⇒ 判「目录失效」。
+                // 此处若沿用 `first()` 会抛 NoSuchElementException，被上游 when 归为「网站失效」
+                // ⇒ 可用源被写成死站。空目录本身由引擎抛 TocEmptyException，走外层 catch 同口径。
+                return CheckBookDetailResult(
+                    infoSuccess = infoSuccess,
+                    categorySuccess = false,
+                    contentSuccess = false
+                )
+            }
             categorySuccess = true
 
             val nextChapterUrl = toc.getOrNull(1)?.url ?: toc.first().url

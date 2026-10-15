@@ -531,10 +531,9 @@ object SourceQualityChecker {
             return
         }
         val tocResult = kotlin.runCatching {
-            WebBook.getChapterListAwait(source, book).getOrThrow().asSequence()
-                .filter { !(it.isVolume && it.url.startsWith(it.title)) }
-                .take(2)
-                .toList()
+            // NEW-21：取样口径与「校验书源」链路收敛为同一实现（sampleProbeChapters），
+            // 两处曾各写一份过滤规则 ⇒ 其中一处漏了空守卫（详见该函数 KDoc）
+            sampleProbeChapters(WebBook.getChapterListAwait(source, book).getOrThrow())
         }
         val toc = tocResult.getOrNull()
         if (toc.isNullOrEmpty()) {
