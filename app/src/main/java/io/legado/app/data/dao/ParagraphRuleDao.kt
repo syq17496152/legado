@@ -52,8 +52,8 @@ interface ParagraphRuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertBookRule(rule: BookParagraphRule)
 
-    @Update
-    fun updateBookRule(rule: BookParagraphRule)
+    // B27 退役（2026-10-16）：`updateBookRule` 零调用 ⇒ 活路径＝`RuleKernel` 的「先删后插」
+    // （`deleteBookRule` + `insertBookRule`，二者均在下方且在用）。
 
     @Query("DELETE FROM book_paragraph_rules WHERE bookUrl = :bookUrl AND ruleId = :ruleId")
     fun deleteBookRule(bookUrl: String, ruleId: Long)

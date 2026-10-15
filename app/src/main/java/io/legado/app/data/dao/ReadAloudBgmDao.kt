@@ -22,11 +22,9 @@ interface ReadAloudBgmDao {
     @Query("SELECT * FROM read_aloud_bgm_groups WHERE assetType = :assetType ORDER BY sortOrder ASC, id ASC")
     fun groupsByType(assetType: String): List<ReadAloudBgmGroup>
 
-    @Query("SELECT * FROM read_aloud_bgm_tracks ORDER BY groupId ASC, sortOrder ASC, id ASC")
-    fun flowTracks(): Flow<List<ReadAloudBgmTrack>>
-
-    @Query("SELECT * FROM read_aloud_bgm_tracks WHERE assetType = :assetType ORDER BY groupId ASC, sortOrder ASC, id ASC")
-    fun flowTracksByType(assetType: String): Flow<List<ReadAloudBgmTrack>>
+    // B27 退役（2026-10-16）：`flowTracks()` / `flowTracksByType()`（Flow 读取变体）零调用 ⇒
+    // 活读取面＝`tracksByType()` / `enabledTracks()` / `track(id)`（List 版，`ReadAloudBgmManageActivity`、
+    // `TtsKernel` 在用）—— 与 B25「Flow 版 vs List 版同 SQL」同判据。
 
     @Query("SELECT * FROM read_aloud_bgm_tracks WHERE assetType = :assetType ORDER BY groupId ASC, sortOrder ASC, id ASC")
     fun tracksByType(assetType: String): List<ReadAloudBgmTrack>

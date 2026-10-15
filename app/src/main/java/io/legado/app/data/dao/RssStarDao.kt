@@ -30,8 +30,8 @@ interface RssStarDao {
     @Query("select * from rssStars where origin = :origin and link = :link")
     fun get(origin: String, link: String): RssStar?
 
-    @Query("select * from rssStars order by starTime desc")
-    fun liveAll(): Flow<List<RssStar>>
+    // B27 退役（2026-10-16）：`liveAll()`（全表 Flow）零调用 ⇒ 活读取面＝`all`（@get:Query List）
+    // 与 `flowByGroup(group)`（列表主查询，已按需裁剪大字段）。
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg rssStar: RssStar)

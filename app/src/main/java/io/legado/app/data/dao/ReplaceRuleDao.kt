@@ -86,8 +86,8 @@ interface ReplaceRuleDao {
     @get:Query("SELECT COUNT(*) - SUM(isEnabled) FROM replace_rules")
     val summary: Int
 
-    @Query("UPDATE replace_rules SET isEnabled = :enable")
-    fun enableAll(enable: Boolean)
+    // B27 退役（2026-10-16）：`enableAll(enable)` 零调用 ⇒ 活路径＝`ReplaceRuleViewModel` 的
+    // `enableSelection` / `disableSelection`（copy + update 批量改，含 UI 侧状态同步）。
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg replaceRule: ReplaceRule): List<Long>

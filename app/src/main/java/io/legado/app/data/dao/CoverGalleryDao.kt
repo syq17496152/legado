@@ -58,8 +58,8 @@ interface CoverGalleryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGroup(group: CoverGalleryGroup): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertGroups(vararg groups: CoverGalleryGroup)
+    // B27 退役（2026-10-16）：批量 `insertGroups(vararg)` 零调用 ⇒ 活替代＝上方 `insertGroup`（单条，
+    // `Restore` / `CoverGalleryRepository` 在用；恢复侧逐条插入即幂等）。
 
     @Update
     suspend fun updateGroup(group: CoverGalleryGroup)

@@ -88,24 +88,9 @@ interface BookSourceDao {
     )
     fun flowExplore(): Flow<List<BookSourcePart>>
 
-    @Query(
-        """select * from book_sources_part
-        where enabledExplore = 1 and hasExploreUrl = 1
-        and (bookSourceGroup is null or bookSourceGroup = '' or bookSourceGroup like '%未分组%')
-        order by customOrder asc"""
-    )
-    fun flowExploreNoGroup(): Flow<List<BookSourcePart>>
-
-    // F-01 修复：未分组发现页+名称组合查询（onFolderClick 解耦 searchView 后所需）
-    @Query(
-        """select * from book_sources_part
-        where enabledExplore = 1 and hasExploreUrl = 1
-        and (bookSourceGroup is null or bookSourceGroup = '' or bookSourceGroup like '%未分组%')
-        and (bookSourceGroup like '%' || :searchKey || '%'
-            or bookSourceName like '%' || :searchKey || '%')
-        order by customOrder asc"""
-    )
-    fun flowExploreNoGroupSearch(searchKey: String): Flow<List<BookSourcePart>>
+    // B27 退役（2026-10-16）：`flowExploreNoGroup()` / `flowExploreNoGroupSearch(key)` 零调用
+    // ⇒ 活替代＝`flowExplore()`（同表同过滤，去分组维度）与 `flowExplore(key: String)`（key 版），
+    // 发现页已统一走后者；保留二者即形成「同一发现查询三处实现」。
 
     // D2 修复：发现页按类型分组查询（只返回启用发现且有发现URL的书源）
     @Query(
@@ -219,16 +204,8 @@ interface BookSourceDao {
     )
     fun getByGroup(group: String): List<BookSource>
 
-    @Query(
-        """select * from book_sources 
-        where enabled = 1 
-        and (bookSourceGroup = :group
-            or bookSourceGroup like :group || ',%' 
-            or bookSourceGroup like  '%,' || :group
-            or bookSourceGroup like  '%,' || :group || ',%')
-        order by customOrder asc"""
-    )
-    fun getEnabledByGroup(group: String): List<BookSource>
+    // B27 退役（2026-10-16）：`getEnabledByGroup`（返回整行 `BookSource`）零调用 ⇒
+    // 活替代＝下方 `getEnabledPartByGroup`（Projection 版本，`SearchScope` / `ChangeBookSourceViewModel` 在用）。
 
     @Query(
         """select * from book_sources_part 

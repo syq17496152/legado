@@ -10,8 +10,8 @@ interface KeyboardAssistsDao {
     @get:Query("select * from keyboardAssists order by serialNo")
     val all: List<KeyboardAssist>
 
-    @Query("select * from keyboardAssists where type = :type order by serialNo")
-    fun getByType(type: Int): List<KeyboardAssist>
+    // B27 退役（2026-10-16）：`getByType`（List 版）零调用 ⇒ 活替代＝下方 `flowByType`（Flow 版，
+    // 同 SQL；`KeyboardToolPop` 在用）。
 
     @get:Query("select * from keyboardAssists order by serialNo")
     val flowAll: Flow<List<KeyboardAssist>>
