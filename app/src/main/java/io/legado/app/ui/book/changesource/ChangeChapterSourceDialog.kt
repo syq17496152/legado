@@ -278,7 +278,7 @@ class ChangeChapterSourceDialog() : ComposeDialogFragment(),
         AppConfig.searchGroup = group
         lifecycleScope.launch(IO) {
             viewModel.stopSearch()
-            if (viewModel.refresh()) {
+            if (viewModel.refreshAwait()) {
                 viewModel.startSearch()
             }
         }
@@ -444,7 +444,8 @@ class ChangeChapterSourceDialog() : ComposeDialogFragment(),
                                     onClick = {
                                         AppConfig.changeSourceCheckAuthor =
                                             !AppConfig.changeSourceCheckAuthor
-                                        viewModel.refresh()
+                                        // 刷新走挂起版（内部 IO）：菜单点击在主线程，直接查库会卡住弹窗
+                                        scope.launch { viewModel.refreshAwait() }
                                     }
                                 ),
                                 MenuAction(

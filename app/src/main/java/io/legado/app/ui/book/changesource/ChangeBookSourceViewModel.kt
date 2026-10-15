@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -158,11 +159,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
      * key 会抛 IllegalArgumentException: Key ... was already used 崩溃。
      * 去重维度必须是 (origin, bookUrl)：同书不同源是换源的正常候选，不可按 bookUrl 单字段抹掉。
      * 搜索由线程池并发回调，判断与插入需在同一锁内完成。
+     * 身份口径统一用 `primaryStr()`（源 + 书址）—— `SearchBook.equals` 只比 `bookUrl`，
+     * **不可**用于行级判定（移除对手方见 `removeCandidate`）。
      */
     private fun addSearchBook(searchBook: SearchBook) {
         synchronized(searchBooks) {
             val exists = searchBooks.any {
-                it.origin == searchBook.origin && it.bookUrl == searchBook.bookUrl
+                it.primaryStr() == searchBook.primaryStr()
             }
             if (!exists) {
                 searchBooks.add(searchBook)
@@ -194,13 +197,20 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             .newFixedThreadPool(threadCount).asCoroutineDispatcher()
     }
 
-    fun refresh(): Boolean {
+    /**
+     * 刷新候选列表（按当前筛选条件**回读数据库**）。
+     *
+     * 必须**主线程安全**：换源弹窗与换章弹窗的「校验作者」菜单点击都在主线程直接调用
+     * （分组切换才走 `launch(IO)`）；DB 仍开着 `allowMainThreadQueries`（只卡不崩），
+     * 主线程查库会直接卡住弹窗 ⇒ 查询统一放在 `withContext(IO)` 内（G-43 台账「只减不增」）。
+     */
+    suspend fun refreshAwait(): Boolean = withContext(IO) {
         getDbSearchBooks().let {
             searchBooks.clear()
             searchBooks.addAll(it)
             searchCallback?.upAdapter()
         }
-        return searchBooks.isEmpty()
+        searchBooks.isEmpty()
     }
 
     /**
@@ -513,7 +523,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 source.enabled = false
                 appDb.bookSourceDao.update(source)
             }
-            searchBooks.remove(searchBook)
+            removeCandidate(searchBooks, searchBook)
             searchCallback?.upAdapter()
         }
     }
@@ -553,7 +563,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             SourceHelp.deleteBookSource(searchBook.origin)
             appDb.searchBookDao.delete(searchBook)
         }
-        searchBooks.remove(searchBook)
+        removeCandidate(searchBooks, searchBook)
         searchCallback?.upAdapter()
     }
 
@@ -603,4 +613,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     }
 
+}
+
+/**
+ * 按**候选身份**移除候选行（身份 = `primaryStr()` = 源 + 书址）。
+ *
+ * 不能用 `searchBooks.remove(searchBook)`：`SearchBook.equals` **只比 `bookUrl`**，而镜像源/同站多源
+ * 会返回同一个 `bookUrl` ⇒ 会把**另一个源**的行当成目标行移除 —— 症状是「禁用/删除某源后，列表里
+ * 消失的却是另一个源的行；被禁用/删除的那一行仍在列表里，点击必然取不到书源而失败」。
+ * 身份口径与 `addSearchBook` 去重一致；搜索线程池并发回调，故与增删同锁。
+ */
+internal fun removeCandidate(list: MutableList<SearchBook>, target: SearchBook) {
+    synchronized(list) {
+        list.removeAll { it.primaryStr() == target.primaryStr() }
+    }
 }
