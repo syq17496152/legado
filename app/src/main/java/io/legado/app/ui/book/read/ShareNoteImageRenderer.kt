@@ -245,12 +245,11 @@ object ShareNoteImageRenderer {
         capture.copy(width = width, height = height)
     }
 
-    suspend fun exportMountedWebView(context: Context, webView: WebView): File = renderMutex.withLock {
-        val bitmap = withContext(Dispatchers.Main) {
-            drawWebViewToBitmap(webView)
-        }
-        writeBitmapToCache(context, bitmap)
-    }
+    // B29 死码清理（2026-10-16）：`exportMountedWebView`（把已挂载 WebView 自绘为缓存 PNG）整条退役 ——
+    // 零调用，且能力被活路径 `renderHtmlToPngFileWithFallback`（经 `renderMountedWebView` / `renderPreview`）
+    // 完整覆盖：同样走 `drawWebViewToBitmap` + `writeBitmapToCache`（两个 helper 仍由活路径第 367/370 行使用
+    // ⇒ 未产生新孤儿）。同族先例：B15 已退役的 `renderShareImage`（自建 WebView 的旧渲染入口）。
+    // 守卫：`ShareNoteDeadPathRetiredTest.deadShareNotePathStaysDeleted`（防回潮 + 活链路单源仍在）。
 
     suspend fun savePngToGallery(context: Context, pngFile: File): Uri = withContext(Dispatchers.IO) {
         val albumName = context.shareNoteAlbumName()
