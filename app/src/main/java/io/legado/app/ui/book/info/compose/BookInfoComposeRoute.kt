@@ -209,6 +209,8 @@ data class BookInfoActions(
     val onSetBookVariable: () -> Unit = {},
     val onCopyBookUrl: () -> Unit = {},
     val onCopyTocUrl: () -> Unit = {},
+    /** 上传到 WebDav（B14 补齐：沉浸式页此前无此入口，而其它两种页样式（经典/现代）均有） */
+    val onUploadToRemote: () -> Unit = {},
     val onClearCache: () -> Unit = {},
     val onSetupWebIntro: (WebView) -> Unit = {},
     val onRefreshEnabledChanged: (Boolean) -> Unit = {},
@@ -1133,6 +1135,10 @@ private fun BookInfoMoreActionSheet(
                 BookInfoMoreActionItem(stringResource(R.string.book_info_edit), style) {
                     onDismiss()
                     actions.onEditBookInfo()
+                }
+                BookInfoMoreActionItem(stringResource(R.string.upload_to_remote), style) {
+                    onDismiss()
+                    actions.onUploadToRemote()
                 }
                 BookInfoMoreActionItem(stringResource(R.string.copy_book_url), style) {
                     onDismiss()

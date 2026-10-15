@@ -37,6 +37,7 @@ import io.legado.app.help.book.BookCloudEntryModeStore
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isImage
+import io.legado.app.help.book.getRemoteUrl
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
@@ -68,6 +69,7 @@ import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.main.ai.AiImageGalleryActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.dialog.PhotoDialog
@@ -198,10 +200,13 @@ class BookInfoComposeActivity :
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         composeView.setContent {
-            BookInfoComposeRoute(
-                state = uiState,
-                actions = composeActions()
-            )
+            // G-37/K1：宿主入口内容必须在应用主题作用域内（此前顶层无作用域，取色会脱离主题体系）
+            LegadoTheme {
+                BookInfoComposeRoute(
+                    state = uiState,
+                    actions = composeActions()
+                )
+            }
         }
         viewModel.bookData.observe(this) { book ->
             showBook(book)
@@ -391,6 +396,7 @@ class BookInfoComposeActivity :
             onSetBookVariable = ::setBookVariable,
             onCopyBookUrl = ::copyBookUrl,
             onCopyTocUrl = ::copyTocUrl,
+            onUploadToRemote = ::uploadBookToRemote,
             onClearCache = ::clearBookCache,
             onSetupWebIntro = ::setupWebIntro,
             onRefreshEnabledChanged = { enabled ->
@@ -947,6 +953,29 @@ class BookInfoComposeActivity :
         }
     }
 
+    /**
+     * 上传到 WebDav（沉浸式页补齐入口，B14）。
+     *
+     * 为什么此前是"半成品"：本页 [upLoadBook] 实现完整，却**全仓零调用点**（`audit_dead_private_fun`
+     * 命中），而同一功能的另两种页样式（经典 [BookInfoActivity] / 现代 [BookInfoModernActivity]）
+     * 都有「上传 WebDav」菜单项 ⇒ 用户切到沉浸式样式后该功能**凭空消失**（可感的功能缺失）。
+     * 口径与 [BookInfoModernActivity.uploadBookToRemote] 一致：已有远端地址时先二次确认，避免覆盖。
+     */
+    private fun uploadBookToRemote() {
+        val book = viewModel.getBook() ?: return
+        if (needsUploadConfirm(book.getRemoteUrl())) {
+            showComposeConfirmDialog(
+                title = getString(R.string.draw),
+                message = getString(R.string.sure_upload),
+                positiveText = getString(R.string.ok),
+                negativeText = getString(R.string.cancel),
+                onPositive = { upLoadBook(book) }
+            )
+        } else {
+            upLoadBook(book)
+        }
+    }
+
     private fun upLoadBook(
         book: Book,
         bookWebDav: RemoteBookWebDav? = AppWebDav.defaultBookWebDav
@@ -1010,3 +1039,11 @@ class BookInfoComposeActivity :
         }
     }
 }
+
+/**
+ * 上传前是否需要二次确认（B14 与 [BookInfoModernActivity] 同口径）。
+ *
+ * 抽成纯函数的理由：上传动作本身要真实网络与 Activity 宿主（不可行为化），而"有无远端地址 ⇒ 是否
+ * 先确认"这条**决策口径**是唯一可被 JVM 断言的部分；若两处页面样式各写一份判断，必漂移。
+ */
+internal fun needsUploadConfirm(remoteUrl: String?): Boolean = remoteUrl != null
