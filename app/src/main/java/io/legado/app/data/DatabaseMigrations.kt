@@ -26,8 +26,30 @@ object DatabaseMigrations {
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
             migration_105_106, migration_106_107, migration_107_108, migration_108_109,
-            migration_109_110, migration_110_111, migration_111_112, migration_112_113
+            migration_109_110, migration_110_111, migration_111_112, migration_112_113,
+            migration_113_114
         )
+    }
+
+    /**
+     * 113 → 114（划线持久化修复）：`highlights` 新增 `chapterUrl` 列（跨目录重排的稳定锚）。
+     *
+     * 只 `ADD COLUMN`（**无 DROP / 无 RENAME**，零数据风险）；`DEFAULT ''` 必须与
+     * `BookHighlight.chapterUrl` 的 `@ColumnInfo(defaultValue = "")` 成对，否则 Room
+     * 运行时 schema 校验会报 `Migration didn't properly handle`。
+     * 老行为空 ⇒ 由 `ReadBook.loadHighlights` 按当前位置一次性回填（自愈）。
+     */
+    private val migration_113_114 = object : Migration(113, 114) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL(
+                    "ALTER TABLE `highlights` ADD COLUMN `chapterUrl` TEXT NOT NULL DEFAULT ''"
+                )
+                AppLog.put("AppDatabase Migration 113→114: highlights 新增 chapterUrl（划线跨目录重排锚）完成")
+            }.onFailure {
+                AppLog.put("migration_113_114 failed", it)
+            }
+        }
     }
 
     /**

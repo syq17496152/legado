@@ -124,6 +124,13 @@ object ReadBook : CoroutineScope by MainScope() {
     var highlights: List<BookHighlight> = emptyList()
         private set
 
+    /**
+     * 划线载入代次：换书 / 同书重载（目录更新）时自增。
+     * IO 载入完成后若代次已过期 ⇒ 丢弃结果，避免旧书结果覆盖新书。
+     */
+    @Volatile
+    private var highlightLoadGeneration = 0
+
     @Volatile
     var highlightRules: List<HighlightRule> = emptyList()
         private set
@@ -181,6 +188,7 @@ object ReadBook : CoroutineScope by MainScope() {
         ReadBook.book = book
         refreshParagraphRuleLayoutKey()
         loadHighlightRules(book)
+        loadHighlights(book)
         readRecord.bookName = book.name
         readRecord.readTime = appDb.readRecordDao.getReadTime(book.name) ?: 0
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
@@ -217,6 +225,7 @@ object ReadBook : CoroutineScope by MainScope() {
         ReadBook.book = book
         refreshParagraphRuleLayoutKey()
         loadHighlightRules(book)
+        loadHighlights(book)
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
         simulatedChapterSize = if (book.readSimulating()) {
             book.simulatedTotalChapterNum()
@@ -397,8 +406,37 @@ object ReadBook : CoroutineScope by MainScope() {
         return true
     }
 
+    /**
+     * 载入本书划线并**同步锚点**（此前该方法零调用点 ⇒ 已存划线从不渲染，且换书后上一本书的
+     * 划线会串到新书同号章节，因为 [highlightsOfChapter] 只按 chapterIndex 过滤）。
+     *
+     * - 先同步清空 `highlights`：换书瞬间不可能渲染出上一本书的划线（消除 IO 载入窗口期串书）
+     * - IO 线程读取；`chapterUrl` 为空的老数据按当前位置一次性回填，索引与目录不一致时按锚重定位
+     *   （决策见 [HighlightSyncPolicy]，不动章节内容 —— 只把索引纠到位，渲染自动正确）
+     */
     fun loadHighlights(book: Book) {
-        highlights = appDb.bookHighlightDao.getByBook(book.name, book.author)
+        highlights = emptyList()
+        val generation = ++highlightLoadGeneration
+        Coroutine.async {
+            val stored = appDb.bookHighlightDao.getByBook(book.name, book.author)
+            if (stored.isEmpty()) return@async stored
+            val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+            val fixes = HighlightSyncPolicy.planAnchorFixes(stored, chapters)
+            if (fixes.isNotEmpty()) {
+                fixes.forEach { fix ->
+                    fix.highlight.chapterIndex = fix.index
+                    fix.highlight.chapterUrl = fix.url
+                }
+                appDb.bookHighlightDao.insert(*fixes.map { it.highlight }.toTypedArray())
+            }
+            stored
+        }.onSuccess { stored ->
+            if (generation != highlightLoadGeneration) return@onSuccess
+            highlights = stored
+            callBack?.get()?.upContent(resetPageOffset = false)
+        }.onError {
+            AppLog.put("载入划线失败", it)
+        }
     }
 
     fun highlightsOfChapter(chapterIndex: Int): List<BookHighlight> {
@@ -499,10 +537,25 @@ object ReadBook : CoroutineScope by MainScope() {
         return matches
     }
 
+    /**
+     * 新增划线：**先入内存即时出图**，再于 IO 线程落库（原实现是主线程直写 DB）。
+     * 落库前补齐 `chapterUrl`：新增该列后创建侧未传值 ⇒ 用当前目录地址回填为稳定锚，
+     * 否则该条划线不受「目录重排重定位」保护。
+     */
     fun addHighlight(highlight: BookHighlight) {
-        appDb.bookHighlightDao.insert(highlight)
         highlights = highlights + highlight
         callBack?.get()?.upContent(resetPageOffset = false)
+        Coroutine.async {
+            val bookUrl = book?.bookUrl
+            if (highlight.chapterUrl.isBlank() && !bookUrl.isNullOrBlank()) {
+                appDb.bookChapterDao.getChapter(bookUrl, highlight.chapterIndex)?.let { chapter ->
+                    highlight.chapterUrl = chapter.url
+                }
+            }
+            appDb.bookHighlightDao.insert(highlight)
+        }.onError {
+            AppLog.put("保存划线失败", it)
+        }
     }
 
     fun updateHighlight(highlight: BookHighlight) {
@@ -2030,6 +2083,8 @@ object ReadBook : CoroutineScope by MainScope() {
             if (simulatedChapterSize > 0 && durChapterIndex > simulatedChapterSize - 1) {
                 durChapterIndex = simulatedChapterSize - 1
             }
+            // 目录更新可能插章/重排 ⇒ 划线索引会整体平移，必须按锚重定位后再渲染
+            loadHighlights(newBook)
             callBack?.get()?.upMenuView()
             if (callBack == null) {
                 clearTextChapter()
