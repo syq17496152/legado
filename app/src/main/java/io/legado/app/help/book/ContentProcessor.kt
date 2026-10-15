@@ -195,7 +195,9 @@ class ContentProcessor private constructor(
                         item.isEnabled = false
                         runBlocking(IO) { appDb.replaceRuleDao.update(item) }
                         mContent = item.name + e.stackTraceStr
-                    } catch (_: CancellationException) {
+                    } catch (e: CancellationException) {
+                        // 取消信号必须原样重抛（铁律：取消不得被吞，否则父协程感知不到取消、内容处理被误判为"已完成"）
+                        throw e
                     } catch (e: Exception) {
                         AppLog.put("替换净化: 规则 ${item.name}替换出错.\n${mContent}", e)
                         appCtx.toastOnUi("替换净化: 规则 ${item.name}替换出错")

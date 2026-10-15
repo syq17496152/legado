@@ -194,7 +194,9 @@ class CoverImageView @JvmOverloads constructor(
                 needNameBitmap.put(bitmapPath.toString(), true)
                 nameBitmapCache.put(pathName + width, bitmap)
                 invalidate()
-            } catch (_: CancellationException) {
+            } catch (e: CancellationException) {
+                // 取消信号必须原样重抛（铁律：取消不得被吞，否则视图已 detach 后仍继续写缓存、且父协程感知不到取消）
+                throw e
             } catch (e: Exception) {
                 AppLog.put("CoverImageView: load", e)
             }
