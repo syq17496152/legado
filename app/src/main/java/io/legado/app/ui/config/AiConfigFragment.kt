@@ -50,6 +50,7 @@ class AiConfigFragment : ComposeSettingFragment() {
         const val KEY_MANAGE_NATIVE_TOOLS = "aiManageNativeTools"
         const val KEY_AI_WORKSPACE = "aiWorkspace"
         const val KEY_CONTEXT_COMPRESSION = "aiContextCompression"
+        const val KEY_SYSTEM_PROMPT = "aiSystemPrompt"
         const val KEY_WORLD_BOOK_MANAGE = "aiWorldBookManage"
         const val KEY_DEFAULT_MODEL_SETTINGS = "aiDefaultModelSettings"
 
@@ -173,6 +174,18 @@ class AiConfigFragment : ComposeSettingFragment() {
                                 getString(R.string.ai_context_compression_summary_default)
                             },
                             onClick = ::showContextCompressionDialog
+                        ),
+                        // NEW-43：接线「AI 系统提示词」编辑入口
+                        // （弹窗实现 showSystemPromptDialog 早已就位却全仓零调用 ⇒ 用户此前无任何 UI 路径编辑系统提示词）
+                        SettingActionSpec(
+                            key = KEY_SYSTEM_PROMPT,
+                            title = getString(R.string.ai_system_prompt),
+                            summary = if (AppConfig.aiSystemPrompt == AppConfig.DEFAULT_AI_SYSTEM_PROMPT) {
+                                "使用内置默认系统提示词"
+                            } else {
+                                "已自定义（${AppConfig.aiSystemPrompt.length} 字符）"
+                            },
+                            onClick = ::showSystemPromptDialog
                         ),
                         SettingActionSpec(
                             key = KEY_WORLD_BOOK_MANAGE,
