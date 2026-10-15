@@ -76,6 +76,11 @@ object BackupSelectorConfig {
         BackupItem("appConfig", "config.xml", "应用配置", "配置"),
         BackupItem("videoConfig", "videoConfig.xml", "视频配置", "配置"),
         BackupItem("backgroundImages", "bg", "背景图片", "其他"),
+        // NEW-51（2026-10-16）：朗读配乐 / 音效（分组 + 曲目 + 音频文件）此前**不在备份范围** ⇒
+        // 换机 / 重装 / 恢复后用户导入的音频与分组全丢。音频是用户本地文件（非可下载产物、不可重建），
+        // 故本条目同时承载元数据 JSON 与音频目录（与 `bg` 的「目录项」范式一致，可整条取消勾选）。
+        // 四处同名同文件铁律齐补：本表 + `Backup` 写出 + `Restore` 还原 + Web 备份硬编码全集。
+        BackupItem("readAloudBgm", "readAloudAudio", "朗读配乐与音效", "其他"),
         BackupItem("bookCache", "book_cache", "书籍缓存", "其他")
     )
 

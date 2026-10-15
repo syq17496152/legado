@@ -236,6 +236,9 @@ object BackupKernel {
             // Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上，必须在此显式登记）
             writeListToJson(appDb.bookCharacterDao.allCharacters(), "bookCharacters.json", webBackupPath)
             writeListToJson(appDb.bookCharacterDao.allRelations(), "bookCharacterRelations.json", webBackupPath)
+            // NEW-51（2026-10-16）：朗读配乐/音效（分组 + 曲目 + 音频文件）——四处同名同文件铁律
+            // 第 ④ 处（Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上）
+            Backup.stageReadAloudBgm(webBackupPath)
 
             // 服务器配置加密存储
             GSON.toJson(appDb.serverDao.all).let { json ->

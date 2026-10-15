@@ -11,6 +11,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Cache
+import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.DirectLinkUpload
@@ -89,6 +90,9 @@ object Backup {
     internal const val bookCacheFolderName = "book_cache"
     private const val bookCacheIndexFileName = "bookCacheIndex.json"
     internal const val READ_BG_DIR = "bg"
+    // NEW-51：朗读配乐/音效音频目录（存储侧与 `ReadAloudBgmManageActivity` 的
+    // `File(filesDir, "readAloudAudio/$assetType")` 同口径；备份/恢复共用本常量防再次漂移）。
+    internal const val READ_ALOUD_AUDIO_DIR = "readAloudAudio"
 
     val backupPath: String by lazy {
         appCtx.filesDir.getFile("backup").createFolderIfNotExist().absolutePath
@@ -217,6 +221,33 @@ object Backup {
                 .forEach { imageFile ->
                     imageFile.copyTo(File(groupDir, imageFile.name), overwrite = true)
                 }
+        }
+    }
+
+    /**
+     * NEW-51（2026-10-16）：朗读配乐 / 音效（分组 + 曲目 + 音频文件）纳入备份。
+     *
+     * 缺陷背景（用户可感）：`read_aloud_bgm_groups` / `read_aloud_bgm_tracks` 两张表此前
+     * 在 `help/storage` 下**零引用** ⇒ 换机 / 重装 / 恢复后用户导入的分组与音频全丢；且音频来自
+     * 用户本地文件（非可下载产物）**无法重建**，与「划线 / 名场面书签均入备份」的既有口径不一致。
+     *
+     * 布局（反向映射见 `Restore.restoreReadAloudBgm`）：元数据 JSON 放备份根；
+     * 音频整目录复制到 `<根>/readAloudAudio/`（保留 `<assetType>/` 子目录，与存储侧同构）。
+     */
+    internal suspend fun stageReadAloudBgm(rootPath: String) {
+        writeListToJson(appDb.readAloudBgmDao.groups(), "readAloudBgmGroups.json", rootPath)
+        // 全量曲目（含未启用项）：`assetType` 列只由 `normalizeAssetType` 写入 ⇒ 值域恰好是
+        // TYPE_BGM / TYPE_SFX 两种，按类型分别取即全量；若日后新增第三种类型，此处需同步扩展。
+        writeListToJson(
+            appDb.readAloudBgmDao.tracksByType(ReadAloudBgmTrack.TYPE_BGM) +
+                appDb.readAloudBgmDao.tracksByType(ReadAloudBgmTrack.TYPE_SFX),
+            "readAloudBgmTracks.json", rootPath
+        )
+        val audioRoot = File(appCtx.filesDir, READ_ALOUD_AUDIO_DIR)
+        if (!audioRoot.isDirectory) return
+        val target = File(rootPath, READ_ALOUD_AUDIO_DIR).createFolderIfNotExist()
+        audioRoot.listFiles()?.filter { it.isDirectory }?.forEach { typeDir ->
+            typeDir.copyRecursively(File(target, typeDir.name), overwrite = true)
         }
     }
 
@@ -598,6 +629,11 @@ object Backup {
         // 背景图片、高亮规则背景、书源运行数据、书籍缓存
         if (selectedFiles.contains(READ_BG_DIR)) {
             stageBackgroundImageFiles(backupPath)
+        }
+        // NEW-51（2026-10-16）：朗读配乐/音效（条目键即目录名，与 `bg` 同口径；
+        // 元数据 JSON + 音频目录由 stageReadAloudBgm 一并写出）
+        if (selectedFiles.contains(READ_ALOUD_AUDIO_DIR)) {
+            stageReadAloudBgm(backupPath)
         }
         if (selectedFiles.contains(HighlightRuleStore.backupFileName)) {
             stageHighlightRuleBackgroundFiles(backupPath)

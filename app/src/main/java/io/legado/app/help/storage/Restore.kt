@@ -28,6 +28,8 @@ import io.legado.app.data.entities.Bookmark
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
+import io.legado.app.data.entities.ReadAloudBgmGroup
+import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReplaceRule
@@ -382,6 +384,8 @@ object Restore {
         restoreBackgroundImages(path)
         restoreBookCache(path)
         restoreCoverGallery(path)
+        // NEW-51（2026-10-16）：朗读配乐/音效（分组 + 曲目 + 音频文件）——此前只备份不还原同类缺口
+        restoreReadAloudBgm(path)
 
         //AppWebDav.downBgs()
         appCtx.getSharedPreferences(path, "config")?.all?.let { map ->
@@ -558,6 +562,43 @@ object Restore {
         }
         // 默认封面可能指向刚恢复的图集 ⇒ 刷新默认封面缓存
         BookCover.upDefaultCover()
+    }
+
+    /**
+     * NEW-51（2026-10-16）：朗读配乐 / 音效（分组 + 曲目 + 音频文件）还原。
+     *
+     * 反向映射对齐 `Backup.stageReadAloudBgm` 的写出布局：
+     * ① `readAloudAudio/<assetType>/`（音频文件）⇒ 整目录复制回 `filesDir/readAloudAudio/`；
+     * ② `readAloudBgmGroups.json` / `readAloudBgmTracks.json`（元数据，`@Insert(REPLACE)` ⇒ 幂等）。
+     *
+     * 顺序不可颠倒：曲目行引用 `groupId` ⇒ 先分组后曲目；音频先落盘再落库，使插入时
+     * `filePath` 即指向真实文件。**`filePath` 一律按落盘文件名重算**（备份记录的是原设备绝对
+     * 路径，换机 / 多用户下 `filesDir` 可能不同）；未命中则保留原值（预览会提示文件缺失）。
+     */
+    private suspend fun restoreReadAloudBgm(path: String) = withContext(IO) {
+        val audioSrc = File(path, Backup.READ_ALOUD_AUDIO_DIR)
+        val audioRoot = File(appCtx.filesDir, Backup.READ_ALOUD_AUDIO_DIR).createFolderIfNotExist()
+        if (audioSrc.isDirectory) {
+            audioSrc.listFiles()?.filter { it.isDirectory }?.forEach { typeDir ->
+                typeDir.copyRecursively(File(audioRoot, typeDir.name), overwrite = true)
+            }
+        }
+        fileToListT<ReadAloudBgmGroup>(path, "readAloudBgmGroups.json")?.let { list ->
+            list.forEach { appDb.readAloudBgmDao.insertGroup(it) }
+        }
+        fileToListT<ReadAloudBgmTrack>(path, "readAloudBgmTracks.json")?.let { list ->
+            list.forEach { track ->
+                val name = File(track.filePath).name
+                val existing = if (name.isBlank()) null else audioRoot.listFiles()
+                    ?.asSequence()
+                    ?.filter { it.isDirectory }
+                    ?.mapNotNull { dir -> File(dir, name).takeIf { it.isFile } }
+                    ?.firstOrNull()
+                appDb.readAloudBgmDao.insertTrack(
+                    if (existing != null) track.copy(filePath = existing.absolutePath) else track
+                )
+            }
+        }
     }
 
     private fun File.isImageFile(): Boolean =
