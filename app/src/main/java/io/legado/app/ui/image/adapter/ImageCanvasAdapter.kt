@@ -825,6 +825,70 @@ class ImageCanvasAdapter(
          * 注：retryCount 不在此处重置——单次绑定只有一次逻辑加载，
          * 缩略图就绪时重置会导致"清晰图失败"时降级链从头再来（潜在循环）。
          */
+        private fun loadIntoPhotoView(
+            file: File,
+            url: String,
+            imgW: Int,
+            imgH: Int,
+            screenW: Int,
+            screenH: Int,
+            position: Int
+        ) {
+            // downloadOnly 异步回调路径：Activity 销毁后跳过（含 Glide.load）
+            if (!isGlideUsable()) return
+            // Phase 3.3: 高度自适应（按宽高比折算，上限 4 倍屏高，fitCenter 不变形不裁剪）
+            val targetH = ImagePyramidLoader.normalDisplayHeight(imgW, imgH, screenW, screenH)
+            // H1(sniff-regression-rss-image-crash): 小内存设备（heap≤320MB）解码高度收敛到屏高，
+            // 普通竖图解码峰值从最高 4×屏高（约 25MB/张）降到 ≤1×屏高（约 6MB/张），
+            // 布局高度不变，仅降低解码分辨率（PhotoView 放大时轻微模糊可接受）
+            val decodeH = if (io.legado.app.help.MemoryPressure.isSmallHeap) {
+                minOf(targetH, screenH)
+            } else {
+                targetH
+            }
+            val lp = itemView.layoutParams
+            if (lp.height != targetH) {
+                lp.height = targetH
+                itemView.layoutParams = lp
+            }
+            binding.ssivView.visibility = View.GONE
+            binding.ssivView.recycle()
+            binding.photoView.visibility = View.VISIBLE
+            Glide.with(itemView.context)
+                .load(file)
+                .override(screenW, decodeH)
+                .dontTransform()
+                .thumbnail(0.1f)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .listener(object : RequestListener<Drawable> {
+                    override fun onResourceReady(
+                        resource: Drawable,
+                        model: Any,
+                        target: Target<Drawable>?,
+                        dataSource: DataSource,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        if (currentUrl != url) return false
+                        hideFallbackHint()
+                        hideItemLoading() // W7 8.3：加载成功 ⇒ 收起逐项占位
+                        return false
+                    }
+
+                    override fun onLoadFailed(
+                        e: GlideException?,
+                        model: Any?,
+                        target: Target<Drawable>?,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        if (currentUrl != url) return true
+                        // 本地解码失败（文件损坏等）：走降级链（降级2会换签名重新下载）
+                        triggerFallbackChain(e, position)
+                        return true
+                    }
+                })
+                .into(binding.photoView)
+        }
+
         /**
          * E1 四级降级链（V4 6.1.3-6.1.5 完整实施）
          *
