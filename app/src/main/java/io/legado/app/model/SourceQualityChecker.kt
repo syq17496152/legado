@@ -38,6 +38,8 @@ import splitties.init.appCtx
  */
 enum class QualityDim {
     DOMAIN, SEARCH, DISCOVERY, INFO, CATEGORY, CONTENT,
+    // **发现来源**首本书的详情/目录/正文：仅「校验书源」巡检链路采集（体检链路缺项 ⇒ NOT_CHECKED 不加组）
+    DISCOVERY_INFO, DISCOVERY_CATEGORY, DISCOVERY_CONTENT,
     ARTICLES, RSS_SEARCH, RSS_SORT, FIRST_SCREEN, EPISODES
 }
 

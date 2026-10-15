@@ -157,7 +157,71 @@ object QualityReportApplier {
         if (dims[QualityDim.CONTENT] == DimState.FAIL) {
             names.add(SourceCheckGroups.SEARCH_CONTENT_FAIL)
         }
+        // 发现来源首本书的目录/正文（仅巡检链路采集；体检缺项 ⇒ 不加组）
+        if (dims[QualityDim.DISCOVERY_CATEGORY] == DimState.FAIL) {
+            names.add(SourceCheckGroups.DISCOVERY_CATEGORY_FAIL)
+        }
+        if (dims[QualityDim.DISCOVERY_CONTENT] == DimState.FAIL) {
+            names.add(SourceCheckGroups.DISCOVERY_CONTENT_FAIL)
+        }
         return names
+    }
+
+    /**
+     * 旧服务结果形态 → 维度态映射（**唯一适配器**；与 [toBookCheckResult] 严格互逆口径）。
+     *
+     * 缺口2 收敛：`CheckSourceService` 自带一份"按 result 字段加/清分组"的内联逻辑，本项目把它换成
+     * 「本适配器 → [failureGroupNames] → 逐个 addGroup」。映射口径**逐条对齐旧内联语义**：
+     *  · 未校验（`*Checked=false`）⇒ `NOT_CHECKED`（不加组）
+     *  · 规则为空 ⇒ `NOT_APPLICABLE`（搜索→`搜索链接规则为空`、发现→`发现规则为空`）
+     *  · **目录/正文只在"上级来源成功"时才有结论**：搜索失败时不给 `CATEGORY/CONTENT` 结论（旧内联
+     *    只在 `searchSuccess` 分支里判目录/正文）；发现同理（`发现失效` 与 `发现目录/正文失效` 不同时出现）
+     *  · 发现来源的详情/目录/正文映射到 `DISCOVERY_*` 三维
+     */
+    internal fun bookResultToDimStates(result: BookCheckResult): Map<QualityDim, DimState?> {
+        val searchSourced = result.searchChecked && !result.searchUrlEmpty && result.searchSuccess
+        val discoverySourced = result.discoveryChecked && !result.discoveryRuleEmpty && result.discoverySuccess
+        return mapOf(
+            QualityDim.DOMAIN to if (result.domainReachable) DimState.PASS else DimState.FAIL,
+            QualityDim.SEARCH to when {
+                !result.searchChecked -> DimState.NOT_CHECKED
+                result.searchUrlEmpty -> DimState.NOT_APPLICABLE
+                result.searchSuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+            QualityDim.DISCOVERY to when {
+                !result.discoveryChecked -> DimState.NOT_CHECKED
+                result.discoveryRuleEmpty -> DimState.NOT_APPLICABLE
+                result.discoverySuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+            QualityDim.INFO to if (result.searchInfoSuccess) DimState.PASS else DimState.FAIL,
+            QualityDim.CATEGORY to when {
+                !searchSourced -> DimState.NOT_CHECKED
+                result.searchCategorySuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+            QualityDim.CONTENT to when {
+                !searchSourced -> DimState.NOT_CHECKED
+                result.searchContentSuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+            QualityDim.DISCOVERY_INFO to when {
+                !discoverySourced -> DimState.NOT_CHECKED
+                result.discoveryInfoSuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+            QualityDim.DISCOVERY_CATEGORY to when {
+                !discoverySourced -> DimState.NOT_CHECKED
+                result.discoveryCategorySuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+            QualityDim.DISCOVERY_CONTENT to when {
+                !discoverySourced -> DimState.NOT_CHECKED
+                result.discoveryContentSuccess -> DimState.PASS
+                else -> DimState.FAIL
+            },
+        )
     }
 
     private fun applyBookGroups(source: BookSource, report: SourceQualityReport, checkDomain: Boolean) =
