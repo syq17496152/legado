@@ -214,27 +214,6 @@ data class TextChapter(
         return ReadAloudTextCleaner.cleanVisibleText(nativeText.ifBlank { text })
     }
 
-    private fun String.cleanReadAloudMarkup(): String {
-        if (isBlank()) return ""
-        var result = this
-        if (result.trimStart().startsWith(EpubFile.NATIVE_CONTENT_FLAG, ignoreCase = true)) {
-            return ""
-        }
-        result = readAloudUseHtmlRegex.replace(result) { match ->
-            match.groupValues.getOrNull(1).orEmpty()
-        }
-        result = readAloudImgRegex.replace(result, "")
-        result = readAloudBreakTagRegex.replace(result, "\n")
-        result = readAloudTagRegex.replace(result, "")
-        result = Parser.unescapeEntities(result, false)
-        return result
-            .replace(Regex("[袮꧁]"), " ")
-            .replace(Regex("[\\t\\x0B\\f\\r ]+"), " ")
-            .replace(Regex(" *\\n+ *"), "\n")
-            .replace(Regex("\\n{3,}"), "\n\n")
-            .trim()
-    }
-
     fun getParagraphNum(
         position: Int,
         pageSplit: Boolean,
@@ -349,23 +328,6 @@ data class TextChapter(
     }
 
     companion object {
-        private val readAloudUseHtmlRegex = Regex(
-            "<usehtml[^>]*>([\\s\\S]*?)</usehtml>",
-            RegexOption.IGNORE_CASE
-        )
-        private val readAloudImgRegex = Regex(
-            "<img\\b[^>]*>",
-            RegexOption.IGNORE_CASE
-        )
-        private val readAloudBreakTagRegex = Regex(
-            "</?(?:p|div|br|hr|h[1-6]|li|tr|table|section|article|dd|dl)[^>]*>",
-            RegexOption.IGNORE_CASE
-        )
-        private val readAloudTagRegex = Regex(
-            "</?[a-zA-Z][^>]*>",
-            RegexOption.IGNORE_CASE
-        )
-
         val emptyTextChapter = TextChapter(
             BookChapter(), -1, "emptyTextChapter", -1,
             sameTitleRemoved = false,

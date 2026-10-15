@@ -714,11 +714,6 @@ private fun ReadRecordBookCoverImage(
 }
 
 @Composable
-private fun android.content.Context.composeReadRecordPanelRadius() = androidx.compose.ui.unit.Dp(
-    UiCorner.panelRadius(this) / resources.displayMetrics.density
-)
-
-@Composable
 private fun ReadRecordDivider(color: Color) {
     Box(
         modifier = Modifier

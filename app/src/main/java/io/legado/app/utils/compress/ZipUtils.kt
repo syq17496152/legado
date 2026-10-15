@@ -480,22 +480,6 @@ object ZipUtils {
         return comments
     }
 
-    private fun createOrExistsDir(file: File?): Boolean {
-        return file != null && if (file.exists()) file.isDirectory else file.mkdirs()
-    }
-
-    private fun createOrExistsFile(file: File?): Boolean {
-        if (file == null) return false
-        if (file.exists()) return file.isFile
-        if (!createOrExistsDir(file.parentFile)) return false
-        return try {
-            file.createNewFile()
-        } catch (e: IOException) {
-            e.printOnDebug()
-            false
-        }
-    }
-
     private fun getFileByPath(filePath: String): File? {
         return if (isSpace(filePath)) null else File(filePath)
     }
