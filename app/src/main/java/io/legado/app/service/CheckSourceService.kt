@@ -173,11 +173,9 @@ class CheckSourceService : BaseService() {
             )
         }.onFailure {
             currentCoroutineContext().ensureActive()
-            when (it) {
-                is TimeoutCancellationException -> source.addGroup("校验超时")
-                is ScriptException, is WrappedException -> source.addGroup("js失效")
-                !is NoStackTraceException -> source.addGroup("网站失效")
-            }
+            // 归因口径单源（见 checkFailureGroupName）：业务异常（NoStackTraceException）自带结论，
+            // 不额外打「网站失效」——否则会把"目录取样空/规则为空"等业务失败误标成死站（NEW-21 同族）
+            checkFailureGroupName(it)?.let { group -> source.addGroup(group) }
             if (CheckSource.wSourceComment) {
                 source.addErrorComment(it)
             }
@@ -482,4 +480,22 @@ class CheckSourceService : BaseService() {
         startForeground(NotificationId.CheckSourceService, notificationBuilder.build())
     }
 
+}
+
+/**
+ * 巡检失败归因 → 源分组名（**单一权威口径**，JVM 可测；`null` = 不加分组）。
+ *
+ * 语义（与改造前的内联 `when` 等价，改造只为可测 + 单源）：
+ *  · 超时（`TimeoutCancellationException`）→ 「校验超时」
+ *  · 脚本异常（`ScriptException` / `WrappedException`）→ 「js失效」
+ *  · **业务异常（`NoStackTraceException` 及其子类，如 `TocEmptyException`/`ContentEmptyException`）→ null**：
+ *    这类异常携带的是**引擎侧的明确结论**（目录为空 / 正文为空 / 规则为空…），上游已按维度打点，
+ *    此处若再打「网站失效」会把可用源误标成死站（NEW-21 同族误判）
+ *  · 其余（网络/解析类）→ 「网站失效」
+ */
+internal fun checkFailureGroupName(e: Throwable): String? = when (e) {
+    is TimeoutCancellationException -> "校验超时"
+    is ScriptException, is WrappedException -> "js失效"
+    !is NoStackTraceException -> "网站失效"
+    else -> null
 }
