@@ -1337,9 +1337,6 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    private fun currentChapterLoadGeneration(index: Int): Long? =
-        chapterLoadGenerations[index]
-
     internal fun cancelContentLoad(index: Int, generation: Long) {
         finishChapterLoad(index, generation)
     }
