@@ -4,6 +4,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.AiAgentTrace
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
+import io.legado.app.help.book.BookIdentity
 import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.character.BookCharacterProfileMeta
 import io.legado.app.help.config.AppConfig
@@ -1532,7 +1533,7 @@ object AiChatService {
 
     private fun displayBookKeyLabel(bookKey: String): String {
         val value = bookKey.trim()
-        if (!value.startsWith("work:")) return value.ifBlank { "未绑定作品" }
+        if (!BookIdentity.isWorkKey(value)) return value.ifBlank { "未绑定作品" }
         val body = value.removePrefix("work:")
         val parts = body.split('/', limit = 2)
         return when {

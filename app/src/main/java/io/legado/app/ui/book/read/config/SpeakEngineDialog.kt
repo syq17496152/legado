@@ -44,11 +44,11 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechRouteSanitizer
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
@@ -78,7 +78,6 @@ import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.ShibbolethCodec
 import io.legado.app.utils.isAbsUrl
-import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
@@ -223,15 +222,7 @@ class SpeakEngineDialog() : ComposeDialogFragment(), SpeakEngineDialogActions {
 
     private fun notifyReadAloudEngineChanged() {
         ReadAloud.refreshReadAloudClass()
-        postEvent(
-            EventBus.READ_ALOUD_CONFIG_CHANGED,
-            Bundle().apply {
-                putString(
-                    EventBus.READ_ALOUD_CONFIG_SCOPE,
-                    EventBus.READ_ALOUD_CONFIG_SCOPE_ENGINE
-                )
-            }
-        )
+        ReadAloudConfigChangeNotifier.notifyEngine()
     }
 
     override fun login(group: SpeechVoiceEngineGroup) {

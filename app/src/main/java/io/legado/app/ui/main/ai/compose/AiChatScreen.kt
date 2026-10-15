@@ -98,6 +98,7 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
 import io.legado.app.R
+import io.legado.app.help.book.BookIdentity
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.ui.about.ReadRecordWidgetStore
@@ -1256,7 +1257,7 @@ private fun AiCompanionAvatar(
 
 private fun displayBookKeyLabel(bookKey: String): String {
     val value = bookKey.trim()
-    if (!value.startsWith("work:")) return value
+    if (!BookIdentity.isWorkKey(value)) return value
     val body = value.removePrefix("work:")
     val parts = body.split('/', limit = 2)
     return when {

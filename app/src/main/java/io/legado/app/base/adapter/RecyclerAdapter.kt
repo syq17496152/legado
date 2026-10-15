@@ -308,15 +308,6 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @SuppressLint("NotifyDataSetChanged")
-        fun clearItems() {
-        kotlin.runCatching {
-            this.items.clear()
-            notifyDataSetChanged()
-            onCurrentListChanged()
-        }
-    }
-
     fun isEmpty() = items.isEmpty()
 
     fun isNotEmpty() = items.isNotEmpty()

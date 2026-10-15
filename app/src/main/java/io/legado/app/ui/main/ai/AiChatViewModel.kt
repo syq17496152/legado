@@ -765,8 +765,6 @@ class AiChatViewModel : ViewModel() {
         return true
     }
 
-    fun currentContextSummary() = currentSessionSummary()
-
     fun restoreCurrentSession() {
         currentCompanionId = AppConfig.aiCurrentChatCompanionId
         messages.clear()

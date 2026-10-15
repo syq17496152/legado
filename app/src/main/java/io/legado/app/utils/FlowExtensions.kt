@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapMerge
 import kotlinx.coroutines.flow.flow
@@ -89,11 +88,6 @@ inline fun <T, R> Flow<T>.transformParallelSafe(
         }
     }
 }.buffer(0)
-
-inline fun <T, R> Flow<T>.mapNotNullParallel(
-    concurrency: Int,
-    crossinline transform: suspend (T) -> R?,
-): Flow<R> = mapParallel(concurrency, transform).filterNotNull()
 
 inline fun <T> Flow<T>.onEachIndexed(
     crossinline action: suspend (index: Int, T) -> Unit,
