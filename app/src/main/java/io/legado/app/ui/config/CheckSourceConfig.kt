@@ -6,21 +6,12 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -28,25 +19,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.model.CheckSource
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
-import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.putPrefString
@@ -67,11 +54,14 @@ class CheckSourceConfig : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    CheckSourceConfigContent(style = style)
+                // G-37/K1：弹窗内容必须在应用主题作用域内（此前顶层无作用域，取色会脱离主题体系）
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        CheckSourceConfigContent(style = style)
+                    }
                 }
             }
         }
@@ -118,13 +108,13 @@ class CheckSourceConfig : ComposeDialogFragment() {
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CheckSourceNumberField(
+                    CheckConfigNumberField(
                         value = timeoutText,
                         onValueChange = { timeoutText = it.filterAsciiDigits() },
                         label = stringResource(R.string.check_source_timeout),
                         style = style
                     )
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.write_source_comment),
                         selected = writeSourceComment,
                         style = style,
@@ -135,7 +125,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
                         color = style.accent,
                         fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.domain),
                         selected = checkDomain,
                         style = style,
@@ -148,20 +138,20 @@ class CheckSourceConfig : ComposeDialogFragment() {
                         }
                     )
                     if (checkDomain) {
-                        DomainCheckModeRow(
+                        CheckConfigDomainModeRow(
                             text = stringResource(R.string.domain_check_socket),
                             selected = domainCheckMode == 0,
                             style = style,
                             onClick = { domainCheckMode = 0 }
                         )
-                        DomainCheckModeRow(
+                        CheckConfigDomainModeRow(
                             text = stringResource(R.string.domain_check_analyze_url),
                             selected = domainCheckMode == 1,
                             style = style,
                             onClick = { domainCheckMode = 1 }
                         )
                     }
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.search),
                         selected = checkSearch,
                         style = style,
@@ -176,7 +166,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
                             refreshCheckItemState()
                         }
                     )
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.discovery),
                         selected = checkDiscovery,
                         style = style,
@@ -191,7 +181,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
                             refreshCheckItemState()
                         }
                     )
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.source_tab_info),
                         selected = checkInfo,
                         enabled = infoEnabled,
@@ -201,7 +191,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
                             refreshCheckItemState()
                         }
                     )
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.chapter_list),
                         selected = checkCategory,
                         enabled = categoryEnabled,
@@ -211,7 +201,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
                             refreshCheckItemState()
                         }
                     )
-                    CheckSourceChoiceRow(
+                    CheckConfigChoiceRow(
                         text = stringResource(R.string.main_body),
                         selected = checkContent,
                         enabled = contentEnabled,
@@ -254,93 +244,6 @@ class CheckSourceConfig : ComposeDialogFragment() {
         )
     }
 
-    @Composable
-    private fun CheckSourceNumberField(
-        value: String,
-        onValueChange: (String) -> Unit,
-        label: String,
-        style: AppDialogStyle
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(label) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            shape = RoundedCornerShape(style.actionRadius),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = style.primaryText,
-                unfocusedTextColor = style.primaryText,
-                focusedContainerColor = style.fieldSurface,
-                unfocusedContainerColor = style.fieldSurface,
-                cursorColor = style.accent,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                focusedLabelColor = style.accent,
-                unfocusedLabelColor = style.secondaryText
-            ),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = style.primaryText,
-                fontFamily = style.bodyFontFamily
-            )
-        )
-    }
-
-    @Composable
-    private fun CheckSourceChoiceRow(
-        text: String,
-        selected: Boolean,
-        style: AppDialogStyle,
-        onClick: () -> Unit,
-        enabled: Boolean = true
-    ) {
-        LegadoMiuixChoiceRow(
-            text = text,
-            selected = selected,
-            palette = style.toMiuixPalette(),
-            onClick = onClick,
-            minHeight = 40.dp,
-            compact = true,
-            enabled = enabled
-        )
-    }
-
-    @Composable
-    private fun DomainCheckModeRow(
-        text: String,
-        selected: Boolean,
-        style: AppDialogStyle,
-        onClick: () -> Unit
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, end = 4.dp)
-                .selectable(
-                    selected = selected,
-                    role = Role.RadioButton,
-                    onClick = onClick
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = text,
-                color = style.primaryText,
-                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                modifier = Modifier.weight(1f)
-            )
-            RadioButton(
-                selected = selected,
-                onClick = null,
-                colors = RadioButtonDefaults.colors(
-                    selectedColor = style.accent,
-                    unselectedColor = style.secondaryText
-                )
-            )
-        }
-    }
-
     private fun saveConfig(
         timeoutText: String,
         writeSourceComment: Boolean,
@@ -380,9 +283,5 @@ class CheckSourceConfig : ComposeDialogFragment() {
         CheckSource.putConfig()
         requireContext().putPrefString(PreferKey.checkSource, CheckSource.summary)
         dismissAllowingStateLoss()
-    }
-
-    private fun String.filterAsciiDigits(): String {
-        return filter { it in '0'..'9' }
     }
 }

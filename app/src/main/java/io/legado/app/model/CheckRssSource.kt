@@ -49,6 +49,34 @@ object CheckRssSource {
         }
     }
 
+    /**
+     * 单源保存入口（UI 与测试共用）：一次性写入全部配置项并落盘。
+     *
+     * 为什么收口：8 个配置项的「字段 ↔ 持久化键」映射原先只在 [putConfig] 内，UI 若各自赋值再调
+     * putConfig，任何一处漏赋值都会**静默沿用旧值**（用户感知＝「设置不生效」，编译期无提示）。
+     * 收口后「赋值 = 落盘」不可分离，且可被 JVM 用例直接断言键值往返。
+     */
+    fun applyConfig(
+        timeoutMs: Long,
+        checkDomain: Boolean,
+        domainCheckMode: Int,
+        checkArticles: Boolean,
+        checkSearch: Boolean,
+        checkSort: Boolean,
+        checkContent: Boolean,
+        enableDedup: Boolean
+    ) {
+        this.timeout = timeoutMs
+        this.checkDomain = checkDomain
+        this.domainCheckMode = domainCheckMode
+        this.checkArticles = checkArticles
+        this.checkSearch = checkSearch
+        this.checkSort = checkSort
+        this.checkContent = checkContent
+        this.enableDedup = enableDedup
+        putConfig()
+    }
+
     fun putConfig() {
         CacheManager.put("checkRssSourceTimeout", timeout)
         CacheManager.put("checkRssDomain", checkDomain)

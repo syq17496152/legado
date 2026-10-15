@@ -207,6 +207,10 @@ object PreferKey {
     const val readUrlOpenInBrowser = "readUrlInBrowser"
     const val defaultBookTreeUri = "defaultBookTreeUri"
     const val checkSource = "checkSource"
+
+    // NEW-33：订阅源校验设置（书源侧 checkSource 的同构入口）——设置页摘要由
+    // CheckRssSourceConfig 写入，键值独立于 checkSource，避免两个校验设置互相覆盖
+    const val checkRssSource = "checkRssSource"
     const val uploadRule = "uploadRule"
     const val tocUiUseReplace = "tocUiUseReplace"
     const val tocCountWords = "tocCountWords"

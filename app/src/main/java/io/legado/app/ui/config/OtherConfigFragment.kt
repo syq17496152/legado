@@ -17,6 +17,7 @@ import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.NavigationBarIconConfig
+import io.legado.app.model.CheckRssSource
 import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
@@ -280,6 +281,13 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 title = getString(R.string.check_source_config),
                 summary = CheckSource.summary,
                 onClick = { showDialogFragment<CheckSourceConfig>() }
+            ),
+            // NEW-33：订阅源校验设置入口（此前 CheckRssSource 的配置面全仓零入口 ⇒ 只能跑默认档）
+            SettingActionSpec(
+                key = PreferKey.checkRssSource,
+                title = getString(R.string.check_rss_source_config),
+                summary = CheckRssSource.summary,
+                onClick = { showDialogFragment<CheckRssSourceConfig>() }
             ),
             SettingActionSpec(
                 key = PreferKey.uploadRule,

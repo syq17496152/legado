@@ -2815,6 +2815,10 @@ bookUrl：%7$s
     <string name="video_download_no_url">视频地址不可用，无法下载</string>
     <string name="video_favorite_no_context">无法收藏：未获取到文章信息</string>
 
+    <string name="check_rss_source_config">订阅校验设置</string>
+    <string name="check_rss_source_timeout">单个订阅源校验超时（秒）</string>
+    <string name="dedup">去重</string>
+
     <string name="check_rss_source_config_summary">订阅检查超时：%1$ss\n检查项：%2$s\n去重：%3$s</string>
 
     <string name="check_rss_articles">文章列表</string>
