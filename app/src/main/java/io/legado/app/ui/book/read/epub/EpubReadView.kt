@@ -226,10 +226,6 @@ class EpubReadView @JvmOverloads constructor(
         resetSlotVisibility()
     }
 
-    private fun dp(value: Int): Int {
-        return (value * resources.displayMetrics.density + 0.5f).toInt()
-    }
-
     fun setListener(listener: Listener?) {
         this.listener = listener
     }

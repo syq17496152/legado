@@ -255,16 +255,6 @@ class EpubPageRenderer {
         }.coerceAtLeast(1f)
     }
 
-    private fun EpubMeasuredTextFragment.resolvedTextRole(): String {
-        return when (kind) {
-            EpubMeasuredTextKind.RubyText -> "rt"
-            EpubMeasuredTextKind.Superscript -> "sup"
-            EpubMeasuredTextKind.Subscript -> "sub"
-            EpubMeasuredTextKind.Ruby -> "ruby"
-            EpubMeasuredTextKind.Text -> tagName?.lowercase().orEmpty()
-        }
-    }
-
     private fun resolveMeasuredBaseline(fragment: EpubMeasuredTextFragment, paint: TextPaint, rectHeight: Float): Float {
         val metrics = paint.fontMetrics
         return (rectHeight - metrics.descent - metrics.ascent) / 2f
