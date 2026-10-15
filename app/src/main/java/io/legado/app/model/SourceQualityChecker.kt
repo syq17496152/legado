@@ -287,6 +287,24 @@ object SourceQualityChecker {
     }
 
     /**
+     * 静态存疑判定（**对外单源入口**：供「校验书源」巡检与导入体检共用同一口径）。
+     *
+     * 复用 [detectStaticSuspects]（登录依赖 / jsLib 依赖 / 源变量依赖 / webView 型），并补
+     * **内网地址**（与探测期 [probeDomain] 的补写口径一致）。零网络成本。
+     */
+    internal fun staticSuspectsOf(source: BookSource): List<SuspectReason> {
+        val reasons = detectStaticSuspects(
+            source.searchUrl, source.jsLib, source.loginUrl, source.loginCheckJs, source.loginUi
+        ).toMutableList()
+        if (isPrivateAddress(source.bookSourceUrl) &&
+            !reasons.contains(SuspectReason.PRIVATE_ADDRESS)
+        ) {
+            reasons.add(SuspectReason.PRIVATE_ADDRESS)
+        }
+        return reasons
+    }
+
+    /**
      * 静态 suspect 检测（登录/jsLib/源变量/webView 四类；内网地址在探测时判定）
      */
     private fun detectStaticSuspects(

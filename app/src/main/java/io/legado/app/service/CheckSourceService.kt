@@ -28,6 +28,7 @@ import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
+import io.legado.app.model.SuspectReason
 import io.legado.app.model.sampleProbeChapters
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
@@ -173,18 +174,34 @@ class CheckSourceService : BaseService() {
             )
         }.onFailure {
             currentCoroutineContext().ensureActive()
-            // 归因口径单源（见 checkFailureGroupName）：业务异常（NoStackTraceException）自带结论，
-            // 不额外打「网站失效」——否则会把"目录取样空/规则为空"等业务失败误标成死站（NEW-21 同族）
-            checkFailureGroupName(it)?.let { group -> source.addGroup(group) }
-            if (CheckSource.wSourceComment) {
-                source.addErrorComment(it)
+            // 存疑源（需登录 / jsLib 依赖 / 源变量依赖 / webView 型 / 内网地址）失败时判**跳过·存疑**，
+            // 不写失败分组与源注释 —— 与质检底座「存疑类不作为确定性失败证据（不误杀）」同口径；
+            // 否则用户按「失败/失效」筛选时会误删这些其实可用的源
+            val skipLabel = suspectSkipLabel(SourceQualityChecker.staticSuspectsOf(source))
+            if (skipLabel != null) {
+                Debug.updateFinalMessage(
+                    source.bookSourceUrl,
+                    "跳过:$skipLabel ${it.localizedMessage.orEmpty()}".trim()
+                )
+                CheckSourceTaskStore.markBlocked(
+                    origin = source.bookSourceUrl,
+                    durationMillis = System.currentTimeMillis() - start,
+                    message = skipLabel
+                )
+            } else {
+                // 归因口径单源（见 checkFailureGroupName）：业务异常（NoStackTraceException）自带结论，
+                // 不额外打「网站失效」——否则会把"目录取样空/规则为空"等业务失败误标成死站（NEW-21 同族）
+                checkFailureGroupName(it)?.let { group -> source.addGroup(group) }
+                if (CheckSource.wSourceComment) {
+                    source.addErrorComment(it)
+                }
+                Debug.updateFinalMessage(source.bookSourceUrl, "校验失败:${it.localizedMessage}")
+                CheckSourceTaskStore.markFailed(
+                    origin = source.bookSourceUrl,
+                    message = it.localizedMessage.orEmpty(),
+                    durationMillis = System.currentTimeMillis() - start
+                )
             }
-            Debug.updateFinalMessage(source.bookSourceUrl, "校验失败:${it.localizedMessage}")
-            CheckSourceTaskStore.markFailed(
-                origin = source.bookSourceUrl,
-                message = it.localizedMessage.orEmpty(),
-                durationMillis = System.currentTimeMillis() - start
-            )
         }
         source.respondTime = Debug.getRespondTime(source.bookSourceUrl)
     }
@@ -498,4 +515,26 @@ internal fun checkFailureGroupName(e: Throwable): String? = when (e) {
     is ScriptException, is WrappedException -> "js失效"
     !is NoStackTraceException -> "网站失效"
     else -> null
+}
+
+/**
+ * 「存疑源」跳过口径（**与质检底座 [SuspectReason] 同源**，纯函数、JVM 可测）。
+ *
+ * 存疑＝静态可判定其失败**不可归因于源本身**（需登录 / 依赖 jsLib / 依赖源变量 / webView 型 /
+ * 内网地址）⇒ 失败时判**跳过·存疑**，而非「网站失效」等确定性失败，避免误杀可用源。
+ *
+ * @return `null` = 非存疑源（按常规失败归因）；否则返回面向用户的跳过原因（如 `存疑（登录依赖）`）
+ */
+internal fun suspectSkipLabel(reasons: List<SuspectReason>): String? {
+    if (reasons.isEmpty()) return null
+    val text = reasons.joinToString("、") { reason ->
+        when (reason) {
+            SuspectReason.LOGIN -> "登录依赖"
+            SuspectReason.JS_LIB -> "jsLib依赖"
+            SuspectReason.SOURCE_VARIABLE -> "源变量依赖"
+            SuspectReason.WEB_VIEW -> "webView型"
+            SuspectReason.PRIVATE_ADDRESS -> "内网地址"
+        }
+    }
+    return "存疑（$text）"
 }

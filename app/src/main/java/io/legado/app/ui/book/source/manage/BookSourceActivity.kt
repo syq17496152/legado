@@ -71,6 +71,7 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.source.recycle.RecycleBinActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
@@ -143,7 +144,6 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
     // bugfix-0908 T5：数据版本信号（实际变更时递增），替代原 BookSourceScreen 内 1 万条 joinToString 巨串指纹
     internal var sourceDataVersion by mutableStateOf(0)
     private var groupSourcesByDomain = false
-    private val finalMessageRegex = Regex("成功|失败")
     private val sourcesState = mutableStateListOf<BookSourcePart>()
     private val selectedUrls = mutableStateOf<Set<String>>(emptySet())
     private val isSelectMode = mutableStateOf(false)
@@ -203,142 +203,144 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
         // 原 activity_book_source.xml 已退役（CE-b）：合成壳 root + attachComposeContent 单源装配
         //（原为「运行时隐藏 title_bar + 摘掉 recyclerView 再手拼 ComposeView 插回原索引位」的死壳装配）
         binding.root.attachComposeContent {
-            AppManagementScaffold(
-                title = getString(R.string.book_source_manage),
-                selectedCount = selectedUrls.value.size,
-                totalCount = sourcesState.size,
-                searchQuery = searchQueryState.value,
-                searchHint = getString(R.string.search_book_source),
-                onSearchChange = ::updateSearchQuery,
-                topActions = listOf(
-                    AppManagementAction(
-                        text = getString(R.string.sort),
-                        iconRes = R.drawable.ic_sort,
-                        onClick = ::showSortMenu
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.menu_action_group),
-                        iconRes = R.drawable.ic_groups,
-                        onClick = ::showFilterMenu
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.add_book_source),
-                        iconRes = R.drawable.ic_add,
-                        onClick = { startActivity<BookSourceEditActivity>() }
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.more_menu),
-                        iconRes = R.drawable.ic_more_vert,
-                        menuActions = ::pageMenuActions
-                    )
-                ),
-                bottomActions = listOf(
-                    AppManagementAction(
-                        text = getString(R.string.enable_selection),
-                        onClick = ::enableSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.disable_selection),
-                        onClick = ::disableSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.enable_explore),
-                        onClick = ::enableExploreSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.disable_explore),
-                        onClick = ::disableExploreSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.add_group),
-                        onClick = ::selectionAddToGroups
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.remove_group),
-                        onClick = ::selectionRemoveFromGroups
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.selection_to_top),
-                        onClick = ::topSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.selection_to_bottom),
-                        onClick = ::bottomSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.check_select_source),
-                        onClick = { checkSource() }
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.export_selection),
-                        onClick = ::exportSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.share_selected_source),
-                        onClick = ::shareSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.check_selected_interval),
-                        onClick = ::checkSelectedInterval
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.delete),
-                        danger = true,
-                        onClick = ::onClickSelectBarMainAction
-                    )
-                ),
-                onBack = { finish() },
-                onSelectAll = { selectAll(true) },
-                onInvertSelection = { revertSelection() }
-            ) {
-                BookSourceScreen(
-                    sources = sourcesState,
-                    selectedUrls = selectedUrls.value,
-                    isSelectMode = isSelectMode.value,
-                    showSourceHost = showSourceHostState.value,
-                    sourceHostHeaders = sourceHostHeaders,
-                    debugMessages = debugMessagesState,
-                    bookCounts = bookCountsState,
-                    isChecking = isCheckingState.value,
-                    checkBannerText = checkTaskState.value.bannerText() ?: checkBannerState.value,
-                    checkBannerRunning = checkTaskState.value.status == CheckSourceTaskStatus.RUNNING,
-                    // Q-N5：单源过程文案（仅进行中的源有值；空串 ⇒ 沿用既有校验消息/引用书籍数口径）
-                    checkStageTexts = checkTaskState.value.items
-                        .associate { it.origin to it.runningStageText() },
-                    onCancelCheck = ::cancelSourceCheck,
-                    dataVersion = sourceDataVersion,
+            LegadoTheme {
+                AppManagementScaffold(
+                    title = getString(R.string.book_source_manage),
+                    selectedCount = selectedUrls.value.size,
+                    totalCount = sourcesState.size,
                     searchQuery = searchQueryState.value,
-                    emptyActions = BookSourceEmptyActions(
-                        onAdd = { startActivity<BookSourceEditActivity>() },
-                        onImportLocal = {
-                            importDoc.launch {
-                                mode = HandleFileContract.FILE
-                                allowExtensions = arrayOf("txt", "json")
-                            }
-                        },
-                        onImportOnline = ::showImportDialog,
-                        onImportQr = { qrResult.launch() },
-                        onClearSearch = { updateSearchQuery("") }
-                    ),
-                    // 与 CHECK_SOURCE_DONE 的自动筛选同口径（同字面量，保证命中同一分组）
-                    onFilterFailed = { updateSearchQuery(FAILED_SOURCE_GROUP_KEY) },
-                    onCheck = { checkSource(sourcesState.toList()) },
-                    reorderEnabled = sort == BookSourceSort.Default &&
-                        searchQueryState.value.isBlank() &&
-                        !groupSourcesByDomain,
-                    onReorder = { reordered ->
-                        val ordered = if (sortAscending) reordered else reordered.asReversed()
-                        viewModel.upOrder(
-                            ordered.mapIndexed { index, source ->
-                                source.copy(customOrder = index)
-                            }
+                    searchHint = getString(R.string.search_book_source),
+                    onSearchChange = ::updateSearchQuery,
+                    topActions = listOf(
+                        AppManagementAction(
+                            text = getString(R.string.sort),
+                            iconRes = R.drawable.ic_sort,
+                            onClick = ::showSortMenu
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.menu_action_group),
+                            iconRes = R.drawable.ic_groups,
+                            onClick = ::showFilterMenu
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.add_book_source),
+                            iconRes = R.drawable.ic_add,
+                            onClick = { startActivity<BookSourceEditActivity>() }
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.more_menu),
+                            iconRes = R.drawable.ic_more_vert,
+                            menuActions = ::pageMenuActions
                         )
-                    },
-                    onToggleSelect = ::toggleSourceSelection,
-                    onToggleEnabled = ::toggleSourceEnabled,
-                    onEdit = ::edit,
-                    sourceMenuActions = ::sourceMenuActions
-                )
+                    ),
+                    bottomActions = listOf(
+                        AppManagementAction(
+                            text = getString(R.string.enable_selection),
+                            onClick = ::enableSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.disable_selection),
+                            onClick = ::disableSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.enable_explore),
+                            onClick = ::enableExploreSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.disable_explore),
+                            onClick = ::disableExploreSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.add_group),
+                            onClick = ::selectionAddToGroups
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.remove_group),
+                            onClick = ::selectionRemoveFromGroups
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.selection_to_top),
+                            onClick = ::topSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.selection_to_bottom),
+                            onClick = ::bottomSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.check_select_source),
+                            onClick = { checkSource() }
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.export_selection),
+                            onClick = ::exportSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.share_selected_source),
+                            onClick = ::shareSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.check_selected_interval),
+                            onClick = ::checkSelectedInterval
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.delete),
+                            danger = true,
+                            onClick = ::onClickSelectBarMainAction
+                        )
+                    ),
+                    onBack = { finish() },
+                    onSelectAll = { selectAll(true) },
+                    onInvertSelection = { revertSelection() }
+                ) {
+                    BookSourceScreen(
+                        sources = sourcesState,
+                        selectedUrls = selectedUrls.value,
+                        isSelectMode = isSelectMode.value,
+                        showSourceHost = showSourceHostState.value,
+                        sourceHostHeaders = sourceHostHeaders,
+                        debugMessages = debugMessagesState,
+                        bookCounts = bookCountsState,
+                        isChecking = isCheckingState.value,
+                        checkBannerText = checkTaskState.value.bannerText() ?: checkBannerState.value,
+                        checkBannerRunning = checkTaskState.value.status == CheckSourceTaskStatus.RUNNING,
+                        // Q-N5：单源过程文案（仅进行中的源有值；空串 ⇒ 沿用既有校验消息/引用书籍数口径）
+                        checkStageTexts = checkTaskState.value.items
+                            .associate { it.origin to it.runningStageText() },
+                        onCancelCheck = ::cancelSourceCheck,
+                        dataVersion = sourceDataVersion,
+                        searchQuery = searchQueryState.value,
+                        emptyActions = BookSourceEmptyActions(
+                            onAdd = { startActivity<BookSourceEditActivity>() },
+                            onImportLocal = {
+                                importDoc.launch {
+                                    mode = HandleFileContract.FILE
+                                    allowExtensions = arrayOf("txt", "json")
+                                }
+                            },
+                            onImportOnline = ::showImportDialog,
+                            onImportQr = { qrResult.launch() },
+                            onClearSearch = { updateSearchQuery("") }
+                        ),
+                        // 与 CHECK_SOURCE_DONE 的自动筛选同口径（同字面量，保证命中同一分组）
+                        onFilterFailed = { updateSearchQuery(FAILED_SOURCE_GROUP_KEY) },
+                        onCheck = { checkSource(sourcesState.toList()) },
+                        reorderEnabled = sort == BookSourceSort.Default &&
+                            searchQueryState.value.isBlank() &&
+                            !groupSourcesByDomain,
+                        onReorder = { reordered ->
+                            val ordered = if (sortAscending) reordered else reordered.asReversed()
+                            viewModel.upOrder(
+                                ordered.mapIndexed { index, source ->
+                                    source.copy(customOrder = index)
+                                }
+                            )
+                        },
+                        onToggleSelect = ::toggleSourceSelection,
+                        onToggleEnabled = ::toggleSourceEnabled,
+                        onEdit = ::edit,
+                        sourceMenuActions = ::sourceMenuActions
+                    )
+                }
             }
         }
     }
@@ -1116,7 +1118,7 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
             if (initial.isBlank()) {
                 null
             } else {
-                if (!Debug.isChecking && !initial.contains(finalMessageRegex)) {
+                if (!Debug.isChecking && !isCheckFinalMessage(initial)) {
                     Debug.updateFinalMessage(source.bookSourceUrl, "校验失败")
                 }
                 val latest = Debug.debugMessageMap[source.bookSourceUrl].orEmpty()
@@ -1284,99 +1286,101 @@ private class SourceGroupFilterDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val allGroups = remember { groups }
-                var query by rememberSaveable { mutableStateOf("") }
-                val style = rememberAppDialogStyle()
-                val filteredGroups by remember(allGroups, query) {
-                    derivedStateOf {
-                        val key = query.trim()
-                        if (key.isBlank()) {
-                            allGroups
-                        } else {
-                            allGroups.filter { it.contains(key, ignoreCase = true) }
+                LegadoTheme {
+                    val allGroups = remember { groups }
+                    var query by rememberSaveable { mutableStateOf("") }
+                    val style = rememberAppDialogStyle()
+                    val filteredGroups by remember(allGroups, query) {
+                        derivedStateOf {
+                            val key = query.trim()
+                            if (key.isBlank()) {
+                                allGroups
+                            } else {
+                                allGroups.filter { it.contains(key, ignoreCase = true) }
+                            }
                         }
                     }
-                }
-                AppDialogFrame(
-                    title = stringResource(R.string.group_select),
-                    scrollContent = false,
-                    content = {
-                        CompositionLocalProvider(
-                            LocalTextStyle provides LocalTextStyle.current.copy(
-                                fontFamily = style.bodyFontFamily
-                            )
-                        ) {
-                            OutlinedTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                label = { Text(stringResource(R.string.search)) },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = style.primaryText,
-                                    unfocusedTextColor = style.primaryText,
-                                    focusedContainerColor = style.fieldSurface,
-                                    unfocusedContainerColor = style.fieldSurface,
-                                    cursorColor = style.accent,
-                                    focusedBorderColor = style.accent.copy(alpha = 0.55f),
-                                    unfocusedBorderColor = style.stroke,
-                                    focusedLabelColor = style.accent,
-                                    unfocusedLabelColor = style.secondaryText
-                                ),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    color = style.primaryText,
+                    AppDialogFrame(
+                        title = stringResource(R.string.group_select),
+                        scrollContent = false,
+                        content = {
+                            CompositionLocalProvider(
+                                LocalTextStyle provides LocalTextStyle.current.copy(
                                     fontFamily = style.bodyFontFamily
                                 )
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "${filteredGroups.size}/${allGroups.size}",
-                                color = style.secondaryText,
-                                fontFamily = style.bodyFontFamily,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val palette = style.toMiuixPalette()
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                if (filteredGroups.isEmpty()) {
-                                    item("empty") {
-                                        Text(
-                                            text = stringResource(R.string.empty),
-                                            color = style.secondaryText,
-                                            fontFamily = style.bodyFontFamily
-                                        )
-                                    }
-                                } else {
-                                    items(filteredGroups, key = { it }) { group ->
-                                        LegadoMiuixActionRow(
-                                            text = group,
-                                            palette = palette,
-                                            onClick = {
-                                                dismissAllowingStateLoss()
-                                                onGroupSelected?.invoke(group)
-                                            },
-                                            cornerRadius = style.actionRadius
-                                        )
+                                OutlinedTextField(
+                                    value = query,
+                                    onValueChange = { query = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    label = { Text(stringResource(R.string.search)) },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = style.primaryText,
+                                        unfocusedTextColor = style.primaryText,
+                                        focusedContainerColor = style.fieldSurface,
+                                        unfocusedContainerColor = style.fieldSurface,
+                                        cursorColor = style.accent,
+                                        focusedBorderColor = style.accent.copy(alpha = 0.55f),
+                                        unfocusedBorderColor = style.stroke,
+                                        focusedLabelColor = style.accent,
+                                        unfocusedLabelColor = style.secondaryText
+                                    ),
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        color = style.primaryText,
+                                        fontFamily = style.bodyFontFamily
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "${filteredGroups.size}/${allGroups.size}",
+                                    color = style.secondaryText,
+                                    fontFamily = style.bodyFontFamily,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val palette = style.toMiuixPalette()
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 420.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (filteredGroups.isEmpty()) {
+                                        item("empty") {
+                                            Text(
+                                                text = stringResource(R.string.empty),
+                                                color = style.secondaryText,
+                                                fontFamily = style.bodyFontFamily
+                                            )
+                                        }
+                                    } else {
+                                        items(filteredGroups, key = { it }) { group ->
+                                            LegadoMiuixActionRow(
+                                                text = group,
+                                                palette = palette,
+                                                onClick = {
+                                                    dismissAllowingStateLoss()
+                                                    onGroupSelected?.invoke(group)
+                                                },
+                                                cornerRadius = style.actionRadius
+                                            )
+                                        }
                                     }
                                 }
                             }
+                        },
+                        actions = {
+                            LegadoMiuixActionButton(
+                                text = stringResource(R.string.cancel),
+                                palette = style.toMiuixPalette(),
+                                onClick = { dismissAllowingStateLoss() },
+                                cornerRadius = style.actionRadius
+                            )
                         }
-                    },
-                    actions = {
-                        LegadoMiuixActionButton(
-                            text = stringResource(R.string.cancel),
-                            palette = style.toMiuixPalette(),
-                            onClick = { dismissAllowingStateLoss() },
-                            cornerRadius = style.actionRadius
-                        )
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -1399,3 +1403,15 @@ private class SourceGroupFilterDialog : ComposeDialogFragment() {
  * 也即 `CHECK_SOURCE_DONE` 自动筛选沿用的既有口径（保证两条路径命中同一分组）。
  */
 private const val FAILED_SOURCE_GROUP_KEY = "失效"
+
+/**
+ * 巡检**终态**文案判据（三态齐全：成功 / 失败 / **跳过（存疑·不适用）**）。
+ *
+ * 用途：巡检结束后，把仍未收敛为终态的单源调试消息补写为「校验失败」
+ * （见 [BookSourceActivity.buildDebugMessagesSnapshot]）。
+ *
+ * ⚠️ **新增终态必须同步登记于此**：漏登记会把合法终态覆写成「校验失败」
+ * （实证：缺口3 接线出的「跳过·存疑」态曾在此被吃掉，用户看到的是假的"校验失败"）。
+ */
+internal fun isCheckFinalMessage(text: String): Boolean =
+    text.contains("成功") || text.contains("失败") || text.contains("跳过")

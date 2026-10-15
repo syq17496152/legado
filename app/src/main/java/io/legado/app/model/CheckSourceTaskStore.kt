@@ -198,12 +198,18 @@ object CheckSourceTaskStore {
         )
     }
 
+    /**
+     * 标记「跳过」（不适用 / 存疑）项。
+     *
+     * [message] 传面向用户的原因（如 `存疑（登录依赖）`）——横幅「跳过 N」之外还需**逐项可见**
+     * 为什么被跳过，否则用户在列表里只看到一条空消息。
+     */
     @Synchronized
-    fun markBlocked(origin: String, durationMillis: Long) {
+    fun markBlocked(origin: String, durationMillis: Long, message: String = "") {
         completeItem(
             origin = origin,
             status = CheckSourceItemStatus.BLOCKED,
-            message = "",
+            message = message,
             durationMillis = durationMillis,
         )
     }
