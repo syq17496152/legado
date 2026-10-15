@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import com.bumptech.glide.load.engine.bitmap_recycle.BitmapPool
 import com.bumptech.glide.load.engine.bitmap_recycle.BitmapPoolAdapter
 import com.bumptech.glide.load.engine.bitmap_recycle.LruBitmapPool
-import io.legado.app.help.globalExecutor
+import io.legado.app.help.glideExecutor
 
 class AsyncRecycleBitmapPool(private val delegate: BitmapPool) : BitmapPool by delegate {
 
@@ -17,7 +17,7 @@ class AsyncRecycleBitmapPool(private val delegate: BitmapPool) : BitmapPool by d
     )
 
     override fun put(bitmap: Bitmap) {
-        globalExecutor.execute {
+        glideExecutor.execute {
             delegate.put(bitmap)
         }
     }

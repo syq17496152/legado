@@ -4,7 +4,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppLog.Level
 import io.legado.app.constant.AppLog.TAG_NETWORK_LOG
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.globalExecutor
+import io.legado.app.help.logExecutor
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.LogUtils
 import okhttp3.Headers
@@ -146,7 +146,7 @@ object NetworkLog {
     }
 
     private fun persist(entry: Entry) {
-        globalExecutor.execute {
+        logExecutor.execute {
             kotlin.runCatching {
                 val root = appCtx.externalCacheDir ?: return@execute
                 val logFolder = FileUtils.createFolderIfNotExist(root, "logs")

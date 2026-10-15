@@ -10,7 +10,7 @@ import io.legado.app.BuildConfig
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.globalExecutor
+import io.legado.app.help.logExecutor
 import splitties.init.appCtx
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,7 +58,7 @@ object LogUtils {
         try {
             val root = context.externalCacheDir ?: return null
             val logFolder = FileUtils.createFolderIfNotExist(root, "logs")
-            globalExecutor.execute {
+            logExecutor.execute {
                 val expiredTime = System.currentTimeMillis() - 7.days.inWholeMilliseconds
                 logFolder.listFiles()?.forEach {
                     if (it.lastModified() < expiredTime || it.name.endsWith(".lck")) {

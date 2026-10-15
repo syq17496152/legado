@@ -1,6 +1,6 @@
 package io.legado.app.utils
 
-import io.legado.app.help.globalExecutor
+import io.legado.app.help.logExecutor
 import java.util.logging.FileHandler
 import java.util.logging.LogRecord
 
@@ -10,7 +10,7 @@ class AsyncFileHandler(pattern: String) : FileHandler(pattern) {
         if (!isLoggable(record)) {
             return
         }
-        globalExecutor.execute {
+        logExecutor.execute {
             super.publish(record)
         }
     }
