@@ -65,7 +65,11 @@ object BackupConfig {
         PreferKey.readAloudWakeLock,
         PreferKey.audioPlayWakeLock,
         // 已删除的旧键（2026-09-27 底栏悬浮搜索按钮裁决）：旧备份里的该键不得写回
-        "floatingBottomBarHideSearch"
+        "floatingBottomBarHideSearch",
+        // 已删除的旧键（2026-10-15 死件普查：两键全仓零读取，连字面量通道亦无）
+        // ① 下载管理已隐藏任务 id（该能力已由 DB 承载）② 覆盖安装一次性内置规则补齐标志（已完成使命）
+        "downloadDismissedIds",
+        "highlightRuleBuiltinMergedV2"
     )
 
     //阅读配置

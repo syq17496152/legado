@@ -103,8 +103,6 @@ object PreferKey {
     const val obsidianAutoExport = "obsidianAutoExport"
     // precise-manage: 网址记录开关（默认开启）
     const val recordUrl = "recordUrl"
-    // precise-manage: 下载管理已隐藏任务 id（用户清除已完成但保留文件的记录）
-    const val downloadDismissedIds = "downloadDismissedIds"
     const val migratedThreadCount = "migratedThreadCount" // 老用户迁移标志位（boolean）
     const val rssParseConcurrency = "rssParseConcurrency"
     const val imageLoadConcurrency = "imageLoadConcurrency"
@@ -342,8 +340,6 @@ object PreferKey {
     const val highlightRuleItems = "highlightRuleItems"
     const val highlightRuleGroups = "highlightRuleGroups"
     const val highlightRuleCurrentGroup = "highlightRuleCurrentGroup"
-    // T-B2: 覆盖安装一次性内置规则补齐标志（首次升级到 V2 时自动 MERGE 缺失 builtinIds）
-    const val highlightRuleBuiltinMergedV2 = "highlightRuleBuiltinMergedV2"
     // §9.5.6 高亮匹配性能治理：整章匹配总预算（毫秒，默认 300，可在「其他设置」调整）
     const val highlightMatchBudgetMs = "highlightMatchBudgetMs"
 
