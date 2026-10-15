@@ -21,21 +21,8 @@ import io.legado.app.exception.NoStackTraceException
  */
 object QualityReportApplier {
 
-    // ==================== 旧分组名常量（与 CheckSourceService 逐字一致） ====================
-
-    private const val G_DOMAIN_FAIL = "域名失效"
-    private const val G_SEARCH_URL_EMPTY = "搜索链接规则为空"
-    private const val G_SEARCH_FAIL = "搜索失效"
-    private const val G_SEARCH_CATEGORY_FAIL = "搜索目录失效"
-    private const val G_SEARCH_CONTENT_FAIL = "搜索正文失效"
-    private const val G_DISCOVERY_RULE_EMPTY = "发现规则为空"
-    private const val G_DISCOVERY_FAIL = "发现失效"
-    private const val G_CHECK_TIMEOUT = "校验超时"
-    private const val G_SCRIPT_FAIL = "js失效"
-    private const val G_SITE_FAIL = "网站失效"
-    private const val G_ARTICLES_FAIL = "列表失效"
-    private const val G_SORT_FAIL = "分类失效"
-    private const val G_CONTENT_FAIL = "正文失效"
+    // 分组名不再本地声明：单源＝[SourceCheckGroups]（缺口6：此处原有 13 条"与 CheckSourceService
+    // 逐字一致（单测锁定）"的私有副本 ⇒ 属靠测试锁住的重复，已收口）
 
     // ==================== 书源 ====================
 
@@ -112,39 +99,39 @@ object QualityReportApplier {
         if (report.suspect) return // 存疑放行：宽松档不误伤
         when (report.failureKind) {
             FailureKind.TIMEOUT -> {
-                source.addGroup(G_CHECK_TIMEOUT)
+                source.addGroup(SourceCheckGroups.CHECK_TIMEOUT)
                 return
             }
             FailureKind.SCRIPT -> {
-                source.addGroup(G_SCRIPT_FAIL)
+                source.addGroup(SourceCheckGroups.SCRIPT_FAIL)
                 return
             }
             FailureKind.NETWORK -> {
-                source.addGroup(G_SITE_FAIL)
+                source.addGroup(SourceCheckGroups.SITE_FAIL)
                 return
             }
             else -> Unit
         }
         val dims = report.dimensions
         if (checkDomain && dims[QualityDim.DOMAIN]?.state == DimState.FAIL) {
-            source.addGroup(G_DOMAIN_FAIL)
+            source.addGroup(SourceCheckGroups.DOMAIN_FAIL)
         }
         when (dims[QualityDim.SEARCH]?.state) {
-            DimState.NOT_APPLICABLE -> source.addGroup(G_SEARCH_URL_EMPTY)
-            DimState.FAIL -> source.addGroup(G_SEARCH_FAIL)
+            DimState.NOT_APPLICABLE -> source.addGroup(SourceCheckGroups.SEARCH_URL_EMPTY)
+            DimState.FAIL -> source.addGroup(SourceCheckGroups.SEARCH_FAIL)
             else -> Unit
         }
         if (dims[QualityDim.DISCOVERY]?.state == DimState.NOT_APPLICABLE) {
-            source.addGroup(G_DISCOVERY_RULE_EMPTY)
+            source.addGroup(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
         } else if (dims[QualityDim.DISCOVERY]?.state == DimState.FAIL) {
-            source.addGroup(G_DISCOVERY_FAIL)
+            source.addGroup(SourceCheckGroups.DISCOVERY_FAIL)
         }
         // 目录/正文维度来自搜索来源首本书（体检探测形态），对应旧服务"搜索目录/正文失效"
         if (dims[QualityDim.CATEGORY]?.state == DimState.FAIL) {
-            source.addGroup(G_SEARCH_CATEGORY_FAIL)
+            source.addGroup(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
         }
         if (dims[QualityDim.CONTENT]?.state == DimState.FAIL) {
-            source.addGroup(G_SEARCH_CONTENT_FAIL)
+            source.addGroup(SourceCheckGroups.SEARCH_CONTENT_FAIL)
         }
     }
 
@@ -223,34 +210,34 @@ object QualityReportApplier {
         if (report.suspect) return
         when (report.failureKind) {
             FailureKind.TIMEOUT -> {
-                source.addGroup(G_CHECK_TIMEOUT)
+                source.addGroup(SourceCheckGroups.CHECK_TIMEOUT)
                 return
             }
             FailureKind.SCRIPT -> {
-                source.addGroup(G_SCRIPT_FAIL)
+                source.addGroup(SourceCheckGroups.SCRIPT_FAIL)
                 return
             }
             FailureKind.NETWORK -> {
-                source.addGroup(G_SITE_FAIL)
+                source.addGroup(SourceCheckGroups.SITE_FAIL)
                 return
             }
             else -> Unit
         }
         val dims = report.dimensions
         if (checkDomain && dims[QualityDim.DOMAIN]?.state == DimState.FAIL) {
-            source.addGroup(G_DOMAIN_FAIL)
+            source.addGroup(SourceCheckGroups.DOMAIN_FAIL)
         }
         if (dims[QualityDim.ARTICLES]?.state == DimState.FAIL) {
-            source.addGroup(G_ARTICLES_FAIL)
+            source.addGroup(SourceCheckGroups.RSS_ARTICLES_FAIL)
         }
         if (dims[QualityDim.RSS_SEARCH]?.state == DimState.FAIL) {
-            source.addGroup(G_SEARCH_FAIL)
+            source.addGroup(SourceCheckGroups.SEARCH_FAIL)
         }
         if (dims[QualityDim.RSS_SORT]?.state == DimState.FAIL) {
-            source.addGroup(G_SORT_FAIL)
+            source.addGroup(SourceCheckGroups.RSS_SORT_FAIL)
         }
         if (dims[QualityDim.CONTENT]?.state == DimState.FAIL) {
-            source.addGroup(G_CONTENT_FAIL)
+            source.addGroup(SourceCheckGroups.RSS_CONTENT_FAIL)
         }
     }
 }

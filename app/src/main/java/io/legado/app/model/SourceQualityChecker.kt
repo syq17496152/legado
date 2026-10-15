@@ -60,7 +60,7 @@ enum class SuspectReason {
 /**
  * 失败分类（供现有校验服务映射分组；组件自身零写库）
  */
-enum class FailureKind { TIMEOUT, SCRIPT, NETWORK, EMPTY, NONE }
+enum class FailureKind { TIMEOUT, SCRIPT, NETWORK, NONE }
 
 /**
  * 维度结果

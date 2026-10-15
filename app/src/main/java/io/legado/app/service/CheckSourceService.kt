@@ -28,6 +28,7 @@ import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
+import io.legado.app.model.SourceCheckGroups
 import io.legado.app.model.SuspectReason
 import io.legado.app.model.sampleProbeChapters
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -251,11 +252,11 @@ class CheckSourceService : BaseService() {
             }
             result = result.copy(domainReachable = reachable, realHost = host)
             if (reachable) {
-                source.removeGroup("域名失效")
+                source.removeGroup(SourceCheckGroups.DOMAIN_FAIL)
                 // 回填真实域名到lastHost,UI分组用此字段优先于源URL截取
                 if (!host.isNullOrBlank()) source.lastHost = host
             } else {
-                source.addGroup("域名失效")
+                source.addGroup(SourceCheckGroups.DOMAIN_FAIL)
                 source.weight = 0
                 throw NoStackTraceException("源地址不可访问")
             }
@@ -325,48 +326,48 @@ class CheckSourceService : BaseService() {
             // 串行更新分组(避免竞态) - 搜索维度
             if (searchResult.searchChecked) {
                 if (searchResult.searchUrlEmpty) {
-                    source.addGroup("搜索链接规则为空")
+                    source.addGroup(SourceCheckGroups.SEARCH_URL_EMPTY)
                 } else {
-                    source.removeGroup("搜索链接规则为空")
+                    source.removeGroup(SourceCheckGroups.SEARCH_URL_EMPTY)
                     if (searchResult.searchSuccess) {
-                        source.removeGroup("搜索失效")
+                        source.removeGroup(SourceCheckGroups.SEARCH_FAIL)
                         // checkBook 结果分组（搜索来源）
                         if (searchResult.searchCategorySuccess) {
-                            source.removeGroup("搜索目录失效")
+                            source.removeGroup(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
                         } else {
-                            source.addGroup("搜索目录失效")
+                            source.addGroup(SourceCheckGroups.SEARCH_CATEGORY_FAIL)
                         }
                         if (searchResult.searchContentSuccess) {
-                            source.removeGroup("搜索正文失效")
+                            source.removeGroup(SourceCheckGroups.SEARCH_CONTENT_FAIL)
                         } else {
-                            source.addGroup("搜索正文失效")
+                            source.addGroup(SourceCheckGroups.SEARCH_CONTENT_FAIL)
                         }
                     } else {
-                        source.addGroup("搜索失效")
+                        source.addGroup(SourceCheckGroups.SEARCH_FAIL)
                     }
                 }
             }
             // 串行更新分组 - 发现维度
             if (discoveryResult.discoveryChecked) {
                 if (discoveryResult.discoveryRuleEmpty) {
-                    source.addGroup("发现规则为空")
+                    source.addGroup(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
                 } else {
-                    source.removeGroup("发现规则为空")
+                    source.removeGroup(SourceCheckGroups.DISCOVERY_RULE_EMPTY)
                     if (discoveryResult.discoverySuccess) {
-                        source.removeGroup("发现失效")
+                        source.removeGroup(SourceCheckGroups.DISCOVERY_FAIL)
                         // checkBook 结果分组（发现来源）
                         if (discoveryResult.discoveryCategorySuccess) {
-                            source.removeGroup("发现目录失效")
+                            source.removeGroup(SourceCheckGroups.DISCOVERY_CATEGORY_FAIL)
                         } else {
-                            source.addGroup("发现目录失效")
+                            source.addGroup(SourceCheckGroups.DISCOVERY_CATEGORY_FAIL)
                         }
                         if (discoveryResult.discoveryContentSuccess) {
-                            source.removeGroup("发现正文失效")
+                            source.removeGroup(SourceCheckGroups.DISCOVERY_CONTENT_FAIL)
                         } else {
-                            source.addGroup("发现正文失效")
+                            source.addGroup(SourceCheckGroups.DISCOVERY_CONTENT_FAIL)
                         }
                     } else {
-                        source.addGroup("发现失效")
+                        source.addGroup(SourceCheckGroups.DISCOVERY_FAIL)
                     }
                 }
             }
@@ -511,9 +512,9 @@ class CheckSourceService : BaseService() {
  *  · 其余（网络/解析类）→ 「网站失效」
  */
 internal fun checkFailureGroupName(e: Throwable): String? = when (e) {
-    is TimeoutCancellationException -> "校验超时"
-    is ScriptException, is WrappedException -> "js失效"
-    !is NoStackTraceException -> "网站失效"
+    is TimeoutCancellationException -> SourceCheckGroups.CHECK_TIMEOUT
+    is ScriptException, is WrappedException -> SourceCheckGroups.SCRIPT_FAIL
+    !is NoStackTraceException -> SourceCheckGroups.SITE_FAIL
     else -> null
 }
 

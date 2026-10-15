@@ -51,12 +51,6 @@ val CheckSourceStage.displayName: String
         CheckSourceStage.CONTENT -> "正文"
     }
 
-/** 校验结果形态（标准源 / 正文已试读） */
-enum class CheckSourceResultKind {
-    STANDARD,
-    CONTENT_PARSED,
-}
-
 data class CheckSourceItemState(
     val origin: String,
     val sourceName: String,
@@ -67,7 +61,6 @@ data class CheckSourceItemState(
     val durationMillis: Long = 0L,
     /** 结果评分（书源 = 既有权重口径 `BookSource.weight`；0 = 未产出） */
     val score: Int = 0,
-    val resultKind: CheckSourceResultKind = CheckSourceResultKind.STANDARD,
     val updatedAt: Long = 0L,
 )
 
@@ -176,7 +169,6 @@ object CheckSourceTaskStore {
         origin: String,
         durationMillis: Long,
         score: Int = 0,
-        resultKind: CheckSourceResultKind = CheckSourceResultKind.STANDARD,
     ) {
         completeItem(
             origin = origin,
@@ -184,7 +176,6 @@ object CheckSourceTaskStore {
             message = "",
             durationMillis = durationMillis,
             score = score,
-            resultKind = resultKind,
         )
     }
 
@@ -261,7 +252,6 @@ object CheckSourceTaskStore {
         message: String,
         durationMillis: Long,
         score: Int = 0,
-        resultKind: CheckSourceResultKind = CheckSourceResultKind.STANDARD,
     ) {
         updateItem(origin) { item ->
             item.copy(
@@ -269,7 +259,6 @@ object CheckSourceTaskStore {
                 message = message,
                 durationMillis = durationMillis,
                 score = score,
-                resultKind = resultKind,
                 updatedAt = System.currentTimeMillis(),
             )
         }
