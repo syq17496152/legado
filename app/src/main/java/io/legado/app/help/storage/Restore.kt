@@ -83,6 +83,17 @@ object Restore {
     private const val TAG = "Restore"
 
     /**
+     * 备份包「已知 JSON 条目」清单（单源＝`BackupSelectorConfig.allItems`）。
+     *
+     * 供 [BackupPackageValidator] 判断包内出现的条目是否被写坏 —— 从配置**派生**而非另抄一份，
+     * 避免与「备份写出清单 / 恢复读取清单」形成三处漂移（本项目已多次踩过该类隐性缺陷）。
+     * 只取 `.json` 条目：目录类（`bg` / `book_cache` / 封面图集）与 XML 配置不参与 JSON 判定。
+     */
+    private val knownBackupJsonFiles: List<String> by lazy {
+        BackupSelectorConfig.allItems.map { it.fileName }.filter { it.endsWith(".json") }
+    }
+
+    /**
      * 恢复（本地文件）。
      * R9：把「清空工作目录 + 解压」与「落库」整体纳入跨流程共享锁，
      * 避免恢复过程中被并发备份（或另一条恢复）清空工作目录。
@@ -143,10 +154,12 @@ object Restore {
      * 校验不通过直接中止（**不动库**），给用户可读回执以便换包重试。
      */
     private suspend fun restoreUnlocked(path: String) {
-        val report = BackupPackageValidator.validate(File(path))
+        val report = BackupPackageValidator.validate(File(path), knownBackupJsonFiles)
         if (!report.ok) {
-            appCtx.toastOnUi("备份包不完整（${report.describe()}），已中止恢复以免数据半恢复")
-            AppLog.put("备份包校验未通过，中止恢复：缺失=${report.missing} 损坏=${report.malformed}")
+            appCtx.toastOnUi("备份包异常（${report.describe()}），已中止恢复以免数据半恢复")
+            AppLog.put(
+                "备份包校验未通过，中止恢复：存在已知条目=${report.present.size} 损坏=${report.malformed}"
+            )
             return
         }
         restore(path)
