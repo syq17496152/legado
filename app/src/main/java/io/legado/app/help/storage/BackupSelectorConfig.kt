@@ -57,6 +57,11 @@ object BackupSelectorConfig {
         BackupItem("ttsCastingTemplates", "ttsCastingTemplates.json", "选角模板", "数据库"),
         BackupItem("keyboardAssists", "keyboardAssists.json", "键盘辅助", "数据库"),
         BackupItem("dictRule", "dictRule.json", "词典规则", "数据库"),
+        // NEW-50（2026-10-16）：书角角色与角色关系此前**不在备份范围** ⇒ 换机/重装/恢复即丢
+        // （同类数据如划线/名场面书签均已入备份并有专项往返测试，属遗漏而非取舍）。
+        // 四处同名同文件铁律齐补：本表 + `Backup` 写出 + `Restore` 还原 + Web 备份硬编码全集。
+        BackupItem("bookCharacter", "bookCharacters.json", "书角角色", "数据库"),
+        BackupItem("bookCharacterRelation", "bookCharacterRelations.json", "角色关系", "数据库"),
         BackupItem("servers", "servers.json", "服务器配置", "数据库"),
         BackupItem("runtimeSourceCache", "runtimeSourceCache.json", "书源运行数据", "数据库"),
         BackupItem("readConfig", "readConfig.json", "阅读样式配置", "配置"),

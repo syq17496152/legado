@@ -232,6 +232,10 @@ object BackupKernel {
             // W4 / REQ-17（AD-08）：订阅已读记录（四处同名同文件铁律的第 ④ 处）
             // Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上，必须在此显式登记
             writeListToJson(appDb.rssReadRecordDao.getRecords(), "rssReadRecord.json", webBackupPath)
+            // NEW-50（2026-10-16）：书角角色 + 角色关系（四处同名同文件铁律的第 ④ 处 ——
+            // Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上，必须在此显式登记）
+            writeListToJson(appDb.bookCharacterDao.allCharacters(), "bookCharacters.json", webBackupPath)
+            writeListToJson(appDb.bookCharacterDao.allRelations(), "bookCharacterRelations.json", webBackupPath)
 
             // 服务器配置加密存储
             GSON.toJson(appDb.serverDao.all).let { json ->

@@ -13,6 +13,8 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookCharacter
+import io.legado.app.data.entities.BookCharacterRelation
 import io.legado.app.data.entities.Cache
 import io.legado.app.data.entities.CoverGalleryGroup
 import io.legado.app.data.entities.CoverGalleryImage
@@ -206,6 +208,20 @@ object Restore {
         // 描述与标签是库内字段，随行一起回填 ⇒ 恢复后 AI 描述保留。
         fileToListT<SceneBookmark>(path, "sceneBookmarks.json")?.let { list ->
             withContext(IO) { list.forEach { appDb.sceneBookmarkDao.insert(it) } }
+        }
+        // NEW-50（2026-10-16）：书角角色 → 角色关系。**顺序不可颠倒**：`book_character_relations`
+        // 对 `book_characters` 有 FK+CASCADE，先插关系会因父行缺失抛 SQLiteConstraintException；
+        // 关系侧再按「库内现存角色 id」过滤，防「只勾选关系」或旧包缺角色时插入悬空外键。
+        // 两侧均为 `@Insert(REPLACE)` ⇒ 幂等，重复恢复不产生重复行。
+        fileToListT<BookCharacter>(path, "bookCharacters.json")?.let { list ->
+            withContext(IO) { list.forEach { appDb.bookCharacterDao.insertCharacter(it) } }
+        }
+        fileToListT<BookCharacterRelation>(path, "bookCharacterRelations.json")?.let { list ->
+            withContext(IO) {
+                val aliveIds = appDb.bookCharacterDao.allCharacters().mapTo(mutableSetOf()) { it.id }
+                list.filter { it.fromCharacterId in aliveIds && it.toCharacterId in aliveIds }
+                    .forEach { appDb.bookCharacterDao.insertRelation(it) }
+            }
         }
         // R8（B2，2026-09-23）：自动任务规则导入（autoTaskRuleDao 亦为 REPLACE ⇒ 幂等）。
         // 恢复后**必须立即重排**：否则规则已在库里但系统闹钟未建立，用户会以为「恢复了却不跑」。

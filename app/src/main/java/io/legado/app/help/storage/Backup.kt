@@ -478,6 +478,15 @@ object Backup {
         if (selectedFiles.contains("dictRule.json")) {
             writeListToJson(appDb.dictRuleDao.all, "dictRule.json", backupPath)
         }
+        // NEW-50（2026-10-16）：书角角色 + 角色关系纳入备份（此前遗漏 ⇒ 换机/重装后角色与关系全丢）。
+        // 四处同名同文件铁律第 ② 处（另三处 = Restore 还原分支 / BackupSelectorConfig.allItems /
+        // Web 备份硬编码全集 `service/kernel/BackupKernel.buildBackupZip`）。
+        if (selectedFiles.contains("bookCharacters.json")) {
+            writeListToJson(appDb.bookCharacterDao.allCharacters(), "bookCharacters.json", backupPath)
+        }
+        if (selectedFiles.contains("bookCharacterRelations.json")) {
+            writeListToJson(appDb.bookCharacterDao.allRelations(), "bookCharacterRelations.json", backupPath)
+        }
         if (selectedFiles.contains(CoverGalleryRepository.backupDirName)) {
             stageCoverGallery(backupPath)
         }
