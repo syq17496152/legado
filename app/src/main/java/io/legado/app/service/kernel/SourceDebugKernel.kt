@@ -5,6 +5,7 @@ import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.model.CheckDepth
+import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.ProbeOptions
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceQualityReport
@@ -33,6 +34,45 @@ import kotlinx.coroutines.withTimeout
  * 不虚报"已定位"。（阶段模型与结果信封已**单源**到 [SourceStepTracer]，见该类的接线状态说明。）
  */
 object SourceDebugKernel {
+
+    /**
+     * `source_check_report`：读取**最近一次「校验所选」巡检**的结构化结果（缺口4 后半）。
+     *
+     * 与用户侧导出（书源管理页「导出校验报告」）**同源**：都读 [CheckSourceTaskStore] 结构化任务态
+     * ⇒ 三端（App / REST / MCP）看到的是同一份结果，不另建报告模型。
+     *
+     * **输出安全**：导出给**用户自己**的 CSV 保留源名/地址原文；本口面向 HTTP/MCP 出参边界，
+     * 源地址经 [DiagKernel.maskUrl] 打码、消息截断（与 [DiagReadKernel] 同口径）。
+     *
+     * @return `runId/status/startedAt/finishedAt/total/passed/failed/blocked/averageScore/items`
+     *         （items：name/origin(masked)/type/status/stage/durationMs/score/message）
+     */
+    suspend fun checkSourceReport(): Map<String, Any?> {
+        val state = CheckSourceTaskStore.state.value
+        return mapOf(
+            "runId" to state.runId,
+            "status" to state.status.name,
+            "startedAt" to state.startedAtMillis,
+            "finishedAt" to state.finishedAtMillis,
+            "total" to state.totalCount,
+            "passed" to state.passedCount,
+            "failed" to state.failedCount,
+            "blocked" to state.blockedCount,
+            "averageScore" to state.averageScore,
+            "items" to state.items.map { item ->
+                mapOf(
+                    "name" to item.sourceName,
+                    "origin" to DiagKernel.maskUrl(item.origin),
+                    "type" to item.sourceType,
+                    "status" to item.status.name,
+                    "stage" to item.stage.name,
+                    "durationMs" to item.durationMillis,
+                    "score" to item.score,
+                    "message" to item.message.take(SNIPPET_LIMIT),
+                )
+            },
+        )
+    }
 
     /** 单个 L3 测试的硬超时：防慢源把 MCP 调用挂死（与 [RssSourceKernel.search] 同量级）。 */
     private const val TEST_TIMEOUT_MS = 30_000L

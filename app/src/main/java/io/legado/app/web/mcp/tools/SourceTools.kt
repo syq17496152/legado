@@ -1,6 +1,7 @@
 package io.legado.app.web.mcp.tools
 
 import io.legado.app.service.kernel.BookSourceKernel
+import io.legado.app.service.kernel.SourceDebugKernel
 import io.legado.app.service.kernel.SourceTempKernel
 import io.legado.app.web.TokenManager
 import io.legado.app.web.mcp.MCP_DOMAIN_SOURCE
@@ -37,6 +38,20 @@ object SourceTools {
         ) { args ->
             val url = args.str("url")?.trim().orEmpty()
             if (url.isEmpty()) BookSourceKernel.sources() else BookSourceKernel.source(url)
+        },
+
+        McpTool(
+            name = "source_check_report",
+            title = "读取校验巡检结果",
+            description = "读取**最近一次「校验所选」巡检**的结构化结果（与 App 内「导出校验报告」读的是" +
+                "同一份任务态）：runId/status/total/passed/failed/blocked/averageScore + 逐源 items" +
+                "（name/origin/status/stage/durationMs/score/message）。源地址的敏感 query 已打码、消息截断。" +
+                "未跑过巡检时 total=0（不报错）。",
+            domain = MCP_DOMAIN_SOURCE,
+            level = TokenManager.Level.READONLY,
+            readOnlyHint = true,
+        ) { _ ->
+            SourceDebugKernel.checkSourceReport()
         },
 
         McpTool(

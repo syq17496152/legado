@@ -106,5 +106,14 @@ object DebugRoutes {
                 )
             )
         },
+        // B11 最近一次「校验所选」巡检的结构化结果（缺口4 后半：App/REST/MCP 三端同一份结果）
+        ApiRoute(
+            Method.GET,
+            "/getCheckSourceReport",
+            Level.READONLY,
+            mcpToolName = "source_check_report"
+        ) { _ ->
+            ReturnData().setData(SourceDebugKernel.checkSourceReport())
+        },
     )
 }
