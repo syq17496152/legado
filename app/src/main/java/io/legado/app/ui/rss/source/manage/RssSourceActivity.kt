@@ -14,11 +14,13 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
 import io.legado.app.help.DirectLinkUpload
+import io.legado.app.model.CheckRssSource
 import io.legado.app.model.ImportCheck
 import io.legado.app.model.QualityCheckSession
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.book.source.manage.SourceQualityReportActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.config.ImportCheckConfigDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
@@ -219,92 +221,100 @@ class RssSourceActivity : VMBaseActivity<ViewBinding, RssSourceViewModel>() {
         // 原 activity_rss_source.xml 已退役（CE-b）：合成壳 root + attachComposeContent 单源装配
         //（原为「运行时隐藏 title_bar + 摘掉 recyclerView 再手拼 ComposeView 插回原索引位」的死壳装配）
         binding.root.attachComposeContent {
-            AppManagementScaffold(
-                title = getString(R.string.rss_source_manage),
-                selectedCount = selectedUrls.value.size,
-                totalCount = sourcesState.size,
-                searchQuery = searchQueryState.value,
-                searchHint = getString(R.string.search_rss_source),
-                onSearchChange = ::updateSearchQuery,
-                topActions = listOf(
-                    AppManagementAction(
-                        text = getString(R.string.menu_action_group),
-                        iconRes = R.drawable.ic_groups,
-                        onClick = ::showFilterMenu
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.add),
-                        iconRes = R.drawable.ic_add,
-                        onClick = { startActivity<RssSourceEditActivity>() }
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.more_menu),
-                        iconRes = R.drawable.ic_more_vert,
-                        menuActions = ::pageMenuActions
-                    )
-                ),
-                bottomActions = listOf(
-                    AppManagementAction(
-                        text = getString(R.string.enable_selection),
-                        onClick = ::enableSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.disable_selection),
-                        onClick = ::disableSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.add_group),
-                        onClick = ::selectionAddToGroups
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.remove_group),
-                        onClick = ::selectionRemoveFromGroups
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.selection_to_top),
-                        onClick = ::topSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.selection_to_bottom),
-                        onClick = ::bottomSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.export_selection),
-                        onClick = ::exportSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.share_selected_source),
-                        onClick = ::shareSelected
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.check_selected_interval),
-                        onClick = ::checkSelectedInterval
-                    ),
-                    AppManagementAction(
-                        text = getString(R.string.delete),
-                        danger = true,
-                        onClick = ::delSourceDialog
-                    )
-                ),
-                onBack = { finish() },
-                onSelectAll = { selectAll(true) },
-                onInvertSelection = { revertSelection() }
-            ) {
-                RssSourceScreen(
-                    sources = sourcesState,
-                    selectedUrls = selectedUrls.value,
-                    isSelectMode = isSelectMode.value,
-                    reorderEnabled = searchQueryState.value.isBlank(),
+            // G-37/K1：宿主入口须以 LegadoTheme 为承载内容的根作用域（与书源管理页同构）
+            LegadoTheme {
+                AppManagementScaffold(
+                    title = getString(R.string.rss_source_manage),
+                    selectedCount = selectedUrls.value.size,
+                    totalCount = sourcesState.size,
                     searchQuery = searchQueryState.value,
-                    onReorder = { reordered -> viewModel.upOrder(reordered) },
-                    onToggleSelect = ::toggleSourceSelection,
-                    onToggleEnabled = ::toggleSourceEnabled,
-                    onEdit = ::editSource,
-                    onAdd = { startActivity<RssSourceEditActivity>() },
-                    onImportOnline = ::showImportDialog,
-                    onClearSearch = { updateSearchQuery("") },
-                    sourceMenuActions = ::sourceMenuActions
-                )
+                    searchHint = getString(R.string.search_rss_source),
+                    onSearchChange = ::updateSearchQuery,
+                    topActions = listOf(
+                        AppManagementAction(
+                            text = getString(R.string.menu_action_group),
+                            iconRes = R.drawable.ic_groups,
+                            onClick = ::showFilterMenu
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.add),
+                            iconRes = R.drawable.ic_add,
+                            onClick = { startActivity<RssSourceEditActivity>() }
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.more_menu),
+                            iconRes = R.drawable.ic_more_vert,
+                            menuActions = ::pageMenuActions
+                        )
+                    ),
+                    bottomActions = listOf(
+                        AppManagementAction(
+                            text = getString(R.string.enable_selection),
+                            onClick = ::enableSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.disable_selection),
+                            onClick = ::disableSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.add_group),
+                            onClick = ::selectionAddToGroups
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.remove_group),
+                            onClick = ::selectionRemoveFromGroups
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.selection_to_top),
+                            onClick = ::topSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.selection_to_bottom),
+                            onClick = ::bottomSelected
+                        ),
+                        // 与书源管理页同构的巡检入口（NEW-28：此前订阅源巡检服务无任何 UI 入口 ⇒ 整条链路不可达）
+                        AppManagementAction(
+                            text = getString(R.string.check_select_source),
+                            onClick = ::checkRssSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.export_selection),
+                            onClick = ::exportSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.share_selected_source),
+                            onClick = ::shareSelected
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.check_selected_interval),
+                            onClick = ::checkSelectedInterval
+                        ),
+                        AppManagementAction(
+                            text = getString(R.string.delete),
+                            danger = true,
+                            onClick = ::delSourceDialog
+                        )
+                    ),
+                    onBack = { finish() },
+                    onSelectAll = { selectAll(true) },
+                    onInvertSelection = { revertSelection() }
+                ) {
+                    RssSourceScreen(
+                        sources = sourcesState,
+                        selectedUrls = selectedUrls.value,
+                        isSelectMode = isSelectMode.value,
+                        reorderEnabled = searchQueryState.value.isBlank(),
+                        searchQuery = searchQueryState.value,
+                        onReorder = { reordered -> viewModel.upOrder(reordered) },
+                        onToggleSelect = ::toggleSourceSelection,
+                        onToggleEnabled = ::toggleSourceEnabled,
+                        onEdit = ::editSource,
+                        onAdd = { startActivity<RssSourceEditActivity>() },
+                        onImportOnline = ::showImportDialog,
+                        onClearSearch = { updateSearchQuery("") },
+                        sourceMenuActions = ::sourceMenuActions
+                    )
+                }
             }
         }
     }
@@ -467,6 +477,24 @@ class RssSourceActivity : VMBaseActivity<ViewBinding, RssSourceViewModel>() {
         val selection = getSelectedSources()
         updateSelectedEnabled(enabled = true)
         viewModel.enableSelection(selection)
+    }
+
+    /**
+     * 「校验所选订阅源」（NEW-28 接线：此前 `CheckRssSourceService` 全链无 UI 入口，属未接线半成品）。
+     *
+     * 与书源管理页 `checkSource()` 同构：交前台服务执行（自带 per-source 超时保护 + 结束后按真实域名
+     * 去重标记），随后退出选择态。进度由服务前台通知承载（订阅源侧暂无页内横幅，见 issues-found NEW-28 残留）。
+     */
+    private fun checkRssSelected() {
+        val selection = getSelectedSources()
+        if (selection.isEmpty()) {
+            toastOnUi(getString(R.string.empty))
+            return
+        }
+        CheckRssSource.start(this, selection)
+        toastOnUi(getString(R.string.check_rss_source))
+        selectedUrls.value = emptySet()
+        isSelectMode.value = false
     }
 
     private fun disableSelected() {

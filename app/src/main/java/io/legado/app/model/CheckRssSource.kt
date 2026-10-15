@@ -14,7 +14,6 @@ import splitties.init.appCtx
  * 订阅源校验配置（参考 [CheckSource]）
  */
 object CheckRssSource {
-    var keyword = "我的"
 
     // 校验设置
     var timeout = CacheManager.getLong("checkRssSourceTimeout") ?: 180000L
@@ -25,8 +24,9 @@ object CheckRssSource {
     var checkSearch = CacheManager.get("checkRssSearch")?.toBoolean() ?: true
     var checkSort = CacheManager.get("checkRssSort")?.toBoolean() ?: true
     var checkContent = CacheManager.get("checkRssContent")?.toBoolean() ?: true
-    // 去重设置（默认关闭）
-    var enableDedup = CacheManager.get("checkRssEnableDedup")?.toBoolean() ?: false
+    // 去重设置（NEW-28 接线时改为默认开启：该去重标注此前因整条链路不可达而从未生效，
+    // 无存量用户受影响；默认开启才能让「按真实域名+type 标记重复源」这一订阅源侧独有收益真正落地）
+    var enableDedup = CacheManager.get("checkRssEnableDedup")?.toBoolean() ?: true
     val summary get() = upSummary()
 
     fun start(context: Context, sources: List<RssSource>) {
