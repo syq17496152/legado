@@ -220,17 +220,11 @@
             android:title="@string/web_port_title"
             app:iconSpaceReserved="false" />
 
-        <io.legado.app.lib.prefs.Preference
-            android:key="cleanCache"
-            android:summary="@string/clear_cache_summary"
-            android:title="@string/clear_cache"
-            app:iconSpaceReserved="false" />
-
-        <io.legado.app.lib.prefs.Preference
-            android:key="clearWebViewData"
-            android:summary="@string/clear_webview_data_summary"
-            android:title="@string/clear_webview_data"
-            app:iconSpaceReserved="false" />
+        <!-- NEW-52（2026-10-16）：cleanCache / clearWebViewData 两项已迁移 —— 清除缓存并入「精准管理 →
+             缓存管理」，WebView 数据清理为缓存管理第 4 分项（见 CacheManageViewModel F6/4.8 注释）；
+             旧处理逻辑已删（ConfigViewModel 同址注释可证）。但 XML 条目仍被 MySettingsData 的
+             `buildPreferenceXmlSearchItems` 解析为**搜索项** ⇒ 用户「搜到了、点进去却没有该项」的幽灵项。
+             同 videoSetting 先例，此处移除防死条目。 -->
 
         <io.legado.app.lib.prefs.Preference
             android:key="shrinkDatabase"

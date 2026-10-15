@@ -83,7 +83,8 @@ object PreferKey {
     const val bookSourceClassPolicyLog = "bookSourceClassPolicyLog" // P0-S4 类导入观察日志开关
     const val sourceRecycleBinEnabled = "sourceRecycleBinEnabled"
     const val processText = "process_text"
-    const val cleanCache = "cleanCache"
+    // NEW-52（2026-10-16）：cleanCache 已退役（功能并入「精准管理 → 缓存管理」；旧处理逻辑与 XML 条目
+    // 均已删）⇒ 删声明 + 键名入 `BackupConfig.ignorePrefKeys` 防旧备份写回（「删键三处」约定）。
     const val saveTabPosition = "saveTabPosition"
     const val fontFolder = "fontFolder"
     const val backupPath = "backupUri"
@@ -249,7 +250,8 @@ object PreferKey {
     const val readAloudWakeLock = "readAloudWakeLock"
     const val showLastUpdateTime = "showLastUpdateTime"
     const val showWaitUpCount = "showWaitUpCount"
-    const val clearWebViewData = "clearWebViewData"
+    // NEW-52（2026-10-16）：clearWebViewData 已退役（WebView 清理为「缓存管理」第 4 分项，F6/4.8）
+    // ⇒ 删声明 + 键名入 `BackupConfig.ignorePrefKeys` 防旧备份写回（「删键三处」约定）。
     const val onlyLatestBackup = "onlyLatestBackup"
     const val brightnessVwPos = "brightnessVwPos"
     const val shrinkDatabase = "shrinkDatabase"

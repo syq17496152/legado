@@ -69,7 +69,12 @@ object BackupConfig {
         // 已删除的旧键（2026-10-15 死件普查：两键全仓零读取，连字面量通道亦无）
         // ① 下载管理已隐藏任务 id（该能力已由 DB 承载）② 覆盖安装一次性内置规则补齐标志（已完成使命）
         "downloadDismissedIds",
-        "highlightRuleBuiltinMergedV2"
+        "highlightRuleBuiltinMergedV2",
+        // NEW-52（2026-10-16）：「设置项形同虚设」审计（audit_prefer_key_consumption）命中 ——
+        // 两项功能已迁移（清除缓存并入缓存管理 / WebView 清理为缓存管理第 4 分项），
+        // 旧处理逻辑与 XML 条目均已删 ⇒ 键声明退役，此处防旧备份写回（「删键三处」约定）。
+        "cleanCache",
+        "clearWebViewData"
     )
 
     //阅读配置
