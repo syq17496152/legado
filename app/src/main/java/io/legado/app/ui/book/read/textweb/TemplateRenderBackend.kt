@@ -120,6 +120,8 @@ class TemplateRenderBackend(
     /** 翻页瞬间是否已由宿主冻结动效（4.19）；`onStable` 消费并复位。 */
     private var motionFrozenForTurn: Boolean = false
     private var richReported: Boolean = false
+    /** 最近一次已输出的沙箱状态名（见 [RenderStateLogGate]，用于抑制稳态重复日志） */
+    private var lastReportedStateTag: String? = null
     private var currentNeedsMermaid: Boolean = false
     private var currentNeedsMath: Boolean = false
     private var disposed = false
@@ -662,8 +664,15 @@ class TemplateRenderBackend(
                 )
             }
 
-            else -> AppLog.putDebugWithTag(AppLog.TAG_READER_TEMPLATE, "render state: $state")
+            // 稳态（settle/page-frame）会**持续上报同一状态名** ⇒ 同状态名只留一行
+            // （真机实测 138 行/10s：JS 桥同步日志开销 + 挤爆 logcat 环形缓冲，
+            //  更早的 `prepare: … manual=N` 等关键行会被挤出 ⇒ 排查时误判为"日志不存在"）
+            else -> if (RenderStateLogGate.shouldLog(lastReportedStateTag, RenderStateLogGate.stateTag(state))) {
+                AppLog.putDebugWithTag(AppLog.TAG_READER_TEMPLATE, "render state: $state")
+            }
         }
+        // 所有分支统一更新游标：保证 `ready→settle` 这类真实状态回归仍会留痕
+        lastReportedStateTag = RenderStateLogGate.stateTag(state)
     }
 
     /** 模板侧失败 ⇒ 回落既有渲染（不把用户留在白屏/空页）。 */
