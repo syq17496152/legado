@@ -289,6 +289,14 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 summary = CheckRssSource.summary,
                 onClick = { showDialogFragment<CheckRssSourceConfig>() }
             ),
+            // NEW-81：Obsidian 批注导出配置入口。此前 5 个 `obsidian*` 配置键与整条导出链路
+            // （exporter/API/Markdown 生成）全仓零 UI、零调用 ⇒ 划线批注导出在设置页无任何路径。
+            SettingActionSpec(
+                key = PreferKey.obsidianExportMethod,
+                title = getString(R.string.obsidian_export_config),
+                summary = getString(R.string.obsidian_export_config_summary),
+                onClick = { showDialogFragment<ObsidianExportConfig>() }
+            ),
             SettingActionSpec(
                 key = PreferKey.uploadRule,
                 title = getString(R.string.direct_link_upload_rule),

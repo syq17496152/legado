@@ -104,6 +104,11 @@
             android:title="@string/check_rss_source_config" />
 
         <io.legado.app.lib.prefs.Preference
+            android:key="obsidianExportMethod"
+            android:summary="@string/obsidian_export_config_summary"
+            android:title="@string/obsidian_export_config" />
+
+        <io.legado.app.lib.prefs.Preference
             android:key="uploadRule"
             android:summary="@string/direct_link_upload_rule_summary"
             android:title="@string/direct_link_upload_rule" />

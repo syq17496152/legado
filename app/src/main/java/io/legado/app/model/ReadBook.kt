@@ -44,6 +44,7 @@ import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
+import io.legado.app.ui.book.thought.ThoughtObsidianExporter
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
@@ -567,6 +568,11 @@ object ReadBook : CoroutineScope by MainScope() {
             appDb.bookHighlightDao.insert(highlight)
         }.onError {
             AppLog.put("保存划线失败", it)
+        }.onSuccess {
+            // NEW-81 接线：划线落库成功后再触发 Obsidian 自动导出（exportBookAsync 内部自判
+            // obsidianAutoExport 开关）。放在 insert 之后而非 UI 调用点，避免与异步落库竞态
+            // 导致最新一条划线漏导出（导出器按书读全量划线）。
+            ThoughtObsidianExporter.exportBookAsync(highlight.bookName, highlight.bookAuthor)
         }
     }
 

@@ -1153,6 +1153,27 @@
 
     <string name="check_rss_source_config_summary">RSS check timeout: %1$ss\nCheck item:%2$s\nDedup: %3$s</string>
 
+    <string name="obsidian_export_config">Obsidian export</string>
+    <string name="obsidian_export_config_summary">Export highlights and notes to Obsidian</string>
+    <string name="obsidian_export_method">Export method</string>
+    <string name="obsidian_export_method_api">Local REST API</string>
+    <string name="obsidian_export_method_local">Vault file (SAF)</string>
+    <string name="obsidian_api_url">API address</string>
+    <string name="obsidian_api_key">API key</string>
+    <string name="obsidian_vault_sub_path">Vault sub path</string>
+    <string name="obsidian_local_dir">Vault directory</string>
+    <string name="obsidian_local_dir_unset">Not selected</string>
+    <string name="obsidian_local_dir_required">Select a vault directory first</string>
+    <string name="obsidian_select_dir">Select directory</string>
+    <string name="obsidian_auto_export">Auto export on new highlight</string>
+    <string name="obsidian_export_all">Export all now</string>
+    <string name="obsidian_test_connection">Test connection</string>
+    <string name="obsidian_connection_ok">Connection OK</string>
+    <string name="obsidian_connection_failed">Connection failed</string>
+    <string name="obsidian_api_url_required">API address cannot be empty</string>
+    <string name="obsidian_export_all_result">Exported %1$d/%2$d books</string>
+    <string name="obsidian_export_all_failed">Export failed: %1$s</string>
+
     <string name="check_rss_articles">Articles</string>
     <string name="check_rss_sort">Sort URL</string>
 

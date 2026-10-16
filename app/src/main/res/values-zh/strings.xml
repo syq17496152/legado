@@ -2821,6 +2821,27 @@ bookUrl：%7$s
 
     <string name="check_rss_source_config_summary">订阅检查超时：%1$ss\n检查项：%2$s\n去重：%3$s</string>
 
+    <string name="obsidian_export_config">Obsidian 导出</string>
+    <string name="obsidian_export_config_summary">将划线与批注导出到 Obsidian</string>
+    <string name="obsidian_export_method">导出方式</string>
+    <string name="obsidian_export_method_api">本地 REST API</string>
+    <string name="obsidian_export_method_local">Vault 文件（SAF）</string>
+    <string name="obsidian_api_url">API 地址</string>
+    <string name="obsidian_api_key">API 密钥</string>
+    <string name="obsidian_vault_sub_path">Vault 子路径</string>
+    <string name="obsidian_local_dir">Vault 目录</string>
+    <string name="obsidian_local_dir_unset">未选择</string>
+    <string name="obsidian_local_dir_required">请先选择 Vault 目录</string>
+    <string name="obsidian_select_dir">选择目录</string>
+    <string name="obsidian_auto_export">新增划线时自动导出</string>
+    <string name="obsidian_export_all">立即导出全部</string>
+    <string name="obsidian_test_connection">测试连接</string>
+    <string name="obsidian_connection_ok">连接正常</string>
+    <string name="obsidian_connection_failed">连接失败</string>
+    <string name="obsidian_api_url_required">API 地址不能为空</string>
+    <string name="obsidian_export_all_result">已导出 %1$d/%2$d 本书</string>
+    <string name="obsidian_export_all_failed">导出失败：%1$s</string>
+
     <string name="check_rss_articles">文章列表</string>
     <string name="check_rss_sort">分类地址</string>
 
