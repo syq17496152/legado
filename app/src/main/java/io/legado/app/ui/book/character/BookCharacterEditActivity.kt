@@ -33,7 +33,7 @@ import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.book.character.compose.AiAvatarPickerGrid
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
@@ -91,24 +91,28 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
         characterId = intent.getLongExtra(BookCharacterManageActivity.EXTRA_CHARACTER_ID, 0L)
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         composeView.setContent {
-            CharacterEditScreen(
-                title = if (characterId > 0L) "编辑角色" else "添加角色",
-                draft = draft,
-                speechEngines = speechEngines,
-                onDraftChange = { draft = it },
-                onBack = ::finish,
-                onSave = ::save,
-                onPickLocalAvatar = {
-                    selectAvatar.launch {
-                        mode = HandleFileContract.IMAGE
-                    }
-                },
-                onPickOnlineAvatar = ::showOnlineAvatarDialog,
-                onPickGalleryAvatar = ::showGalleryAvatarSelector,
-                onRegenerateAvatar = ::showRegenerateAvatarDialog,
-                onClearAvatar = { draft = draft.copy(avatar = "") },
-                saving = saving
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`，
+            // 否则 `CharacterEditScreen` 内读 M3 派生色的组件会回落默认色板
+            LegadoTheme {
+                CharacterEditScreen(
+                    title = if (characterId > 0L) "编辑角色" else "添加角色",
+                    draft = draft,
+                    speechEngines = speechEngines,
+                    onDraftChange = { draft = it },
+                    onBack = ::finish,
+                    onSave = ::save,
+                    onPickLocalAvatar = {
+                        selectAvatar.launch {
+                            mode = HandleFileContract.IMAGE
+                        }
+                    },
+                    onPickOnlineAvatar = ::showOnlineAvatarDialog,
+                    onPickGalleryAvatar = ::showGalleryAvatarSelector,
+                    onRegenerateAvatar = ::showRegenerateAvatarDialog,
+                    onClearAvatar = { draft = draft.copy(avatar = "") },
+                    saving = saving
+                )
+            }
         }
         load()
     }
@@ -242,7 +246,7 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
         val gridView = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
+                LegadoTheme {
                     AiAvatarPickerGrid(
                         items = gridItems.value,
                         onPick = { image ->

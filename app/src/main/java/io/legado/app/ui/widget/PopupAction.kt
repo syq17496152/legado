@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.theme.rememberThemeUiPalette
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppShapes
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
@@ -58,7 +58,7 @@ class PopupAction(private val context: Context) :
 
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         composeView.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 PopupActionContent(
                     items = actionItems,
                     onActionClick = { onActionClick?.invoke(it) }

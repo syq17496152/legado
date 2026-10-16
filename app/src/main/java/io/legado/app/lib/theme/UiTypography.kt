@@ -7,6 +7,11 @@ import android.widget.EditText
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.widget.TitleBar
@@ -47,6 +52,48 @@ fun Context.loadUiTypeface(fontPath: String): Typeface? {
         return null
     }
     return UiTypefaceCache.get(this, fontPath)
+}
+
+/**
+ * 主题字体族下发（Compose 侧单源，NEW-71）。
+ *
+ * 「界面字体」→ 正文/标签族；「标题字体」→ display/headline/titleLarge 族。
+ * 字体来源与 View 体系同源（[uiTypeface] / [titleTypeface]）：`AppConfig.uiFontPath` /
+ * `titleFontPath`（自定义字体文件）与 `AppConfig.systemTypefaces`（无衬线/衬线/等宽）。
+ *
+ * 原先该映射只存在于 `ui/widget/compose/LegadoComposeTheme.kt`，导致「只包 `LegadoTheme`」
+ * 的宿主（含 `setLegadoContent` 全页路径）拿不到主题字体 ⇒ Compose 文本与 View 文本字体口径
+ * 不一致。现由 `LegadoTheme`（唯一主题入口）统一调用，消除「漏包字体层」这一整类缺陷。
+ */
+fun Typography.withThemeFontFamilies(body: FontFamily, title: FontFamily): Typography = copy(
+    displayLarge = displayLarge.copy(fontFamily = title),
+    displayMedium = displayMedium.copy(fontFamily = title),
+    displaySmall = displaySmall.copy(fontFamily = title),
+    headlineLarge = headlineLarge.copy(fontFamily = title),
+    headlineMedium = headlineMedium.copy(fontFamily = title),
+    headlineSmall = headlineSmall.copy(fontFamily = title),
+    titleLarge = titleLarge.copy(fontFamily = title),
+    titleMedium = titleMedium.copy(fontFamily = body),
+    titleSmall = titleSmall.copy(fontFamily = body),
+    bodyLarge = bodyLarge.copy(fontFamily = body),
+    bodyMedium = bodyMedium.copy(fontFamily = body),
+    bodySmall = bodySmall.copy(fontFamily = body),
+    labelLarge = labelLarge.copy(fontFamily = body),
+    labelMedium = labelMedium.copy(fontFamily = body),
+    labelSmall = labelSmall.copy(fontFamily = body)
+)
+
+/**
+ * 读取当前主题的「界面字体 / 标题字体」族。
+ * `rememberThemeUiPalette().signature` 变更（主题包 / 日夜 / 字体设置变更）时重建。
+ */
+@Composable
+fun rememberThemeFontFamilies(): Pair<FontFamily, FontFamily> {
+    val context = LocalContext.current
+    val themeSignature = rememberThemeUiPalette().signature
+    val bodyFamily = remember(context, themeSignature) { FontFamily(context.uiTypeface()) }
+    val titleFamily = remember(context, themeSignature) { FontFamily(context.titleTypeface()) }
+    return bodyFamily to titleFamily
 }
 
 private object UiTypefaceCache {

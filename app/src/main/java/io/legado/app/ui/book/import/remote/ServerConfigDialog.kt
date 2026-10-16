@@ -30,11 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.data.entities.Server
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.AppDialogSize
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -60,7 +60,7 @@ class ServerConfigDialog() : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
+                LegadoTheme {
                     var name by remember { mutableStateOf("") }
                     var url by remember { mutableStateOf("") }
                     var username by remember { mutableStateOf("") }

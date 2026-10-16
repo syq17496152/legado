@@ -11,6 +11,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.lib.theme.rememberThemeFontFamilies
+import io.legado.app.lib.theme.withThemeFontFamilies
 import io.legado.app.ui.widget.components.ThemeSpec
 import io.legado.app.ui.widget.components.toM3Scheme
 import io.legado.app.utils.ColorUtils
@@ -103,9 +105,16 @@ fun LegadoTheme(
         ).toM3Scheme()
     }
 
+    // 主题字体族（界面/标题）：随主题签名重建，与 View 体系 uiTypeface()/titleTypeface() 同源
+    val (bodyFamily, titleFamily) = rememberThemeFontFamilies()
+
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = LegadoTypography
+        // 主题字体族单源（NEW-71）：界面字体→正文/标签族、标题字体→display/headline/titleLarge 族。
+        // 与 View 体系同源（AppConfig.uiFontPath/titleFontPath + systemTypefaces）；原字体层只在
+        // `LegadoComposeTheme` 内下发，导致「只包 LegadoTheme」的宿主（含 setLegadoContent 全页路径）
+        // 文本回落系统默认字体，与 View 页字体口径不一致。
+        typography = LegadoTypography.withThemeFontFamilies(bodyFamily, titleFamily)
     ) {
         content()
     }

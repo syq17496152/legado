@@ -63,7 +63,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.service.BaseReadAloudService
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.installViewTreeOwnersFrom
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.utils.dpToPx
@@ -119,7 +119,7 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
 
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         composeView.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 TextActionMenuContent(
                     actions = menuActions,
                     popupWidthPx = popupWidthPx,

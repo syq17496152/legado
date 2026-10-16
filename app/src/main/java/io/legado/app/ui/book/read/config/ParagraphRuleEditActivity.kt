@@ -36,7 +36,6 @@ import io.legado.app.ui.widget.components.FieldTemplate
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.TopBarActionRow
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import androidx.compose.runtime.getValue
@@ -186,21 +185,23 @@ class ParagraphRuleEditActivity : BaseActivity<ViewBinding>() {
     @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
-                LegadoTheme {
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`，否则子树回落
+            // M3 默认色板（夜间/主题包下黑字黑图标）；原「只包顶栏」形态即本条失守
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
                     GlassTopAppBar(
                         title = getString(R.string.paragraph_rule_edit),
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { finish() },
                         actions = { TopBarActionRow(topBarActions()) }
                     )
+                    // ---- 原 nested_scroll（`0dp + weight=1` ⇒ Compose `weight(1f)`；滚动/焦点语义整体保留）----
+                    AndroidView(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        factory = { shell.nestedScroll }
+                    )
                 }
-                // ---- 原 nested_scroll（`0dp + weight=1` ⇒ Compose `weight(1f)`；滚动/焦点语义整体保留）----
-                AndroidView(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    factory = { shell.nestedScroll }
-                )
             }
         }
     }
@@ -284,7 +285,7 @@ class ParagraphRuleEditActivity : BaseActivity<ViewBinding>() {
         }
         // 合成策略由唯一工厂 `ParagraphRuleEditShellViews.composeSlot` 统一设置（宿主不再自设）
         shell.cvScriptTemplates.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 if (scriptTemplateVisible) {
                     EmptyFieldTemplateRow(
                         title = getString(R.string.paragraph_rule_template_title),
