@@ -167,8 +167,50 @@ fun rememberAppDialogStyle(): AppDialogStyle {
     )
 }
 
+/**
+ * 弹层统一框架（NEW-73：**主题作用域由本框架单点注入**）。
+ *
+ * 背景：全仓 40 个弹窗宿主以 `setContent { AppDialogFrame(…) }` 为内容根，而框架此前只提供
+ * `rememberAppDialogStyle()` 直色（框架自身文字/卡片色）——其内部使用的 M3 组件
+ * （`TextField` / `Switch` / `DropdownMenu` / `Icon` 等）读 `MaterialTheme.colorScheme`，
+ * 在夜间/主题包/自定义主题色下回落 **M3 默认亮色基线**（浅色输入框、白底菜单）。
+ * 现由框架统一补 `LegadoTheme`：调用点无需逐个包裹，该类缺陷结构上不再出现。
+ * 已显式包裹的宿主形成幂等嵌套（同值 MaterialTheme 重复下发无副作用）。
+ * 门禁 G-37 的「框架提供作用域」豁免**自校验本文件**（此处移除 `LegadoTheme` ⇒ 40 处立即重新按违规计）。
+ */
 @Composable
 fun AppDialogFrame(
+    title: String,
+    modifier: Modifier = Modifier,
+    message: String? = null,
+    scrollContent: Boolean = true,
+    messageInContent: Boolean = false,
+    titleTrailing: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+    actions: @Composable () -> Unit
+) {
+    LegadoTheme {
+        AppDialogFrameContent(
+            title = title,
+            modifier = modifier,
+            message = message,
+            scrollContent = scrollContent,
+            messageInContent = messageInContent,
+            titleTrailing = titleTrailing,
+            content = content,
+            actions = actions
+        )
+    }
+}
+
+/**
+ * 弹层框架的**原实现体**（自 NEW-73 起由 [AppDialogFrame] 在 `LegadoTheme` 内调用）。
+ *
+ * 拆分而非在原体内加重排缩进：原体约 85 行，逐行重排的改动面积与风险远高于「保留原体 + 外层包一层」。
+ * 行为与拆分前逐字一致（参数逐项同名透传）。
+ */
+@Composable
+private fun AppDialogFrameContent(
     title: String,
     modifier: Modifier = Modifier,
     message: String? = null,
