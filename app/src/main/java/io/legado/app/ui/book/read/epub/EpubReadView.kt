@@ -50,7 +50,7 @@ class EpubReadView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
-    interface Listener : EpubGestureController.Listener {
+    interface Listener : EpubGestureListener {
         override fun onTapAction(action: Int, x: Float, y: Float) = Unit
         fun onPageChanged(pageIndex: Int, pageCount: Int) = Unit
         fun onPageBoundary(direction: Int) = Unit

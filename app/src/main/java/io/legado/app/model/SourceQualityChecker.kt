@@ -865,15 +865,6 @@ object SourceQualityChecker {
         }
     }
 
-    private fun classifyFailure(e: Throwable?): FailureKind {
-        return when (e) {
-            null -> FailureKind.NONE
-            is TimeoutCancellationException -> FailureKind.TIMEOUT
-            is ScriptException, is WrappedException -> FailureKind.SCRIPT
-            else -> FailureKind.NETWORK
-        }
-    }
-
     private fun fillNotChecked(dims: MutableMap<QualityDim, DimResult>, applicable: List<QualityDim>) {
         applicable.forEach { dim ->
             if (!dims.containsKey(dim)) {
@@ -965,11 +956,6 @@ object SourceQualityChecker {
         val template = SourceQualityScorer.selectRssTemplate(source.type, isWebView)
         return SourceQualityScorer.score(report, template)
     }
-
-    /**
-     * 失败分类（平移自 CheckSourceService.checkSource L153-157，供服务侧映射分组）
-     */
-    fun classifyCheckFailure(e: Throwable?): FailureKind = classifyFailure(e)
 
     const val CACHE_PREFIX = "importCheckResult:"
     const val CACHE_TTL_SECONDS = 86400 // 24h
