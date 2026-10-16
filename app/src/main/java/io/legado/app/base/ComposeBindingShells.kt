@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.viewbinding.ViewBinding
+import io.legado.app.ui.theme.LegadoTheme
 
 /**
  * 纯 Compose 页面的合成 ViewBinding 空壳工厂（compose-shell-binding-fix，2026-09-12）。
@@ -67,7 +68,16 @@ fun View.attachComposeContent(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
-        setContent(content)
+        // 主题作用域由工厂**单点注入**（NEW-72）：此前要求每个宿主入口自行包 `LegadoTheme`，
+        // 全仓实测仍有 41 个 attach 宿主漏包 ⇒ 其子树 `MaterialTheme.colorScheme` 回落 M3 默认色板
+        // （夜间/主题包下文字与光标不随主题）。收口到此处后，该类缺陷在结构上不可能再出现。
+        // 已显式包裹的宿主将形成幂等嵌套（同值 MaterialTheme 重复下发，无副作用）。
+        // 门禁 G-37 的 attach 豁免**自校验**本文件：此处若移除 `LegadoTheme`，attach 宿主立即重新变成违规。
+        setContent {
+            LegadoTheme {
+                content()
+            }
+        }
     }
     container.addView(composeView)
 }
