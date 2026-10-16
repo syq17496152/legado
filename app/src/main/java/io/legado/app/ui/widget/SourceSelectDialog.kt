@@ -56,6 +56,7 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.windowSize
 import splitties.systemservices.windowManager
 import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.theme.subtitleLarge
 import io.legado.app.ui.theme.subtitleLargeX
@@ -98,19 +99,22 @@ object SourceSelectDialog {
             ComposeView(context).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
                 setContent {
-                    SourceSelectContent(
-                        title = title.toString(),
-                        items = items,
-                        selectedKey = selectedKey,
-                        displayName = displayName,
-                        searchTexts = searchTexts,
-                        itemKey = itemKey,
-                        showTitle = showTitle,
-                        onSelect = {
-                            dialog.dismiss()
-                            onSelect(it)
-                        }
-                    )
+                    // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                    LegadoTheme {
+                        SourceSelectContent(
+                            title = title.toString(),
+                            items = items,
+                            selectedKey = selectedKey,
+                            displayName = displayName,
+                            searchTexts = searchTexts,
+                            itemKey = itemKey,
+                            showTitle = showTitle,
+                            onSelect = {
+                                dialog.dismiss()
+                                onSelect(it)
+                            }
+                        )
+                    }
                 }
             }
         )

@@ -16,6 +16,7 @@ import io.legado.app.data.entities.BookCharacterRelation
 import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.ui.book.character.compose.CharacterRelationScreen
 import io.legado.app.ui.book.character.compose.RelationEditDraft
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.startActivity
@@ -70,22 +71,25 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
         requestedCenterId = intent.getLongExtra(EXTRA_CENTER_ID, 0L)
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         composeView.setContent {
-            CharacterRelationScreen(
-                characters = characters,
-                relations = relations,
-                selectedCenterId = selectedCenterId,
-                selectedRelation = selectedRelation,
-                editingRelation = editingRelation,
-                onBack = ::finish,
-                onAddRelation = ::addRelation,
-                onEditRelation = ::editRelation,
-                onDeleteRelation = ::confirmDeleteRelation,
-                onSaveRelation = ::saveRelation,
-                onDismissEdit = { editingRelation = null },
-                onSelectCenter = ::selectCenter,
-                onOpenCard = ::openCharacterCard,
-                onSelectRelation = { selectedRelation = it }
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                CharacterRelationScreen(
+                    characters = characters,
+                    relations = relations,
+                    selectedCenterId = selectedCenterId,
+                    selectedRelation = selectedRelation,
+                    editingRelation = editingRelation,
+                    onBack = ::finish,
+                    onAddRelation = ::addRelation,
+                    onEditRelation = ::editRelation,
+                    onDeleteRelation = ::confirmDeleteRelation,
+                    onSaveRelation = ::saveRelation,
+                    onDismissEdit = { editingRelation = null },
+                    onSelectCenter = ::selectCenter,
+                    onOpenCard = ::openCharacterCard,
+                    onSelectRelation = { selectedRelation = it }
+                )
+            }
         }
         load()
     }

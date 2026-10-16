@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.character
+package io.legado.app.ui.book.character
 
 import android.app.Activity
 import android.os.Bundle
@@ -16,6 +16,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.character.compose.CharacterManageScreen
@@ -51,16 +52,19 @@ class BookCharacterManageActivity : BaseActivity<ViewBinding>(
         book = appDb.bookDao.getBook(bookUrl)
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         composeView.setContent {
-            CharacterManageScreen(
-                bookName = book?.name.orEmpty(),
-                characters = characters,
-                onBack = ::finish,
-                onAdd = { openEdit() },
-                onOpenCard = { openCard(it.id) },
-                onEdit = { openEdit(it.id) },
-                onDelete = ::delete,
-                onOpenRelations = ::openRelations
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                CharacterManageScreen(
+                    bookName = book?.name.orEmpty(),
+                    characters = characters,
+                    onBack = ::finish,
+                    onAdd = { openEdit() },
+                    onOpenCard = { openCard(it.id) },
+                    onEdit = { openEdit(it.id) },
+                    onDelete = ::delete,
+                    onOpenRelations = ::openRelations
+                )
+            }
         }
         load()
     }
