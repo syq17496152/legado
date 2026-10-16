@@ -707,8 +707,7 @@
     <string name="gamepad_preset_conflict_title">Key conflict</string>
     <string name="gamepad_preset_conflict_message">This preset conflicts with your current custom key codes; continuing will overwrite them. Continue?</string>
     <string name="gamepad_preset_applied">Preset applied, you can still edit manually</string>
-    <string name="no_group">Ungrouped</string>
-    <string name="folder_view">Folder view</string>
+    <string name="no_group">Ungrouped</string>
     <string name="all_groups">All</string>
     <string name="prev_sentence">Prior sentence</string>
     <string name="next_sentence">Next sentence</string>
@@ -808,8 +807,7 @@
     <string name="disabled">Disabled</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-
-    <string name="clear_cache_summary">Clear the cache of the downloaded books and fonts</string>
+
     <string name="default_cover">Default cover</string>
     <string name="restore_ignore">Bypass list</string>
     <!-- R17（B3）：备份前按内容类别分选 -->
@@ -1352,8 +1350,6 @@
     <string name="c_blacklist">黑名单(contentBlacklist)</string>
     <string name="confirm">Confirm</string>
     <string name="jump_to_another_app">Jump to another app</string>
-    <string name="clear_webview_data">Clear WebView Data</string>
-    <string name="clear_webview_data_summary">Clear all data in WebView</string>
     <string name="source_tab_list">List</string>
     <string name="dict_rule">Dict rule</string>
     <string name="config_dict_rule">Config dict rule</string>

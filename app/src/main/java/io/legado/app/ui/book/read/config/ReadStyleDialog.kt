@@ -281,14 +281,12 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
      * 用于"入口显性化"：入口区按此显示（未启用也能看到开关与直达入口），
      * 而"是否接管排版"另按 [templateTakesOverTypography]（含开关）判定。
      *
-     * **口径必须与阅读页 `isTextRichMode()` 逐字一致**（否则出现"弹层说已接管、正文其实没换"的静默欺骗），
-     * 两者同源于 `ReaderTemplateAvailabilityPolicy.ContentKind.TEXT_LIKE`：**非 EPUB、非音视频/图片/PDF**。
+     * **口径与阅读页 `isTextRichMode()` 共用同一单源**（`ReaderTemplateManager.isTextLikeContent`
+     * ⇒ `ReaderTemplateAvailabilityPolicy.ContentKind.TEXT_LIKE`：**非 EPUB、非音视频/图片/PDF**）
+     * —— 此前两处各自内联同一串判据，属口径分裂风险，已收口。
      */
-    private fun templateInScope(): Boolean {
-        val book = ReadBook.book ?: return false
-        if (book.isEpub || book.isAudio || book.isVideo || book.isImage || book.isPdf) return false
-        return true
-    }
+    private fun templateInScope(): Boolean =
+        ReaderTemplateManager.isTextLikeContent(ReadBook.book)
 
     /** 系统"减少动效"（与 ReadBookActivity 同一判据；取不到按未开启处理）。 */
     private fun systemReduceMotion(): Boolean {

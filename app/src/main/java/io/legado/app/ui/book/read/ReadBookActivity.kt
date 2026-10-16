@@ -2557,9 +2557,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun isTextRichMode(): Boolean {
         val book = ReadBook.book ?: return false
         // 适用格式（与 archive v15「阅读页模板」的 `isOrdinaryText` 同口径）：**非 EPUB、非音视频/图片/PDF**。
-        // - EPUB：走自身内置排版（archive 亦以 `book?.isEpub == false` 直接排除，模板对其不适用）；
-        // - 音视频 / 图片 / PDF：无正文可排。
-        if (book.isEpub || book.isAudio || book.isVideo || book.isImage || book.isPdf) return false
+        // 该判据已收口为**单源** `ReaderTemplateManager.isTextLikeContent` → `ReaderTemplateAvailabilityPolicy`
+        // （`ReadStyleDialog.templateInScope()` 共用同一单源，防两处口径分裂；EPUB 走自身内置排版，
+        // archive 亦以 `book?.isEpub == false` 直接排除；音视频 / 图片 / PDF 无正文可排）。
+        if (!ReaderTemplateManager.isTextLikeContent(book)) return false
         if (book.isMarkdown) return AppConfig.mdRichRender
         // 其它文本类（本地 txt / **在线正文** / UMD / MOBI）随「阅读页模板」总开关一并开放
         // （默认关 ⇒ 零回归）。正文来源见 [richTextRawContent]。

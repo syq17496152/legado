@@ -1,5 +1,12 @@
 package io.legado.app.model.localBook.epubcore.template
 
+import io.legado.app.data.entities.Book
+import io.legado.app.help.book.isAudio
+import io.legado.app.help.book.isEpub
+import io.legado.app.help.book.isImage
+import io.legado.app.help.book.isPdf
+import io.legado.app.help.book.isVideo
+
 /**
  * 模板可用性策略（epub-md-rich-rendering 阶段 4.9；AD-25 / S7 / N1）。
  *
@@ -101,6 +108,20 @@ internal object ReaderTemplateAvailabilityPolicy {
             return Decision(usable = false, reason = Reason.NEEDS_CONFIRMATION, notice = ImportDisclaimer)
         }
         return Decision(usable = true, reason = Reason.AVAILABLE, notice = "")
+    }
+
+    /**
+     * `Book` → 是否属 [ContentKind.TEXT_LIKE]（**唯一映射源**）。
+     *
+     * 此前 `ReadStyleDialog.templateInScope()` 与 `ReadBookActivity.isTextRichMode()` 各自**内联**
+     * 同一串 `isEpub || isAudio || isVideo || isImage || isPdf` ⇒ 口径分裂风险（本仓库既有教训：
+     * 「同一规则出现两份必然失守」）。本函数把该判据收口到**纯策略**，UI 侧只做门面转发。
+     *
+     * `book == null`（无书上下文）按**不在作用域**处理（保守：宁可不接管排版）。
+     */
+    fun isTextLikeContent(book: Book?): Boolean {
+        val b = book ?: return false
+        return !(b.isEpub || b.isAudio || b.isVideo || b.isImage || b.isPdf)
     }
 
     /** 导出前提示（用于分享/导出动作的确认弹层）。 */

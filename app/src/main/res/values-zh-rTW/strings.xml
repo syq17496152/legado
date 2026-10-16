@@ -444,8 +444,7 @@
     <string name="custom_page_key">自訂翻頁按鍵</string>
     <string name="prev_page_key">上一頁按鍵</string>
     <string name="next_page_key">下一頁按鍵</string>
-    <string name="no_group">未分組</string>
-    <string name="folder_view">資料夾視圖</string>
+    <string name="no_group">未分組</string>
     <string name="all_groups">全部</string>
     <string name="prev_sentence">上一句</string>
     <string name="next_sentence">下一句</string>
@@ -535,8 +534,7 @@
     <string name="disabled">已禁用</string>
     <string name="enabled_explore">已啟用發現</string>
     <string name="disabled_explore">已禁用發現</string>
-
-    <string name="clear_cache_summary">清除已下載書籍和字體快取</string>
+
     <string name="default_cover">預設封面</string>
     <string name="restore_ignore">復原忽略列表</string>
     <string name="restore_ignore_summary">復原時忽略一些內容不復原，方便不同手機配置不同</string>
@@ -831,9 +829,7 @@
     <string name="c_whitelist">白名单(contentWhitelist)</string>
     <string name="c_blacklist">黑名单(contentBlacklist)</string>
     <string name="confirm">确认</string>
-    <string name="jump_to_another_app">跳转其它应用</string>
-    <string name="clear_webview_data">清除 WebView 数据</string>
-    <string name="clear_webview_data_summary">清除内置浏览器所有数据</string>
+    <string name="jump_to_another_app">跳转其它应用</string>
     <string name="source_tab_list">列表</string>
     <string name="dict_rule">字典规则</string>
     <string name="config_dict_rule">配置字典规则</string>

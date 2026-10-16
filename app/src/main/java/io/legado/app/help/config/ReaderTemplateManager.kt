@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import io.legado.app.constant.AppLog
+import io.legado.app.data.entities.Book
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
 import io.legado.app.model.localBook.epubcore.template.ReaderBuiltinTemplateCatalog
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateAvailabilityPolicy
@@ -166,6 +167,16 @@ object ReaderTemplateManager {
     /** 导出/分享前的**免责提示**（内置为自研合规素材 ⇒ 空串，不打扰用户）。 */
     fun exportNotice(entry: Entry): String =
         ReaderTemplateAvailabilityPolicy.exportNotice(originOf(entry))
+
+    /**
+     * 当前书内容形态是否属**模板作用域**（`ContentKind.TEXT_LIKE`）—— **UI 门面**。
+     *
+     * 判据单源在 `ReaderTemplateAvailabilityPolicy.isTextLikeContent`（纯策略）；本方法只做转发，
+     * 供 `ReadStyleDialog`（入口显性化）与 `ReadBookActivity`（是否进入文本渲染模式）共用 ——
+     * 此前两处各自内联 `isEpub || isAudio || isVideo || isImage || isPdf`，属口径分裂风险。
+     */
+    fun isTextLikeContent(book: Book?): Boolean =
+        ReaderTemplateAvailabilityPolicy.isTextLikeContent(book)
 
     /**
      * 此刻该模板/该内容形态能否使用（4.9 的单一判据入口）。

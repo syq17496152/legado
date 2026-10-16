@@ -537,8 +537,7 @@
     <string name="disabled">Desativado</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-
-    <string name="clear_cache_summary">Limpar o cache dos livros e fontes baixados</string>
+
     <string name="default_cover">Capa padrão</string>
     <string name="restore_ignore">Lista de ignorados</string>
     <string name="restore_ignore_summary">Ignore alguns conteúdos durante restauração</string>
@@ -836,8 +835,6 @@
     <string name="c_blacklist">黑名单(contentBlacklist)</string>
     <string name="confirm">确认</string>
     <string name="jump_to_another_app">跳转其它应用</string>
-    <string name="clear_webview_data">清除 WebView 数据</string>
-    <string name="clear_webview_data_summary">清除内置浏览器所有数据</string>
     <string name="source_tab_list">列表</string>
     <string name="dict_rule">字典规则</string>
     <string name="config_dict_rule">配置字典规则</string>

@@ -539,8 +539,7 @@
     <string name="disabled">Đã tắt</string>
     <string name="enabled_explore">Đã bật khám phá</string>
     <string name="disabled_explore">Đã tắt khám phá</string>
-
-    <string name="clear_cache_summary">Xóa bộ đệm của sách và phông chữ đã tải xuống</string>
+
     <string name="default_cover">Bìa mặc định</string>
     <string name="restore_ignore">Danh sách bỏ qua</string>
     <string name="restore_ignore_summary">Bỏ qua một số nội dung khi khôi phục</string>
@@ -834,8 +833,6 @@
     <string name="c_blacklist">Danh sách đen(contentBlacklist)</string>
     <string name="confirm">Xác nhận</string>
     <string name="jump_to_another_app">Chuyển sang ứng dụng khác</string>
-    <string name="clear_webview_data">Xóa dữ liệu WebView</string>
-    <string name="clear_webview_data_summary">Xóa tất cả dữ liệu của trình duyệt tích hợp</string>
     <string name="source_tab_list">Danh sách</string>
     <string name="dict_rule">Quy tắc từ điển</string>
     <string name="config_dict_rule">Cấu hình quy tắc từ điển</string>
