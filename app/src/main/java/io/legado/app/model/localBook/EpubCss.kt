@@ -268,10 +268,6 @@ internal object EpubCss {
         return rules
     }
 
-    fun normalizeSupportedStyle(style: String): String {
-        return normalizeSupportedDeclarations(style).toStyleString()
-    }
-
     fun normalizeSupportedDeclarations(style: String): List<Declaration> {
         return parseDeclarations(style)
             .expandBoxShorthand()
