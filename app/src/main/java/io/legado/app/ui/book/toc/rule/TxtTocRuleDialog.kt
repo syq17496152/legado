@@ -62,7 +62,7 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.ComposeSuggestionTextInputDialog
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
@@ -120,7 +120,7 @@ class TxtTocRuleDialog() : ComposeDialogFragment(),
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
+                LegadoTheme {
                     // 列表状态用引用判等承载：TxtTocRule.equals 仅比 id，若沿用结构相等策略，
                     // DB 回灌的同 id 新实例会被判「相等」而跳过赋值 → 开关等变更无法反映到界面
                     var tocRules by remember {

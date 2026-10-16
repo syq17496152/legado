@@ -74,7 +74,7 @@ import io.legado.app.ui.widget.RoundedTagBarView
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.TopBarActionRow
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.applyMainBottomBarPadding
@@ -194,7 +194,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.panelOverview.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 overviewUiState.value?.let { ui ->
                     ReadRecordOverviewCard(ui = ui)
                 }
@@ -204,7 +204,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.llRecentBooks.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 ReadRecordRecentBooksList(
                     items = recentBooksUiState.value,
                     onClick = { index -> openRecentBook(index) },
@@ -216,7 +216,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.llDailyRecords.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 ReadRecordDailyList(
                     items = dailyRecordsUiState.value,
                     onLongClick = { index -> confirmDeleteDailyRecord(index) }
@@ -227,7 +227,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.llReadRank.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 ReadRecordRankList(
                     items = rankUiState.value,
                     onClick = { index -> openRankBook(index) },
@@ -267,7 +267,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.rvRecentCovers.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 ReadRecordCoverRow(
                     items = recentCoversUiState.value,
                     onClick = { index -> openRecentCover(index) },
@@ -279,7 +279,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.goalCardContent.setContent {
-            LegadoComposeTheme {
+            LegadoTheme {
                 goalUiState.value?.let { ui ->
                     ReadRecordGoalCardContent(ui = ui)
                 }
@@ -310,7 +310,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             )
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
+                LegadoTheme {
                     GlassTopAppBar(
                         title = getString(R.string.read_record),
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -374,7 +374,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             )
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
+                LegadoTheme {
                     TagChipRow(
                         items = filterDayItems.value,
                         selectedIndex = filterDaySelected.value,
