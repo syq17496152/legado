@@ -17,10 +17,6 @@ object CacheManifestHelper {
         return File(BookHelp.getCacheDir(book), MANIFEST_FILE_NAME)
     }
 
-    fun hasManifest(cacheDir: File): Boolean {
-        return File(cacheDir, MANIFEST_FILE_NAME).isFile
-    }
-
     fun read(book: Book): CacheBookManifest? {
         return read(manifestFile(book))
     }
