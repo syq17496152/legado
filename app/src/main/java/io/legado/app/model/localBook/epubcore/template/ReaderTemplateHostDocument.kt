@@ -133,12 +133,6 @@ object ReaderTemplateHostDocument {
             "if(!s)return 'no-skeleton';s.style.display='$display';return 'skeleton-$state';})()"
     }
 
-    /** 沙箱文档是否已在容器内（宿主文档侧事实，用于诊断与就绪判定）。 */
-    fun sandboxProbeScript(): String =
-        "(function(){var c=document.getElementById('$ContainerId');" +
-            "var f=c&&c.firstElementChild;" +
-            "return [!!f,window.ReaderTemplateHost?'1':'0'].join('|');})()"
-
     /**
      * 容器定尺寸脚本：按宿主文档视口以 **px 显式值**定尺寸，并**回发几何自证**。
      *

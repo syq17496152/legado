@@ -114,19 +114,6 @@ object UiCorner {
         )
     }
 
-    fun panelRoundedStroke(
-        context: Context,
-        color: Int,
-        radius: Float,
-        strokeWidth: Int,
-        strokeColor: Int
-    ): Drawable {
-        val border = applyPanelBorderAlpha(context, strokeColor)
-        val base = roundedStroke(color, radius, strokeWidth, border)
-        val image = panelImageDrawable(context, radius) ?: return base
-        return LayerDrawable(arrayOf(base, image, strokeOnly(radius, strokeWidth, border)))
-    }
-
     fun panelInsetStrokeDrawable(
         context: Context,
         color: Int,

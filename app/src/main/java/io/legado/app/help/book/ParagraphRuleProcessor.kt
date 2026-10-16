@@ -79,8 +79,6 @@ object ParagraphRuleProcessor {
         return click?.startsWith(CLICK_PREFIX) == true || click?.startsWith(RULE_PREFIX) == true
     }
 
-    fun wrapClick(ruleId: Long, js: String): String = "$CLICK_PREFIX$RULE_PREFIX$ruleId\n$js"
-
     private fun wrapRuleClick(ruleId: Long, js: String): String = "$RULE_PREFIX$ruleId:$js"
 
     suspend fun process(book: Book, chapter: BookChapter, content: BookContent): BookContent {
@@ -665,10 +663,6 @@ object ParagraphRuleProcessor {
         map.forEach { (key, value) ->
             if (key != null) appDb.paragraphRuleDao.putVar(ParagraphRuleVar(ruleId, key.toString(), value?.toString() ?: ""))
         }
-    }
-
-    fun clickKey(ruleId: Long, js: String): String {
-        return "{\"pclick\":${GSON.toJson(wrapClick(ruleId, js))}}"
     }
 
     fun stableKey(rule: ParagraphRule): String {

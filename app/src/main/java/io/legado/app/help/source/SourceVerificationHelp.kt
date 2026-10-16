@@ -27,6 +27,9 @@ object SourceVerificationHelp {
      * 用途：验证码弹窗的「连续失败升级引导」（F169）——同源被再次要求验证，
      * 即说明上一次输入未被接受，累计 ≥2 次时在弹窗内给出禁用/删除该源的引导。
      * 口径说明：源验证是否被接受无法在本层观测，故按"进程内累计"计；进程重启清零。
+     * 传递方式：本层在 [getVerificationResult] 里把本次序号作为 `attempt` 意图附加项
+     * 交给弹窗（`VerificationCodeActivity` → `VerificationCodeDialog`），弹窗侧按 `attempt >= 2`
+     * 渲染升级引导行，无需再回调本层取值。
      */
     private val verificationAttempts = ConcurrentHashMap<String, Int>()
 
@@ -34,9 +37,6 @@ object SourceVerificationHelp {
         getVerificationResultKey(source.getKey())
 
     private fun getVerificationResultKey(sourceKey: String) = "${sourceKey}_verificationResult"
-
-    /** 本进程内该源累计发起的验证次数（供弹窗侧读取，见 [verificationAttempts] 口径说明） */
-    fun verificationAttemptCount(sourceKey: String): Int = verificationAttempts[sourceKey] ?: 0
 
     /**
      * 获取书源验证结果
