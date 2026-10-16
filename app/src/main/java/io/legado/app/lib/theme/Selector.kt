@@ -54,7 +54,7 @@ object Selector {
         private var hasSetDisabledBgColor = false
         private var hasSetPressedBgColor = false
         private var hasSetSelectedBgColor = false
-        private val hasSetFocusedBgColor = false
+        private var hasSetFocusedBgColor = false
         private var hasSetCheckedBgColor = false
 
         private var hasSetDisabledStrokeColor = false
@@ -126,7 +126,7 @@ object Selector {
 
         fun setFocusedBgColor(@ColorInt color: Int): ShapeSelector {
             mFocusedBgColor = color
-            hasSetPressedBgColor = true
+            hasSetFocusedBgColor = true
             return this
         }
 
