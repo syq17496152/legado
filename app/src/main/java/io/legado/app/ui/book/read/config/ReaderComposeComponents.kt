@@ -3,7 +3,6 @@ package io.legado.app.ui.book.read.config
 import android.content.DialogInterface
 import android.view.Gravity
 import android.view.ViewGroup
-import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -107,17 +106,7 @@ abstract class ReaderBottomSheetComposeDialogFragment : ComposeDialogFragment() 
     override fun onStart() {
         super.onStart()
         registerBottomDialog()
-        dialog?.window?.run {
-            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setBackgroundDrawableResource(android.R.color.transparent)
-            decorView.setPadding(0, 0, 0, 0)
-            val attr = attributes
-            attr.dimAmount = 0f
-            attr.gravity = Gravity.BOTTOM
-            attr.windowAnimations = if (AppConfig.isEInkMode) 0 else R.style.AnimDialogBottom
-            attributes = attr
-            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
+        dialog?.window?.applyReaderBottomSheetWindow()
     }
 
     override fun onDismiss(dialog: DialogInterface) {
