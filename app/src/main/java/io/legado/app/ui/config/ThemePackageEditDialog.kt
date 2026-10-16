@@ -85,12 +85,14 @@ class ThemePackageEditDialog : ComposeDialogFragment() {
         return androidx.compose.ui.platform.ComposeView(requireContext()).apply {
             setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
+                if (host == null) {
+                    dismissAllowingStateLoss()
+                    return@setContent
+                }
                 // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                // ⚠ 早退必须留在 setContent 本层：`LegadoTheme` 是非内联 lambda，
+                //   其内部写 `return@setContent` 会被 Kotlin 判「'return' is prohibited here」
                 LegadoTheme {
-                    if (host == null) {
-                        dismissAllowingStateLoss()
-                        return@setContent
-                    }
                     ThemePackageEditContent(host, onClose = { dismissAllowingStateLoss() })
                 }
             }
