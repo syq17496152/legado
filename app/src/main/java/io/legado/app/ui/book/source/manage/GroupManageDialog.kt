@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.activityViewModels
 import io.legado.app.R
 import io.legado.app.data.appDb
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.ComposeGroupManageDialogContent
 import io.legado.app.ui.widget.compose.AppDialogSize
@@ -28,16 +29,19 @@ class GroupManageDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val groups by appDb.bookSourceDao.flowGroups()
-                    .conflate()
-                    .collectAsState(initial = emptyList())
-                ComposeGroupManageDialogContent(
-                    groups = groups,
-                    onAddGroup = viewModel::addGroup,
-                    onRenameGroup = { old, new -> viewModel.upGroup(old, new) },
-                    onDeleteGroup = viewModel::delGroup,
-                    onDismiss = { dismissAllowingStateLoss() }
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val groups by appDb.bookSourceDao.flowGroups()
+                        .conflate()
+                        .collectAsState(initial = emptyList())
+                    ComposeGroupManageDialogContent(
+                        groups = groups,
+                        onAddGroup = viewModel::addGroup,
+                        onRenameGroup = { old, new -> viewModel.upGroup(old, new) },
+                        onDeleteGroup = viewModel::delGroup,
+                        onDismiss = { dismissAllowingStateLoss() }
+                    )
+                }
             }
         }
     }

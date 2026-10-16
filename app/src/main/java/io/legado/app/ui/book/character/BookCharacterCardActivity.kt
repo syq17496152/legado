@@ -16,6 +16,7 @@ import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.ui.book.character.compose.CharacterCardScreen
 import io.legado.app.ui.book.character.compose.CharacterSpeechEngineUi
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
@@ -47,15 +48,18 @@ class BookCharacterCardActivity : BaseActivity<ViewBinding>(
         characterId = intent.getLongExtra(BookCharacterManageActivity.EXTRA_CHARACTER_ID, 0L)
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         composeView.setContent {
-            CharacterCardScreen(
-                character = character,
-                onBack = ::finish,
-                onEdit = ::openEdit,
-                speechEngines = speechEngines,
-                onSpeechRouteChange = ::updateSpeechRoute,
-                relationCount = directRelationCount,
-                onOpenRelations = ::openRelations
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                CharacterCardScreen(
+                    character = character,
+                    onBack = ::finish,
+                    onEdit = ::openEdit,
+                    speechEngines = speechEngines,
+                    onSpeechRouteChange = ::updateSpeechRoute,
+                    relationCount = directRelationCount,
+                    onOpenRelations = ::openRelations
+                )
+            }
         }
         load()
     }

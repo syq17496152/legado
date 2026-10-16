@@ -24,6 +24,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.FragmentMyConfigBinding
 import io.legado.app.service.WebService
 import io.legado.app.ui.main.MainFragmentInterface
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.data.appDb
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.utils.applyStatusBarPadding
@@ -129,38 +130,41 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
     // 内容区 MySettingsScreen；路由逻辑零改动：onRowClick → handleSettingsRowClick
     private fun installComposeContent() {
         binding.composeHost.setContent {
-            MySettingsScreen(
-                sections = sections,
-                subSearchItems = subSearchItems,
-                searchQuery = "",
-                metrics = metricItemsState.value,
-                // F26：身份行用真实品牌名 + 版本号（本地账户无登录态，不写「已登录设备」类不实文案）
-                profileName = getString(R.string.app_name),
-                profileSubtitle = "${getString(R.string.version)} ${AppConst.appInfo.versionName}",
-                themeModeLabel = currentThemeModeLabel(
-                    requireContext(),
-                    themeOptions,
-                    themeModeState.value
-                ),
-                webServiceState = webServiceState.value,
-                onThemeModeClick = {
-                    (activity as? AppCompatActivity)?.showThemeModeActions(
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                MySettingsScreen(
+                    sections = sections,
+                    subSearchItems = subSearchItems,
+                    searchQuery = "",
+                    metrics = metricItemsState.value,
+                    // F26：身份行用真实品牌名 + 版本号（本地账户无登录态，不写「已登录设备」类不实文案）
+                    profileName = getString(R.string.app_name),
+                    profileSubtitle = "${getString(R.string.version)} ${AppConst.appInfo.versionName}",
+                    themeModeLabel = currentThemeModeLabel(
+                        requireContext(),
                         themeOptions,
                         themeModeState.value
-                    ) { value ->
-                        (activity as? AppCompatActivity)?.applyThemeMode(value) { themeModeState.value = it }
+                    ),
+                    webServiceState = webServiceState.value,
+                    onThemeModeClick = {
+                        (activity as? AppCompatActivity)?.showThemeModeActions(
+                            themeOptions,
+                            themeModeState.value
+                        ) { value ->
+                            (activity as? AppCompatActivity)?.applyThemeMode(value) { themeModeState.value = it }
+                        }
+                    },
+                    onWebServiceCheckedChange = {
+                        (activity as? AppCompatActivity)?.setWebServiceEnabled(it) { webServiceState.value = it }
+                    },
+                    onWebServiceClick = {
+                        (activity as? AppCompatActivity)?.handleWebServiceClick { webServiceState.value = it }
+                    },
+                    onRowClick = { key, searchTarget ->
+                        activity?.handleSettingsRowClick(key, searchTarget)
                     }
-                },
-                onWebServiceCheckedChange = {
-                    (activity as? AppCompatActivity)?.setWebServiceEnabled(it) { webServiceState.value = it }
-                },
-                onWebServiceClick = {
-                    (activity as? AppCompatActivity)?.handleWebServiceClick { webServiceState.value = it }
-                },
-                onRowClick = { key, searchTarget ->
-                    activity?.handleSettingsRowClick(key, searchTarget)
-                }
-            )
+                )
+            }
         }
     }
 

@@ -22,6 +22,7 @@ import io.legado.app.R
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleGroupStore
 import io.legado.app.ui.book.read.config.HighlightRuleStore
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -58,11 +59,14 @@ class HighlightRuleGroupManageDialog @JvmOverloads constructor(
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                GroupManageDialogContent(
-                    onChanged = onChanged,
-                    onSelectGroup = onSelectGroup,
-                    onDismiss = { dismissAllowingStateLoss() }
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    GroupManageDialogContent(
+                        onChanged = onChanged,
+                        onSelectGroup = onSelectGroup,
+                        onDismiss = { dismissAllowingStateLoss() }
+                    )
+                }
             }
         }
     }

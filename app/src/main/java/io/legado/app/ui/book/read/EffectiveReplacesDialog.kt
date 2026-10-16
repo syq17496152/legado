@@ -38,6 +38,7 @@ import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -77,28 +78,31 @@ class EffectiveReplacesDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                var items by remember { mutableStateOf(initialItems()) }
-                EffectiveReplacesPanel(
-                    items = items,
-                    onRowClick = { item ->
-                        if (item == chineseConvert) {
-                            showChineseConvertAlert()
-                        } else {
-                            editActivity.launch(ReplaceEditActivity.startIntent(requireContext(), item.id))
-                        }
-                    },
-                    onClose = { item ->
-                        isEdit = true
-                        items = items.filterNot { it === item }
-                        if (item == chineseConvert) {
-                            AppConfig.chineseConverterType = 0
-                        } else {
-                            item.isEnabled = false
-                            appDb.replaceRuleDao.insert(item)
-                        }
-                    },
-                    onDismiss = { dismissAllowingStateLoss() }
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    var items by remember { mutableStateOf(initialItems()) }
+                    EffectiveReplacesPanel(
+                        items = items,
+                        onRowClick = { item ->
+                            if (item == chineseConvert) {
+                                showChineseConvertAlert()
+                            } else {
+                                editActivity.launch(ReplaceEditActivity.startIntent(requireContext(), item.id))
+                            }
+                        },
+                        onClose = { item ->
+                            isEdit = true
+                            items = items.filterNot { it === item }
+                            if (item == chineseConvert) {
+                                AppConfig.chineseConverterType = 0
+                            } else {
+                                item.isEnabled = false
+                                appDb.replaceRuleDao.insert(item)
+                            }
+                        },
+                        onDismiss = { dismissAllowingStateLoss() }
+                    )
+                }
             }
         }
     }
