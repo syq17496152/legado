@@ -57,6 +57,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -117,111 +118,114 @@ class ContentEditDialog() : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(bottomBackground))
-                ) {
-                    Row(
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(style.surface)
-                            .heightIn(min = 52.dp)
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .background(Color(bottomBackground))
                     ) {
-                        Text(
-                            text = chapterTitle,
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .clickable { onTitleClick() }
-                                .padding(vertical = 12.dp),
-                            color = style.primaryText,
-                            fontFamily = style.titleFontFamily,
-                            fontSize = MaterialTheme.typography.titleMedium.fontSize,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        IconButton(onClick = {
-                            save()
-                            dismiss()
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.Save,
-                                contentDescription = stringResource(R.string.action_save),
-                                tint = style.primaryText
+                                .fillMaxWidth()
+                                .background(style.surface)
+                                .heightIn(min = 52.dp)
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = chapterTitle,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onTitleClick() }
+                                    .padding(vertical = 12.dp),
+                                color = style.primaryText,
+                                fontFamily = style.titleFontFamily,
+                                fontSize = MaterialTheme.typography.titleMedium.fontSize,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                        }
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
+                            IconButton(onClick = {
+                                save()
+                                dismiss()
+                            }) {
                                 Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = stringResource(R.string.more),
+                                    imageVector = Icons.Filled.Save,
+                                    contentDescription = stringResource(R.string.action_save),
                                     tint = style.primaryText
                                 )
                             }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = listOf(
-                                    MenuAction(
-                                        icon = Icons.Filled.Refresh,
-                                        title = stringResource(R.string.reset),
-                                        onClick = {
-                                            menuExpanded = false
-                                            viewModel.initContent(true) { content ->
-                                                editorRef?.setText(content)
-                                                refreshCurrentChapter()
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = stringResource(R.string.more),
+                                        tint = style.primaryText
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = listOf(
+                                        MenuAction(
+                                            icon = Icons.Filled.Refresh,
+                                            title = stringResource(R.string.reset),
+                                            onClick = {
+                                                menuExpanded = false
+                                                viewModel.initContent(true) { content ->
+                                                    editorRef?.setText(content)
+                                                    refreshCurrentChapter()
+                                                }
                                             }
-                                        }
-                                    ),
-                                    MenuAction(
-                                        icon = Icons.Filled.ContentCopy,
-                                        title = stringResource(R.string.copy_all),
-                                        onClick = {
-                                            menuExpanded = false
-                                            requireContext()
-                                                .sendToClip("$chapterTitle\n${editorRef?.text}")
-                                        }
+                                        ),
+                                        MenuAction(
+                                            icon = Icons.Filled.ContentCopy,
+                                            title = stringResource(R.string.copy_all),
+                                            onClick = {
+                                                menuExpanded = false
+                                                requireContext()
+                                                    .sendToClip("$chapterTitle\n${editorRef?.text}")
+                                            }
+                                        )
                                     )
                                 )
-                            )
+                            }
                         }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                EditText(ctx).apply {
-                                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                                    gravity = Gravity.TOP or Gravity.START
-                                    val pad = 12.dpToPx()
-                                    setPadding(pad, pad, pad, pad)
-                                    importantForAutofill =
-                                        View.IMPORTANT_FOR_AUTOFILL_NO
-                                    editorRef = this
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    EditText(ctx).apply {
+                                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                        gravity = Gravity.TOP or Gravity.START
+                                        val pad = 12.dpToPx()
+                                        setPadding(pad, pad, pad, pad)
+                                        importantForAutofill =
+                                            View.IMPORTANT_FOR_AUTOFILL_NO
+                                        editorRef = this
+                                    }
+                                },
+                                update = { editor ->
+                                    editor.setTextColor(style.primaryText.toArgb())
+                                    editor.setHintTextColor(style.secondaryText.toArgb())
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (loading) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(56.dp),
+                                        color = style.accent
+                                    )
                                 }
-                            },
-                            update = { editor ->
-                                editor.setTextColor(style.primaryText.toArgb())
-                                editor.setHintTextColor(style.secondaryText.toArgb())
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        if (loading) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(56.dp),
-                                    color = style.accent
-                                )
                             }
                         }
                     }

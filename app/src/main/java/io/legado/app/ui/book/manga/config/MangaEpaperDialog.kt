@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.R
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSection
@@ -62,52 +63,55 @@ class MangaEpaperDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                val palette = style.toMiuixPalette()
-                var threshold by remember { mutableStateOf(mMangaEInkThreshold.toFloat()) }
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    LegadoMiuixCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        color = style.surface,
-                        contentColor = style.primaryText,
-                        cornerRadius = style.panelRadius,
-                        insidePadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    val palette = style.toMiuixPalette()
+                    var threshold by remember { mutableStateOf(mMangaEInkThreshold.toFloat()) }
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
                     ) {
-                        Text(
-                            text = stringResource(R.string.manga_epaper_stting),
-                            color = style.primaryText,
-                            fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = style.titleFontFamily
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        LegadoMiuixSection(
-                            title = stringResource(R.string.manga_epaper_value),
-                            palette = palette,
-                            cornerRadius = style.actionRadius
+                        LegadoMiuixCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            color = style.surface,
+                            contentColor = style.primaryText,
+                            cornerRadius = style.panelRadius,
+                            insidePadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)
                         ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = threshold.roundToInt().toString(),
-                                    color = palette.secondaryText,
-                                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize
-                                )
-                                LegadoMiuixSlider(
-                                    value = threshold,
-                                    onValueChange = { value ->
-                                        threshold = value
-                                        val intValue = value.roundToInt().coerceIn(0, 255)
-                                        mMangaEInkThreshold = intValue
-                                        callback?.updateEepaper(intValue)
-                                    },
-                                    palette = palette,
-                                    valueRange = 0f..255f,
-                                    steps = 254
-                                )
+                            Text(
+                                text = stringResource(R.string.manga_epaper_stting),
+                                color = style.primaryText,
+                                fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = style.titleFontFamily
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            LegadoMiuixSection(
+                                title = stringResource(R.string.manga_epaper_value),
+                                palette = palette,
+                                cornerRadius = style.actionRadius
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = threshold.roundToInt().toString(),
+                                        color = palette.secondaryText,
+                                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize
+                                    )
+                                    LegadoMiuixSlider(
+                                        value = threshold,
+                                        onValueChange = { value ->
+                                            threshold = value
+                                            val intValue = value.roundToInt().coerceIn(0, 255)
+                                            mMangaEInkThreshold = intValue
+                                            callback?.updateEepaper(intValue)
+                                        },
+                                        palette = palette,
+                                        valueRange = 0f..255f,
+                                        steps = 254
+                                    )
+                                }
                             }
                         }
                     }

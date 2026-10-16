@@ -53,6 +53,7 @@ import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
@@ -125,11 +126,14 @@ class ClickActionConfigDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    ClickActionConfigContent(style = style)
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        ClickActionConfigContent(style = style)
+                    }
                 }
             }
         }

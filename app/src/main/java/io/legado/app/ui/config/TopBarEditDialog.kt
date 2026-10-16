@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.TopBarConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -81,78 +82,81 @@ class TopBarEditDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val callbacksReady = onSave != null &&
-                    onShowStyleSelector != null &&
-                    onShowCornerScalePicker != null &&
-                    onShowColorPicker != null &&
-                    onShowWallpaperSelector != null &&
-                    onShowWallpaperAlphaPicker != null &&
-                    onShowFilterDefaultSelector != null &&
-                    onToggleFilterToggleHidden != null &&
-                    onShowTagBarAlphaPicker != null &&
-                    onShowTagSelectedAlphaPicker != null &&
-                    onToggleSearchInDefaultStyle != null
-                LaunchedEffect(callbacksReady) {
-                    if (!callbacksReady) {
-                        dismissAllowingStateLoss()
-                    }
-                }
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(
-                        fontFamily = style.bodyFontFamily
-                    )
-                ) {
-                    TopBarEditDialogContent(
-                        args = args,
-                        style = style,
-                        onNameChanged = { name ->
-                            onNameChanged?.invoke(name)
-                        },
-                        onShowStyleSelector = {
-                            onShowStyleSelector?.invoke() ?: dismissAllowingStateLoss()
-                        },
-                        onShowCornerScalePicker = {
-                            onShowCornerScalePicker?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onShowColorPicker = { target, color ->
-                            onShowColorPicker?.invoke(target, color) ?: dismissAllowingStateLoss()
-                        },
-                        onShowWallpaperSelector = {
-                            onShowWallpaperSelector?.invoke() ?: dismissAllowingStateLoss()
-                        },
-                        onShowWallpaperAlphaPicker = {
-                            onShowWallpaperAlphaPicker?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onShowFilterDefaultSelector = {
-                            onShowFilterDefaultSelector?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onToggleFilterToggleHidden = {
-                            onToggleFilterToggleHidden?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onShowTagBarAlphaPicker = {
-                            onShowTagBarAlphaPicker?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onShowTagSelectedAlphaPicker = {
-                            onShowTagSelectedAlphaPicker?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onToggleSearchInDefaultStyle = {
-                            onToggleSearchInDefaultStyle?.invoke(it) ?: dismissAllowingStateLoss()
-                        },
-                        onSave = { name ->
-                            val saveCallback = onSave
-                            if (saveCallback != null) {
-                                dismissAllowingStateLoss()
-                                saveCallback(name)
-                            } else {
-                                dismissAllowingStateLoss()
-                            }
-                        },
-                        onCancel = {
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val callbacksReady = onSave != null &&
+                        onShowStyleSelector != null &&
+                        onShowCornerScalePicker != null &&
+                        onShowColorPicker != null &&
+                        onShowWallpaperSelector != null &&
+                        onShowWallpaperAlphaPicker != null &&
+                        onShowFilterDefaultSelector != null &&
+                        onToggleFilterToggleHidden != null &&
+                        onShowTagBarAlphaPicker != null &&
+                        onShowTagSelectedAlphaPicker != null &&
+                        onToggleSearchInDefaultStyle != null
+                    LaunchedEffect(callbacksReady) {
+                        if (!callbacksReady) {
                             dismissAllowingStateLoss()
-                            onCancel?.invoke()
                         }
-                    )
+                    }
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(
+                            fontFamily = style.bodyFontFamily
+                        )
+                    ) {
+                        TopBarEditDialogContent(
+                            args = args,
+                            style = style,
+                            onNameChanged = { name ->
+                                onNameChanged?.invoke(name)
+                            },
+                            onShowStyleSelector = {
+                                onShowStyleSelector?.invoke() ?: dismissAllowingStateLoss()
+                            },
+                            onShowCornerScalePicker = {
+                                onShowCornerScalePicker?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onShowColorPicker = { target, color ->
+                                onShowColorPicker?.invoke(target, color) ?: dismissAllowingStateLoss()
+                            },
+                            onShowWallpaperSelector = {
+                                onShowWallpaperSelector?.invoke() ?: dismissAllowingStateLoss()
+                            },
+                            onShowWallpaperAlphaPicker = {
+                                onShowWallpaperAlphaPicker?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onShowFilterDefaultSelector = {
+                                onShowFilterDefaultSelector?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onToggleFilterToggleHidden = {
+                                onToggleFilterToggleHidden?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onShowTagBarAlphaPicker = {
+                                onShowTagBarAlphaPicker?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onShowTagSelectedAlphaPicker = {
+                                onShowTagSelectedAlphaPicker?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onToggleSearchInDefaultStyle = {
+                                onToggleSearchInDefaultStyle?.invoke(it) ?: dismissAllowingStateLoss()
+                            },
+                            onSave = { name ->
+                                val saveCallback = onSave
+                                if (saveCallback != null) {
+                                    dismissAllowingStateLoss()
+                                    saveCallback(name)
+                                } else {
+                                    dismissAllowingStateLoss()
+                                }
+                            },
+                            onCancel = {
+                                dismissAllowingStateLoss()
+                                onCancel?.invoke()
+                            }
+                        )
+                    }
                 }
             }
         }

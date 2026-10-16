@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogSliderGrid
 import io.legado.app.ui.widget.compose.AppDialogSliderItem
 import io.legado.app.ui.widget.compose.AppDialogStyle
@@ -70,11 +71,14 @@ class MangaColorFilterDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    MangaColorFilterContent(style = style)
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        MangaColorFilterContent(style = style)
+                    }
                 }
             }
         }

@@ -40,6 +40,7 @@ import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.ui.book.read.ContentSelectConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -76,67 +77,70 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val initialSelected = remember {
-                    sanitizeActionIds(ContentSelectConfig.selectedActionIds(requireContext()))
-                        .toList()
-                }
-                var selectedActions by rememberSaveable {
-                    mutableStateOf(initialSelected)
-                }
-                val initialDefaultOpen = remember {
-                    requireContext()
-                        .getPrefString(PreferKey.contentSelectDefaultOpen, "")
-                        .orEmpty()
-                        .takeIf { it in defaultOpenValues }
-                        .orEmpty()
-                }
-                var defaultOpen by rememberSaveable {
-                    mutableStateOf(initialDefaultOpen)
-                }
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    AppDialogFrame(
-                        title = stringResource(R.string.content_select_menu_config),
-                        content = {
-                            ContentSelectMenuContent(
-                                selectedActions = selectedActions.toSet(),
-                                defaultOpen = defaultOpen,
-                                style = style,
-                                onActionToggle = { actionId ->
-                                    selectedActions = selectedActions
-                                        .toMutableSet()
-                                        .apply {
-                                            if (!add(actionId)) {
-                                                remove(actionId)
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val initialSelected = remember {
+                        sanitizeActionIds(ContentSelectConfig.selectedActionIds(requireContext()))
+                            .toList()
+                    }
+                    var selectedActions by rememberSaveable {
+                        mutableStateOf(initialSelected)
+                    }
+                    val initialDefaultOpen = remember {
+                        requireContext()
+                            .getPrefString(PreferKey.contentSelectDefaultOpen, "")
+                            .orEmpty()
+                            .takeIf { it in defaultOpenValues }
+                            .orEmpty()
+                    }
+                    var defaultOpen by rememberSaveable {
+                        mutableStateOf(initialDefaultOpen)
+                    }
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        AppDialogFrame(
+                            title = stringResource(R.string.content_select_menu_config),
+                            content = {
+                                ContentSelectMenuContent(
+                                    selectedActions = selectedActions.toSet(),
+                                    defaultOpen = defaultOpen,
+                                    style = style,
+                                    onActionToggle = { actionId ->
+                                        selectedActions = selectedActions
+                                            .toMutableSet()
+                                            .apply {
+                                                if (!add(actionId)) {
+                                                    remove(actionId)
+                                                }
                                             }
-                                        }
-                                        .toList()
-                                },
-                                onDefaultOpenChange = { defaultOpen = it }
-                            )
-                        },
-                        actions = {
-                            val palette = style.toMiuixPalette()
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.cancel),
-                                palette = palette,
-                                onClick = { dismissAllowingStateLoss() },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.ok),
-                                palette = palette,
-                                primary = true,
-                                onClick = {
-                                    saveConfig(selectedActions.toSet(), defaultOpen)
-                                },
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    )
+                                            .toList()
+                                    },
+                                    onDefaultOpenChange = { defaultOpen = it }
+                                )
+                            },
+                            actions = {
+                                val palette = style.toMiuixPalette()
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.cancel),
+                                    palette = palette,
+                                    onClick = { dismissAllowingStateLoss() },
+                                    cornerRadius = style.actionRadius
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.ok),
+                                    palette = palette,
+                                    primary = true,
+                                    onClick = {
+                                        saveConfig(selectedActions.toSet(), defaultOpen)
+                                    },
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }

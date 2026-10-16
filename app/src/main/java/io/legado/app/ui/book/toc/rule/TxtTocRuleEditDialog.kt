@@ -48,6 +48,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.code.CodeView
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.ui.widget.code.addJsonPattern
@@ -98,88 +99,91 @@ class TxtTocRuleEditDialog() : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LaunchedEffect(Unit) {
-                    viewModel.initData(arguments?.getLong("id")) { upRuleView(it) }
-                }
-                val style = rememberAppDialogStyle()
-                val palette = style.toMiuixPalette()
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { dismiss() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppDialogFrame(
-                        modifier = Modifier.clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {},
-                        title = stringResource(R.string.txt_toc_rule),
-                        scrollContent = true,
-                        content = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                LabeledTextField(
-                                    label = stringResource(R.string.name),
-                                    value = name,
-                                    onValueChange = { name = it },
-                                    style = style
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    LaunchedEffect(Unit) {
+                        viewModel.initData(arguments?.getLong("id")) { upRuleView(it) }
+                    }
+                    val style = rememberAppDialogStyle()
+                    val palette = style.toMiuixPalette()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { dismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppDialogFrame(
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {},
+                            title = stringResource(R.string.txt_toc_rule),
+                            scrollContent = true,
+                            content = {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    LabeledTextField(
+                                        label = stringResource(R.string.name),
+                                        value = name,
+                                        onValueChange = { name = it },
+                                        style = style
+                                    )
+                                    LabeledTextField(
+                                        label = stringResource(R.string.regex),
+                                        value = rule,
+                                        onValueChange = { rule = it },
+                                        style = style
+                                    )
+                                    LabeledCodeField(
+                                        label = stringResource(R.string.replace_to_js),
+                                        value = replacement,
+                                        onValueChange = { replacement = it },
+                                        style = style
+                                    )
+                                    LabeledTextField(
+                                        label = stringResource(R.string.example),
+                                        value = example,
+                                        onValueChange = { example = it },
+                                        style = style
+                                    )
+                                }
+                            },
+                            actions = {
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.paste_rule),
+                                    palette = palette,
+                                    onClick = { viewModel.pasteRule { upRuleView(it) } },
+                                    cornerRadius = style.actionRadius
                                 )
-                                LabeledTextField(
-                                    label = stringResource(R.string.regex),
-                                    value = rule,
-                                    onValueChange = { rule = it },
-                                    style = style
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.copy_rule),
+                                    palette = palette,
+                                    onClick = { context?.sendToClip(GSON.toJson(getRuleFromView())) },
+                                    cornerRadius = style.actionRadius
                                 )
-                                LabeledCodeField(
-                                    label = stringResource(R.string.replace_to_js),
-                                    value = replacement,
-                                    onValueChange = { replacement = it },
-                                    style = style
-                                )
-                                LabeledTextField(
-                                    label = stringResource(R.string.example),
-                                    value = example,
-                                    onValueChange = { example = it },
-                                    style = style
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.action_save),
+                                    palette = palette,
+                                    onClick = {
+                                        val tocRule = getRuleFromView()
+                                        if (checkValid(tocRule)) {
+                                            callback?.saveTxtTocRule(tocRule)
+                                            dismissAllowingStateLoss()
+                                        }
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
                                 )
                             }
-                        },
-                        actions = {
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.paste_rule),
-                                palette = palette,
-                                onClick = { viewModel.pasteRule { upRuleView(it) } },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.copy_rule),
-                                palette = palette,
-                                onClick = { context?.sendToClip(GSON.toJson(getRuleFromView())) },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.action_save),
-                                palette = palette,
-                                onClick = {
-                                    val tocRule = getRuleFromView()
-                                    if (checkValid(tocRule)) {
-                                        callback?.saveTxtTocRule(tocRule)
-                                        dismissAllowingStateLoss()
-                                    }
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }

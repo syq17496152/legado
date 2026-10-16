@@ -52,6 +52,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.ui.config.AdvancedTitleManageActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
@@ -119,36 +120,39 @@ class PaddingConfigDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    LayoutConfigContent(
-                        style = style,
-                        colorRefreshTick = colorRefreshTick,
-                        onShowAdvancedTitleConfig = {
-                            startActivity(
-                                Intent(requireContext(), AdvancedTitleManageActivity::class.java)
-                            )
-                        },
-                        onShowSelector = ::showActionSelector,
-                        onShowTipColorPicker = {
-                            ColorPickerDialog.newBuilder()
-                                .setShowAlphaSlider(false)
-                                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                                .setDialogId(TIP_COLOR)
-                                .show(requireActivity())
-                        },
-                        onShowTipDividerColorPicker = {
-                            ColorPickerDialog.newBuilder()
-                                .setShowAlphaSlider(false)
-                                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                                .setDialogId(TIP_DIVIDER_COLOR)
-                                .show(requireActivity())
-                        },
-                        onColorChanged = { colorRefreshTick++ },
-                        onShowTemplateEditor = ::showTemplateEditor
-                    )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        LayoutConfigContent(
+                            style = style,
+                            colorRefreshTick = colorRefreshTick,
+                            onShowAdvancedTitleConfig = {
+                                startActivity(
+                                    Intent(requireContext(), AdvancedTitleManageActivity::class.java)
+                                )
+                            },
+                            onShowSelector = ::showActionSelector,
+                            onShowTipColorPicker = {
+                                ColorPickerDialog.newBuilder()
+                                    .setShowAlphaSlider(false)
+                                    .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+                                    .setDialogId(TIP_COLOR)
+                                    .show(requireActivity())
+                            },
+                            onShowTipDividerColorPicker = {
+                                ColorPickerDialog.newBuilder()
+                                    .setShowAlphaSlider(false)
+                                    .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+                                    .setDialogId(TIP_DIVIDER_COLOR)
+                                    .show(requireActivity())
+                            },
+                            onColorChanged = { colorRefreshTick++ },
+                            onShowTemplateEditor = ::showTemplateEditor
+                        )
+                    }
                 }
             }
         }

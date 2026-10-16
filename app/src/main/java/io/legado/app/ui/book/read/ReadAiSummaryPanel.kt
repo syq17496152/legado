@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppShapes
 import android.content.Context
 import android.util.AttributeSet
@@ -109,15 +110,18 @@ class ReadAiSummaryPanel @JvmOverloads constructor(
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         addView(composeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         composeView.setContent {
-            ReadAiSummaryContent(
-                state = uiState,
-                markwon = markwon,
-                onTopDrag = ::handleDrag,
-                onSelectModel = ::selectModel,
-                onRefresh = { loadSummary(forceRefresh = true) },
-                onStop = ::stop,
-                onClose = ::close
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                ReadAiSummaryContent(
+                    state = uiState,
+                    markwon = markwon,
+                    onTopDrag = ::handleDrag,
+                    onSelectModel = ::selectModel,
+                    onRefresh = { loadSummary(forceRefresh = true) },
+                    onStop = ::stop,
+                    onClose = ::close
+                )
+            }
         }
     }
 

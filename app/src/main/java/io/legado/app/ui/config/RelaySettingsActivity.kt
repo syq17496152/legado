@@ -66,6 +66,7 @@ import io.legado.app.service.relay.RelaySecretStore
 import io.legado.app.service.relay.RelayService
 import io.legado.app.service.relay.RelayShareResult
 import io.legado.app.service.relay.RelayStateRepository
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementPalette
@@ -118,31 +119,34 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setContent {
-                RelaySettingsScreen(
-                    initialWorkerUrl = prefs.getString(PreferKey.publicWebRelayWorkerUrl, "").orEmpty(),
-                    initialDeviceName = prefs.getString(PreferKey.publicWebRelayDeviceName, "").orEmpty(),
-                    initialEnabled = prefs.getBoolean(PreferKey.publicWebRelayEnabled, false),
-                    initialPermanentShare = prefs.getBoolean(PreferKey.publicWebRelayPermanentShare, false),
-                    initialShareProgressSync = prefs.getBoolean(PreferKey.publicWebRelayShareProgressSync, false),
-                    deviceId = identityId,
-                    secureStorageSupported = RelaySecretStore.isSupported,
-                    onBack = ::finish,
-                    onEnabledChange = ::setEnabled,
-                    onReconnect = ::reconnect,
-                    onProvision = ::provision,
-                    onCreateShare = ::createShare,
-                    onCopyShare = { sendToClip(it) },
-                    onShareQr = { shareWithQr(it, getString(R.string.public_web_relay_share_qr)) },
-                    onRevokeShare = ::revokeShare,
-                    onTest = ::testConnection,
-                    onShareOptionsChange = { permanent, progressSync ->
-                        prefs.edit()
-                            .putBoolean(PreferKey.publicWebRelayPermanentShare, permanent)
-                            .putBoolean(PreferKey.publicWebRelayShareProgressSync, progressSync)
-                            .apply()
-                    },
-                    onOpenBatterySettings = ::openBatterySettings,
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    RelaySettingsScreen(
+                        initialWorkerUrl = prefs.getString(PreferKey.publicWebRelayWorkerUrl, "").orEmpty(),
+                        initialDeviceName = prefs.getString(PreferKey.publicWebRelayDeviceName, "").orEmpty(),
+                        initialEnabled = prefs.getBoolean(PreferKey.publicWebRelayEnabled, false),
+                        initialPermanentShare = prefs.getBoolean(PreferKey.publicWebRelayPermanentShare, false),
+                        initialShareProgressSync = prefs.getBoolean(PreferKey.publicWebRelayShareProgressSync, false),
+                        deviceId = identityId,
+                        secureStorageSupported = RelaySecretStore.isSupported,
+                        onBack = ::finish,
+                        onEnabledChange = ::setEnabled,
+                        onReconnect = ::reconnect,
+                        onProvision = ::provision,
+                        onCreateShare = ::createShare,
+                        onCopyShare = { sendToClip(it) },
+                        onShareQr = { shareWithQr(it, getString(R.string.public_web_relay_share_qr)) },
+                        onRevokeShare = ::revokeShare,
+                        onTest = ::testConnection,
+                        onShareOptionsChange = { permanent, progressSync ->
+                            prefs.edit()
+                                .putBoolean(PreferKey.publicWebRelayPermanentShare, permanent)
+                                .putBoolean(PreferKey.publicWebRelayShareProgressSync, progressSync)
+                                .apply()
+                        },
+                        onOpenBatterySettings = ::openBatterySettings,
+                    )
+                }
             }
         }
         (binding.root as FrameLayout).addView(composeView)

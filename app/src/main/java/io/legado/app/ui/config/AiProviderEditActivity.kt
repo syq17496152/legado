@@ -29,6 +29,7 @@ import io.legado.app.ui.main.ai.AI_API_MODE_CHAT_COMPLETIONS
 import io.legado.app.ui.main.ai.AI_API_MODE_RESPONSES
 import io.legado.app.ui.main.ai.AiModelConfig
 import io.legado.app.ui.main.ai.AiProviderConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.compose.ComposeFetchedModelDialog
@@ -76,7 +77,10 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
                     setViewCompositionStrategy(
                         ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
                     )
-                    setContent { AiProviderEditScreen() }
+                    setContent {
+                        // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                        LegadoTheme { AiProviderEditScreen() }
+                    }
                 },
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,

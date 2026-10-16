@@ -48,6 +48,7 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.ThemePackageManager
 import io.legado.app.lib.theme.ThemeStore
 import kotlinx.coroutines.launch
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -84,11 +85,14 @@ class ThemePackageEditDialog : ComposeDialogFragment() {
         return androidx.compose.ui.platform.ComposeView(requireContext()).apply {
             setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                if (host == null) {
-                    dismissAllowingStateLoss()
-                    return@setContent
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    if (host == null) {
+                        dismissAllowingStateLoss()
+                        return@setContent
+                    }
+                    ThemePackageEditContent(host, onClose = { dismissAllowingStateLoss() })
                 }
-                ThemePackageEditContent(host, onClose = { dismissAllowingStateLoss() })
             }
         }
     }

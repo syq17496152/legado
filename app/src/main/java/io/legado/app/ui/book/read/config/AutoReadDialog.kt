@@ -50,6 +50,7 @@ import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.BaseReadBookActivity
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
@@ -110,25 +111,28 @@ class AutoReadDialog : ComposeDialogFragment() {
                 post { dismissAllowingStateLoss() }
             }
             setContent {
-                if (!shouldDismissForExistingDialog) {
-                    AutoReadContent(
-                        onShowMenu = {
-                            callBack?.showMenuBar()
-                            dismissAllowingStateLoss()
-                        },
-                        onOpenChapterList = { callBack?.openChapterList() },
-                        onStopAutoPage = {
-                            callBack?.autoPageStop()
-                            post { dismissAllowingStateLoss() }
-                        },
-                        onOpenSetting = {
-                            (activity as? BaseReadBookActivity)?.showPageAnimConfig {
-                                (activity as? ReadBookActivity)?.upPageAnim()
-                                ReadBook.loadContent(false)
-                            }
-                        },
-                        onSpeedCommitted = ::upTtsSpeechRate
-                    )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    if (!shouldDismissForExistingDialog) {
+                        AutoReadContent(
+                            onShowMenu = {
+                                callBack?.showMenuBar()
+                                dismissAllowingStateLoss()
+                            },
+                            onOpenChapterList = { callBack?.openChapterList() },
+                            onStopAutoPage = {
+                                callBack?.autoPageStop()
+                                post { dismissAllowingStateLoss() }
+                            },
+                            onOpenSetting = {
+                                (activity as? BaseReadBookActivity)?.showPageAnimConfig {
+                                    (activity as? ReadBookActivity)?.upPageAnim()
+                                    ReadBook.loadContent(false)
+                                }
+                            },
+                            onSpeedCommitted = ::upTtsSpeechRate
+                        )
+                    }
                 }
             }
         }

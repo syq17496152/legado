@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
 import io.legado.app.R
 import io.legado.app.help.config.BubblePackageManager
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -95,35 +96,38 @@ class BubbleEditDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                BubbleEditContent(
-                    title = titleText,
-                    initialName = configName,
-                    sizeScaleDisplay = sizeScaleDisplay,
-                    dayNormal = dayNormal,
-                    dayEmphasis = dayEmphasis,
-                    nightNormal = nightNormal,
-                    nightEmphasis = nightEmphasis,
-                    onNameChanged = { name ->
-                        onNameChanged?.invoke(name)
-                    },
-                    onDismiss = { dismissAllowingStateLoss() },
-                    onSave = { name ->
-                        dismissAllowingStateLoss()
-                        val config = editingConfigSnapshot().copy(name = name)
-                        onSaved?.invoke(name, config)
-                    },
-                    onOpenSizeScalePicker = {
-                        dismissAllowingStateLoss()
-                        onOpenSizeScalePicker?.invoke()
-                    },
-                    onOpenSvgEditor = {
-                        dismissAllowingStateLoss()
-                        onOpenSvgEditor?.invoke()
-                    },
-                    onPickColor = { dialogId, currentColor ->
-                        onPickColor?.invoke(dialogId, currentColor)
-                    }
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    BubbleEditContent(
+                        title = titleText,
+                        initialName = configName,
+                        sizeScaleDisplay = sizeScaleDisplay,
+                        dayNormal = dayNormal,
+                        dayEmphasis = dayEmphasis,
+                        nightNormal = nightNormal,
+                        nightEmphasis = nightEmphasis,
+                        onNameChanged = { name ->
+                            onNameChanged?.invoke(name)
+                        },
+                        onDismiss = { dismissAllowingStateLoss() },
+                        onSave = { name ->
+                            dismissAllowingStateLoss()
+                            val config = editingConfigSnapshot().copy(name = name)
+                            onSaved?.invoke(name, config)
+                        },
+                        onOpenSizeScalePicker = {
+                            dismissAllowingStateLoss()
+                            onOpenSizeScalePicker?.invoke()
+                        },
+                        onOpenSvgEditor = {
+                            dismissAllowingStateLoss()
+                            onOpenSvgEditor?.invoke()
+                        },
+                        onPickColor = { dialogId, currentColor ->
+                            onPickColor?.invoke(dialogId, currentColor)
+                        }
+                    )
+                }
             }
         }
     }

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.data.entities.RuleSub
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -67,82 +68,85 @@ class RuleSubEditComposeDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val typeLabels = stringArrayResource(R.array.rule_type).toList()
-                var type by rememberSaveable(initial.id) {
-                    mutableIntStateOf(initial.type.coerceIn(0, typeLabels.lastIndex))
-                }
-                var name by rememberSaveable(initial.id) { mutableStateOf(initial.name) }
-                var url by rememberSaveable(initial.id) { mutableStateOf(initial.url) }
-                var autoUpdate by rememberSaveable(initial.id) {
-                    mutableStateOf(initial.autoUpdate || initial.updateInterval > 0)
-                }
-                var silentUpdate by rememberSaveable(initial.id) {
-                    mutableStateOf(initial.silentUpdate && (initial.autoUpdate || initial.updateInterval > 0))
-                }
-                var updateInterval by rememberSaveable(initial.id) {
-                    mutableStateOf(initial.updateInterval.coerceAtLeast(0).toString())
-                }
-
-                RuleSubEditContent(
-                    typeLabels = typeLabels,
-                    selectedType = type,
-                    onTypeSelected = { type = it },
-                    name = name,
-                    onNameChange = { name = it },
-                    url = url,
-                    onUrlChange = { url = it },
-                    autoUpdate = autoUpdate,
-                    onAutoUpdateChange = { checked ->
-                        autoUpdate = checked
-                        if (checked && updateInterval.toIntOrNull().orZero() == 0) {
-                            updateInterval = "24"
-                        }
-                        if (!checked) {
-                            silentUpdate = false
-                            updateInterval = "0"
-                        }
-                    },
-                    silentUpdate = silentUpdate,
-                    onSilentUpdateChange = { checked ->
-                        if (autoUpdate) {
-                            silentUpdate = checked
-                        }
-                    },
-                    updateInterval = updateInterval,
-                    onUpdateIntervalChange = { text ->
-                        val normalized = text.filter { it.isDigit() }.take(4)
-                        updateInterval = normalized
-                        val interval = normalized.toIntOrNull().orZero()
-                        if (interval == 0) {
-                            autoUpdate = false
-                            silentUpdate = false
-                        } else {
-                            autoUpdate = true
-                        }
-                    },
-                    onDismiss = { dismissAllowingStateLoss() },
-                    onSave = {
-                        if (url.isBlank()) {
-                            requireContext().toastOnUi(R.string.null_url)
-                            return@RuleSubEditContent
-                        }
-                        val next = initial.copy(
-                            type = type,
-                            name = name,
-                            url = url,
-                            autoUpdate = autoUpdate,
-                            silentUpdate = silentUpdate && autoUpdate,
-                            updateInterval = if (autoUpdate) {
-                                updateInterval.toIntOrNull().orZero()
-                            } else {
-                                0
-                            }
-                        )
-                        callback?.saveRuleSub(next) {
-                            dismissAllowingStateLoss()
-                        }
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val typeLabels = stringArrayResource(R.array.rule_type).toList()
+                    var type by rememberSaveable(initial.id) {
+                        mutableIntStateOf(initial.type.coerceIn(0, typeLabels.lastIndex))
                     }
-                )
+                    var name by rememberSaveable(initial.id) { mutableStateOf(initial.name) }
+                    var url by rememberSaveable(initial.id) { mutableStateOf(initial.url) }
+                    var autoUpdate by rememberSaveable(initial.id) {
+                        mutableStateOf(initial.autoUpdate || initial.updateInterval > 0)
+                    }
+                    var silentUpdate by rememberSaveable(initial.id) {
+                        mutableStateOf(initial.silentUpdate && (initial.autoUpdate || initial.updateInterval > 0))
+                    }
+                    var updateInterval by rememberSaveable(initial.id) {
+                        mutableStateOf(initial.updateInterval.coerceAtLeast(0).toString())
+                    }
+
+                    RuleSubEditContent(
+                        typeLabels = typeLabels,
+                        selectedType = type,
+                        onTypeSelected = { type = it },
+                        name = name,
+                        onNameChange = { name = it },
+                        url = url,
+                        onUrlChange = { url = it },
+                        autoUpdate = autoUpdate,
+                        onAutoUpdateChange = { checked ->
+                            autoUpdate = checked
+                            if (checked && updateInterval.toIntOrNull().orZero() == 0) {
+                                updateInterval = "24"
+                            }
+                            if (!checked) {
+                                silentUpdate = false
+                                updateInterval = "0"
+                            }
+                        },
+                        silentUpdate = silentUpdate,
+                        onSilentUpdateChange = { checked ->
+                            if (autoUpdate) {
+                                silentUpdate = checked
+                            }
+                        },
+                        updateInterval = updateInterval,
+                        onUpdateIntervalChange = { text ->
+                            val normalized = text.filter { it.isDigit() }.take(4)
+                            updateInterval = normalized
+                            val interval = normalized.toIntOrNull().orZero()
+                            if (interval == 0) {
+                                autoUpdate = false
+                                silentUpdate = false
+                            } else {
+                                autoUpdate = true
+                            }
+                        },
+                        onDismiss = { dismissAllowingStateLoss() },
+                        onSave = {
+                            if (url.isBlank()) {
+                                requireContext().toastOnUi(R.string.null_url)
+                                return@RuleSubEditContent
+                            }
+                            val next = initial.copy(
+                                type = type,
+                                name = name,
+                                url = url,
+                                autoUpdate = autoUpdate,
+                                silentUpdate = silentUpdate && autoUpdate,
+                                updateInterval = if (autoUpdate) {
+                                    updateInterval.toIntOrNull().orZero()
+                                } else {
+                                    0
+                                }
+                            )
+                            callback?.saveRuleSub(next) {
+                                dismissAllowingStateLoss()
+                            }
+                        }
+                    )
+                }
             }
         }
     }

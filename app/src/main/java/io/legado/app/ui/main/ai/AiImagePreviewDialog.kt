@@ -37,6 +37,7 @@ import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.ui.image.ImagePyramidLoader
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -84,87 +85,90 @@ class AiImagePreviewDialog() : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LaunchedEffect(Unit) { reload() }
-                val style = rememberAppDialogStyle()
-                val palette = style.toMiuixPalette()
-                val target = image
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(bottomBackground))
-                ) {
-                    Box(
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    LaunchedEffect(Unit) { reload() }
+                    val style = rememberAppDialogStyle()
+                    val palette = style.toMiuixPalette()
+                    val target = image
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                            .fillMaxSize()
+                            .background(Color(bottomBackground))
                     ) {
-                        if (target != null) {
-                            // W6 7.3（AD-10/AD-21）：预览轨收敛为 SSIV（原为 PhotoView + Glide into）
-                            AndroidView(
-                                factory = { ctx -> SubsamplingScaleImageView(ctx) },
-                                update = { ssiv ->
-                                    val file = File(target.localPath)
-                                    if (file.exists()) {
-                                        ImagePyramidLoader.bindNormalImage(ssiv, file)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
+                            if (target != null) {
+                                // W6 7.3（AD-10/AD-21）：预览轨收敛为 SSIV（原为 PhotoView + Glide into）
+                                AndroidView(
+                                    factory = { ctx -> SubsamplingScaleImageView(ctx) },
+                                    update = { ssiv ->
+                                        val file = File(target.localPath)
+                                        if (file.exists()) {
+                                            ImagePyramidLoader.bindNormalImage(ssiv, file)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
-                    }
-                    Text(
-                        text = target?.name.orEmpty(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        color = style.primaryText,
-                        fontFamily = style.titleFontFamily,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (target != null) {
-                            val favorite = target.favorite
-                            LegadoMiuixActionButton(
-                                text = getString(
-                                    if (favorite) R.string.ai_image_cancel_favorite else R.string.favorite
-                                ),
-                                palette = palette,
-                                onClick = { toggleFavorite() },
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (favorite) {
+                        Text(
+                            text = target?.name.orEmpty(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            color = style.primaryText,
+                            fontFamily = style.titleFontFamily,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 56.dp)
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (target != null) {
+                                val favorite = target.favorite
                                 LegadoMiuixActionButton(
-                                    text = getString(R.string.ai_image_group),
+                                    text = getString(
+                                        if (favorite) R.string.ai_image_cancel_favorite else R.string.favorite
+                                    ),
                                     palette = palette,
-                                    onClick = { selectGroup() },
+                                    onClick = { toggleFavorite() },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (favorite) {
+                                    LegadoMiuixActionButton(
+                                        text = getString(R.string.ai_image_group),
+                                        palette = palette,
+                                        onClick = { selectGroup() },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                LegadoMiuixActionButton(
+                                    text = getString(R.string.ai_image_rename),
+                                    palette = palette,
+                                    onClick = { if (favorite) renameImage() },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .alpha(if (favorite) 1f else 0.45f)
+                                )
+                                LegadoMiuixActionButton(
+                                    text = getString(R.string.delete),
+                                    palette = palette,
+                                    onClick = { confirmDelete() },
+                                    danger = true,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
-                            LegadoMiuixActionButton(
-                                text = getString(R.string.ai_image_rename),
-                                palette = palette,
-                                onClick = { if (favorite) renameImage() },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .alpha(if (favorite) 1f else 0.45f)
-                            )
-                            LegadoMiuixActionButton(
-                                text = getString(R.string.delete),
-                                palette = palette,
-                                onClick = { confirmDelete() },
-                                danger = true,
-                                modifier = Modifier.weight(1f)
-                            )
                         }
                     }
                 }

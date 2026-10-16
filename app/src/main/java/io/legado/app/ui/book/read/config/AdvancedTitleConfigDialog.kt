@@ -41,6 +41,7 @@ import io.legado.app.R
 import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
@@ -142,14 +143,17 @@ class AdvancedTitleConfigDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                AdvancedTitleConfigContent(
-                    entryId = entryId,
-                    initialName = args.getString(ARG_NAME).orEmpty(),
-                    startModeIsRegex = startModeIsRegex,
-                    startDelimiter = startDelimiter,
-                    startRegex = startRegex,
-                    initialHeightFactor = initialHeightFactor
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    AdvancedTitleConfigContent(
+                        entryId = entryId,
+                        initialName = args.getString(ARG_NAME).orEmpty(),
+                        startModeIsRegex = startModeIsRegex,
+                        startDelimiter = startDelimiter,
+                        startRegex = startRegex,
+                        initialHeightFactor = initialHeightFactor
+                    )
+                }
             }
         }
     }

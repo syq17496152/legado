@@ -38,6 +38,7 @@ import io.legado.app.constant.AppConst.DEFAULT_WEBDAV_ID
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Server
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -68,26 +69,29 @@ class ServersDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val servers by appDb.serverDao.observeAll()
-                    .conflate()
-                    .collectAsState(initial = emptyList())
-                ServersPanel(
-                    servers = servers,
-                    selectServerId = selectServerId,
-                    onSelectChange = { selectServerId = it },
-                    onAdd = { showDialogFragment(ServerConfigDialog()) },
-                    onEdit = { server -> showDialogFragment(ServerConfigDialog(server.id)) },
-                    onDelete = { server -> confirmDeleteServer(server) },
-                    onUseDefault = {
-                        AppConfig.remoteServerId = DEFAULT_WEBDAV_ID
-                        dismissAllowingStateLoss()
-                    },
-                    onCancel = { dismissAllowingStateLoss() },
-                    onConfirm = {
-                        AppConfig.remoteServerId = selectServerId
-                        dismissAllowingStateLoss()
-                    }
-                )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val servers by appDb.serverDao.observeAll()
+                        .conflate()
+                        .collectAsState(initial = emptyList())
+                    ServersPanel(
+                        servers = servers,
+                        selectServerId = selectServerId,
+                        onSelectChange = { selectServerId = it },
+                        onAdd = { showDialogFragment(ServerConfigDialog()) },
+                        onEdit = { server -> showDialogFragment(ServerConfigDialog(server.id)) },
+                        onDelete = { server -> confirmDeleteServer(server) },
+                        onUseDefault = {
+                            AppConfig.remoteServerId = DEFAULT_WEBDAV_ID
+                            dismissAllowingStateLoss()
+                        },
+                        onCancel = { dismissAllowingStateLoss() },
+                        onConfirm = {
+                            AppConfig.remoteServerId = selectServerId
+                            dismissAllowingStateLoss()
+                        }
+                    )
+                }
             }
         }
     }

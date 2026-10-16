@@ -29,6 +29,7 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.DictRule
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppRuleFieldSpacer
@@ -70,36 +71,39 @@ class DictRuleEditDialog() : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LaunchedEffect(Unit) {
-                    viewModel.initData(arguments?.getString("name")) {
-                        upRuleView(viewModel.dictRule)
-                        loaded = true
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    LaunchedEffect(Unit) {
+                        viewModel.initData(arguments?.getString("name")) {
+                            upRuleView(viewModel.dictRule)
+                            loaded = true
+                        }
                     }
-                }
-                if (loaded) {
-                    DictRuleEditContent(
-                        name = nameValue,
-                        onNameChange = { nameValue = it },
-                        urlRule = urlRuleValue,
-                        onUrlRuleChange = { urlRuleValue = it },
-                        showRule = showRuleValue,
-                        onShowRuleChange = { showRuleValue = it },
-                        onFieldFocused = { focusedField = it },
-                        onFullEdit = ::onFullEditClicked,
-                        onSave = {
-                            viewModel.save(getDictRule()) {
-                                forceDismiss = true
-                                dismissAllowingStateLoss()
-                            }
-                        },
-                        onCopyRule = { viewModel.copyRule(getDictRule()) },
-                        onPasteRule = {
-                            viewModel.pasteRule {
-                                upRuleView(it)
-                            }
-                        },
-                        onDismiss = { dismiss() }
-                    )
+                    if (loaded) {
+                        DictRuleEditContent(
+                            name = nameValue,
+                            onNameChange = { nameValue = it },
+                            urlRule = urlRuleValue,
+                            onUrlRuleChange = { urlRuleValue = it },
+                            showRule = showRuleValue,
+                            onShowRuleChange = { showRuleValue = it },
+                            onFieldFocused = { focusedField = it },
+                            onFullEdit = ::onFullEditClicked,
+                            onSave = {
+                                viewModel.save(getDictRule()) {
+                                    forceDismiss = true
+                                    dismissAllowingStateLoss()
+                                }
+                            },
+                            onCopyRule = { viewModel.copyRule(getDictRule()) },
+                            onPasteRule = {
+                                viewModel.pasteRule {
+                                    upRuleView(it)
+                                }
+                            },
+                            onDismiss = { dismiss() }
+                        )
+                    }
                 }
             }
         }

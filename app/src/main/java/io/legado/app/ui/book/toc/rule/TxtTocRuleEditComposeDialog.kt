@@ -32,6 +32,7 @@ import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.TxtTocRule
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -63,70 +64,73 @@ class TxtTocRuleEditComposeDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val context = LocalContext.current
-                var loaded by remember { mutableStateOf(false) }
-                var name by remember { mutableStateOf("") }
-                var rule by remember { mutableStateOf("") }
-                var replacement by remember { mutableStateOf("") }
-                var example by remember { mutableStateOf("") }
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val context = LocalContext.current
+                    var loaded by remember { mutableStateOf(false) }
+                    var name by remember { mutableStateOf("") }
+                    var rule by remember { mutableStateOf("") }
+                    var replacement by remember { mutableStateOf("") }
+                    var example by remember { mutableStateOf("") }
 
-                LaunchedEffect(ruleId) {
-                    viewModel.initData(ruleId) { tocRule ->
-                        if (tocRule != null) {
-                            name = tocRule.name
-                            rule = tocRule.rule
-                            replacement = tocRule.replacement
-                            example = tocRule.example.orEmpty()
+                    LaunchedEffect(ruleId) {
+                        viewModel.initData(ruleId) { tocRule ->
+                            if (tocRule != null) {
+                                name = tocRule.name
+                                rule = tocRule.rule
+                                replacement = tocRule.replacement
+                                example = tocRule.example.orEmpty()
+                            }
+                            loaded = true
                         }
-                        loaded = true
                     }
-                }
 
-                if (loaded) {
-                    TxtTocRuleEditContent(
-                        name = name,
-                        onNameChange = { name = it },
-                        rule = rule,
-                        onRuleChange = { rule = it },
-                        replacement = replacement,
-                        onReplacementChange = { replacement = it },
-                        example = example,
-                        onExampleChange = { example = it },
-                        onSave = {
-                            val tocRule = viewModel.tocRule ?: TxtTocRule().also {
-                                viewModel.tocRule = it
-                            }
-                            tocRule.name = name
-                            tocRule.rule = rule
-                            tocRule.replacement = replacement
-                            tocRule.example = example
-                            if (checkValid(tocRule)) {
-                                callback?.saveTxtTocRule(tocRule)
-                                dismissAllowingStateLoss()
-                            }
-                        },
-                        onCopyRule = {
-                            val tocRule = viewModel.tocRule ?: TxtTocRule().also {
-                                viewModel.tocRule = it
-                            }
-                            tocRule.name = name
-                            tocRule.rule = rule
-                            tocRule.replacement = replacement
-                            tocRule.example = example
-                            context.sendToClip(
-                                io.legado.app.utils.GSON.toJson(tocRule)
-                            )
-                        },
-                        onPasteRule = {
-                            viewModel.pasteRule { pasted ->
-                                name = pasted.name
-                                rule = pasted.rule
-                                replacement = pasted.replacement
-                                example = pasted.example.orEmpty()
-                            }
-                        },
-                        onDismiss = { dismissAllowingStateLoss() }
-                    )
+                    if (loaded) {
+                        TxtTocRuleEditContent(
+                            name = name,
+                            onNameChange = { name = it },
+                            rule = rule,
+                            onRuleChange = { rule = it },
+                            replacement = replacement,
+                            onReplacementChange = { replacement = it },
+                            example = example,
+                            onExampleChange = { example = it },
+                            onSave = {
+                                val tocRule = viewModel.tocRule ?: TxtTocRule().also {
+                                    viewModel.tocRule = it
+                                }
+                                tocRule.name = name
+                                tocRule.rule = rule
+                                tocRule.replacement = replacement
+                                tocRule.example = example
+                                if (checkValid(tocRule)) {
+                                    callback?.saveTxtTocRule(tocRule)
+                                    dismissAllowingStateLoss()
+                                }
+                            },
+                            onCopyRule = {
+                                val tocRule = viewModel.tocRule ?: TxtTocRule().also {
+                                    viewModel.tocRule = it
+                                }
+                                tocRule.name = name
+                                tocRule.rule = rule
+                                tocRule.replacement = replacement
+                                tocRule.example = example
+                                context.sendToClip(
+                                    io.legado.app.utils.GSON.toJson(tocRule)
+                                )
+                            },
+                            onPasteRule = {
+                                viewModel.pasteRule { pasted ->
+                                    name = pasted.name
+                                    rule = pasted.rule
+                                    replacement = pasted.replacement
+                                    example = pasted.example.orEmpty()
+                                }
+                            },
+                            onDismiss = { dismissAllowingStateLoss() }
+                        )
+                    }
                 }
             }
         }

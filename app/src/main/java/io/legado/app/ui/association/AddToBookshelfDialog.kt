@@ -41,6 +41,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.book.info.BookInfoNavigator
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -89,42 +90,45 @@ class AddToBookshelfDialog() : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val context = LocalContext.current
-                val lifecycleOwner = LocalLifecycleOwner.current
-                var loadError by remember { mutableStateOf<String?>(null) }
-                DisposableEffect(lifecycleOwner) {
-                    val errObserver = Observer<String?> { loadError = it }
-                    viewModel.loadErrorLiveData.observe(lifecycleOwner, errObserver)
-                    onDispose { viewModel.loadErrorLiveData.removeObserver(errObserver) }
-                }
-                LaunchedEffect(Unit) {
-                    bookUrl?.let { url ->
-                        val existing = withContext(IO) { appDb.bookDao.getBook(url) }
-                        if (existing != null) {
-                            AppLog.put("${existing.name} 已在书架", null, true)
-                            BookInfoNavigator.open(context, existing)
-                            dismissAllowingStateLoss()
-                        } else {
-                            viewModel.load(url) { book ->
-                                viewModel.saveSearchBook(book) {
-                                    BookInfoNavigator.open(context, book)
-                                    dismissAllowingStateLoss()
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val context = LocalContext.current
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    var loadError by remember { mutableStateOf<String?>(null) }
+                    DisposableEffect(lifecycleOwner) {
+                        val errObserver = Observer<String?> { loadError = it }
+                        viewModel.loadErrorLiveData.observe(lifecycleOwner, errObserver)
+                        onDispose { viewModel.loadErrorLiveData.removeObserver(errObserver) }
+                    }
+                    LaunchedEffect(Unit) {
+                        bookUrl?.let { url ->
+                            val existing = withContext(IO) { appDb.bookDao.getBook(url) }
+                            if (existing != null) {
+                                AppLog.put("${existing.name} 已在书架", null, true)
+                                BookInfoNavigator.open(context, existing)
+                                dismissAllowingStateLoss()
+                            } else {
+                                viewModel.load(url) { book ->
+                                    viewModel.saveSearchBook(book) {
+                                        BookInfoNavigator.open(context, book)
+                                        dismissAllowingStateLoss()
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                val errorText = loadError
-                if (errorText != null) {
-                    LaunchedEffect(errorText) {
-                        toastOnUi(errorText)
-                        dismissAllowingStateLoss()
+                    val errorText = loadError
+                    if (errorText != null) {
+                        LaunchedEffect(errorText) {
+                            toastOnUi(errorText)
+                            dismissAllowingStateLoss()
+                        }
                     }
+                    AddToBookshelfPanel(
+                        loading = true,
+                        onCancel = { dismissAllowingStateLoss() }
+                    )
                 }
-                AddToBookshelfPanel(
-                    loading = true,
-                    onCancel = { dismissAllowingStateLoss() }
-                )
             }
         }
     }

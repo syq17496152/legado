@@ -43,6 +43,7 @@ import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -68,7 +69,10 @@ class ParagraphRuleQuickDialog : ReaderBottomSheetComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                ParagraphRuleQuickContent()
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    ParagraphRuleQuickContent()
+                }
             }
         }
     }

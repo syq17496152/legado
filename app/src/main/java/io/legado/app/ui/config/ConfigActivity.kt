@@ -29,6 +29,7 @@ import androidx.fragment.app.Fragment
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.help.config.TopBarConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
@@ -109,12 +110,15 @@ class ConfigActivity : VMBaseActivity<ViewBinding, ConfigViewModel>() {
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         titleComposeView.setContent {
-            GlassTopAppBar(
-                title = titleText,
-                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                onNavClick = ::supportFinishAfterTransition,
-                actions = { ConfigMenuActions(actions = menuActions) }
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = titleText,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = ::supportFinishAfterTransition,
+                    actions = { ConfigMenuActions(actions = menuActions) }
+                )
+            }
         }
         when (val configTag = intent.getStringExtra("configTag")) {
             ConfigTag.OTHER_CONFIG -> replaceFragment(configTag, OtherConfigFragment::class.java)

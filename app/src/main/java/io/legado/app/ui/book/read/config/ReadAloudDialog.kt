@@ -46,6 +46,7 @@ import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -128,13 +129,16 @@ class ReadAloudDialog() : ComposeDialogFragment() {
                 post { dismissAllowingStateLoss() }
             }
             setContent {
-                if (!shouldDismissForExistingDialog) {
-                    LegadoComposeTheme {
-                        key(playStateTick) {
-                            ReadAloudContent(
-                                isPlaying = !BaseReadAloudService.pause,
-                                isRun = BaseReadAloudService.isRun
-                            )
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    if (!shouldDismissForExistingDialog) {
+                        LegadoComposeTheme {
+                            key(playStateTick) {
+                                ReadAloudContent(
+                                    isPlaying = !BaseReadAloudService.pause,
+                                    isRun = BaseReadAloudService.isRun
+                                )
+                            }
                         }
                     }
                 }
