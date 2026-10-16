@@ -2426,6 +2426,9 @@ Selected text or question:
 	<string name="advanced_title_rule_error">Rule error: %1$s</string>
 	<string name="advanced_title_edit_title">Edit advanced title</string>
 	<string name="advanced_title_rule_label">Split rule</string>
+	<string name="advanced_title_book_rule">Book title rule</string>
+	<string name="advanced_title_book_rule_hint">Applies to this book only; overrides the global rule.</string>
+	<string name="advanced_title_book_rule_reset">Follow global rule</string>
 	<string name="advanced_title_height_factor_label">Render height ratio</string>
 	<string name="advanced_title_json_label">Advanced Title JSON</string>
 	<string name="advanced_title_json_hint">Edit the current rule Lottie JSON in the code editor. Import new rules from the management screen.</string>

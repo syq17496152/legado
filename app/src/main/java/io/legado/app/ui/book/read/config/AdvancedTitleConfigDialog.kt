@@ -329,8 +329,9 @@ class AdvancedTitleConfigDialog : ComposeDialogFragment() {
     }
 }
 
+/** 高级标题类弹框共用的字段行（`AdvancedTitleConfigDialog` 与 `AdvancedTitleBookRuleDialog` 复用同一单源）。 */
 @Composable
-private fun AdvancedTitleTextField(
+internal fun AdvancedTitleTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,

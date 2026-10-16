@@ -134,6 +134,13 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                                     Intent(requireContext(), AdvancedTitleManageActivity::class.java)
                                 )
                             },
+                            // NEW-56：本书标题拆分规则（写入 `AdvancedTitleConfig.setBookRule`；读侧早已在活路径）
+                            onShowBookTitleRule = {
+                                AdvancedTitleBookRuleDialog().show(
+                                    parentFragmentManager,
+                                    AdvancedTitleBookRuleDialog::class.java.simpleName
+                                )
+                            },
                             onShowSelector = ::showActionSelector,
                             onShowTipColorPicker = {
                                 ColorPickerDialog.newBuilder()
@@ -195,6 +202,7 @@ class PaddingConfigDialog : ComposeDialogFragment() {
         style: AppDialogStyle,
         colorRefreshTick: Int,
         onShowAdvancedTitleConfig: () -> Unit,
+        onShowBookTitleRule: () -> Unit,
         onShowSelector: (String, List<String>, (Int) -> Unit) -> Unit,
         onShowTipColorPicker: () -> Unit,
         onShowTipDividerColorPicker: () -> Unit,
@@ -214,6 +222,7 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                     style = style,
                     colorRefreshTick = colorRefreshTick,
                     onShowAdvancedTitleConfig = onShowAdvancedTitleConfig,
+                    onShowBookTitleRule = onShowBookTitleRule,
                     onShowSelector = onShowSelector,
                     onShowTipColorPicker = onShowTipColorPicker,
                     onShowTipDividerColorPicker = onShowTipDividerColorPicker,

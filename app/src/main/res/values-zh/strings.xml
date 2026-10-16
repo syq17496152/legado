@@ -1981,6 +1981,9 @@ bookUrl：%7$s
 	<string name="advanced_title_rule_error">规则错误：%1$s</string>
 	<string name="advanced_title_edit_title">编辑高级标题</string>
 	<string name="advanced_title_rule_label">分隔规则</string>
+	<string name="advanced_title_book_rule">本书标题规则</string>
+	<string name="advanced_title_book_rule_hint">仅对本书生效，优先级高于全局规则。</string>
+	<string name="advanced_title_book_rule_reset">恢复跟随全局</string>
 	<string name="advanced_title_height_factor_label">高级标题占位高度系数</string>
 	<string name="advanced_title_json_label">高级标题 JSON</string>
 	<string name="advanced_title_json_hint">在代码编辑器中修改当前规则的 Lottie JSON；导入新规则请返回管理页操作。</string>

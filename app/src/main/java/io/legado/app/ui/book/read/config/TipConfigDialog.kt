@@ -79,6 +79,8 @@ internal fun TipConfigContent(
     style: AppDialogStyle,
     colorRefreshTick: Int,
     onShowAdvancedTitleConfig: () -> Unit,
+    /** NEW-56：打开「本书标题拆分规则」弹框（仅「高级标题」模式下有意义） */
+    onShowBookTitleRule: () -> Unit,
     onShowSelector: (String, List<String>, (Int) -> Unit) -> Unit,
     onShowTipColorPicker: () -> Unit,
     onShowTipDividerColorPicker: () -> Unit,
@@ -229,6 +231,16 @@ internal fun TipConfigContent(
                         showSelectedMark = false
                     )
                 }
+            }
+            // NEW-56：本书标题拆分规则入口 —— 仅「高级标题」模式下有意义（其余标题模式不消费拆分规则）；
+            // 该规则写入 `AdvancedTitleConfig.setBookRule`（读侧 `bookRule`/`effectiveRule` 早已在活路径）。
+            if (titleMode == AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+                TipValueRow(
+                    title = stringResource(R.string.advanced_title_book_rule),
+                    value = stringResource(R.string.advanced_title_book_rule_hint),
+                    style = style,
+                    onClick = onShowBookTitleRule
+                )
             }
         }
         // 页眉
