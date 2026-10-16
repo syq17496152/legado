@@ -10,6 +10,7 @@ import io.legado.app.model.ProbeOptions
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceQualityReport
 import io.legado.app.model.SourceQualitySession
+import io.legado.app.model.failureBreakdownText
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.CancellationException
@@ -44,8 +45,12 @@ object SourceDebugKernel {
      * **输出安全**：导出给**用户自己**的 CSV 保留源名/地址原文；本口面向 HTTP/MCP 出参边界，
      * 源地址经 [DiagKernel.maskUrl] 打码、消息截断（与 [DiagReadKernel] 同口径）。
      *
-     * @return `runId/status/startedAt/finishedAt/total/passed/failed/blocked/averageScore/items`
-     *         （items：name/origin(masked)/type/status/stage/durationMs/score/message）
+     * @return `runId/status/startedAt/finishedAt/total/passed/failed/blocked/averageScore/
+     *          timeout/scriptFail/siteFail/ruleFail/suspect`（items：name/origin(masked)/type/status/
+     *          stage/durationMs/score/failureKind/suspect/message）
+     *
+     * NEW-102：`timeout/scriptFail/siteFail/ruleFail/suspect` 为**归因计数**（与页内横幅 / 导出 CSV
+     * 同一份单源口径 `failureBreakdownText()`）⇒ 外部巡检脚本可改用本出参做统计，不必再自行归类。
      */
     suspend fun checkSourceReport(): Map<String, Any?> {
         val state = CheckSourceTaskStore.state.value
@@ -59,6 +64,12 @@ object SourceDebugKernel {
             "failed" to state.failedCount,
             "blocked" to state.blockedCount,
             "averageScore" to state.averageScore,
+            "timeout" to state.timeoutCount,
+            "scriptFail" to state.scriptFailCount,
+            "siteFail" to state.siteFailCount,
+            "ruleFail" to state.ruleFailCount,
+            "suspect" to state.suspectCount,
+            "failureBreakdown" to state.failureBreakdownText(),
             "items" to state.items.map { item ->
                 mapOf(
                     "name" to item.sourceName,
@@ -68,6 +79,8 @@ object SourceDebugKernel {
                     "stage" to item.stage.name,
                     "durationMs" to item.durationMillis,
                     "score" to item.score,
+                    "failureKind" to item.failureKind.name,
+                    "suspect" to item.suspect,
                     "message" to item.message.take(SNIPPET_LIMIT),
                 )
             },

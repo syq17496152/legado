@@ -7,7 +7,7 @@ package io.legado.app.model
  * 不另建报告模型）。
  *
  * 口径：
- *  · 首行 `#` 汇总（状态/总数/通过/失败/跳过/平均分/生成时间）——人可读；机器解析按 `#` 跳过即可；
+ *  · 首行 `#` 汇总（状态/总数/通过/失败/跳过/平均分/归因/存疑/生成时间）——人可读；机器解析按 `#` 跳过即可；
  *  · 表头行恒输出（**空任务也导出表头**：用户看到的是"本次没有记录"，而不是空文件的假象）；
  *  · 字段含 `,` / `"` / 换行一律按 CSV 规范转义（整字段双引号包裹，内部引号翻倍）；
  *  · 用户导出的报告保留**源名与地址原文**（打码只作用于 HTTP/MCP 出参边界，见 DiagReadKernel.mask）。
@@ -27,8 +27,11 @@ internal fun formatCheckSourceReportCsv(
         .append(" 失败=").append(state.failedCount)
         .append(" 跳过=").append(state.blockedCount)
     state.averageScore?.let { sb.append(" 平均分=").append(it) }
+    // NEW-102：归因摘要与存疑计数写入首行（与横幅 `failureBreakdownText()` 同一份口径）
+    state.failureBreakdownText().takeIf { it.isNotBlank() }?.let { sb.append(" 归因=").append(it) }
+    if (state.suspectCount > 0) sb.append(" 存疑=").append(state.suspectCount)
     sb.append('\n')
-    sb.append("序号,书源名称,书源地址,状态,阶段,耗时(ms),评分,消息\n")
+    sb.append("序号,书源名称,书源地址,状态,阶段,耗时(ms),评分,归因,消息\n")
     state.items.forEachIndexed { index, item ->
         sb.append(index + 1).append(',')
             .append(csvField(item.sourceName)).append(',')
@@ -37,6 +40,7 @@ internal fun formatCheckSourceReportCsv(
             .append(item.stage.displayName).append(',')
             .append(item.durationMillis).append(',')
             .append(if (item.score > 0) item.score.toString() else "").append(',')
+            .append(csvField(item.failureKindText())).append(',')
             .append(csvField(item.message))
             .append('\n')
     }

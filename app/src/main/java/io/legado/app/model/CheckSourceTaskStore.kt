@@ -61,6 +61,14 @@ data class CheckSourceItemState(
     val durationMillis: Long = 0L,
     /** 结果评分（书源 = 既有权重口径 `BookSource.weight`；0 = 未产出） */
     val score: Int = 0,
+    /**
+     * 失败归因（NEW-102）：仅 [CheckSourceItemStatus.FAILED] 有实义 ——
+     * 由服务侧 `QualityReportApplier.failureKindOf(e)` 从异常推出（超时 / 脚本 / 站点），
+     * `NONE` 表示**无异常短路**的维度判定失败（规则层）。
+     */
+    val failureKind: FailureKind = FailureKind.NONE,
+    /** 存疑跳过（不误杀口径）：[CheckSourceItemStatus.BLOCKED] 且因静态存疑原因放行时为 true */
+    val suspect: Boolean = false,
     val updatedAt: Long = 0L,
 )
 
@@ -99,6 +107,22 @@ data class CheckSourceTaskState(
             if (scored.isEmpty()) return null
             return (scored.sumOf { it.score }.toFloat() / scored.size).roundToInt()
         }
+
+    // ---- NEW-102 失败归因计数（超时 / 脚本 / 站点 / 规则） ----
+    // 口径：**只统计 FAILED 项**（PASSED/BLOCKED/CANCELLED 即使携带 failureKind 也不计入），
+    // 否则「探测中已被写过归因、最终又判存疑跳过」的项会被重复计入失败。
+    val timeoutCount: Int get() = failedCountOf(FailureKind.TIMEOUT)
+    val scriptFailCount: Int get() = failedCountOf(FailureKind.SCRIPT)
+    val siteFailCount: Int get() = failedCountOf(FailureKind.NETWORK)
+
+    /** 规则层失败：无异常短路的**维度判定失败**（如目录取样空 / 规则为空），不属于站点/脚本/超时三类 */
+    val ruleFailCount: Int get() = failedCountOf(FailureKind.NONE)
+
+    /** 存疑跳过计数（不误杀口径：静态存疑源不计入失败与归因） */
+    val suspectCount: Int get() = items.count { it.suspect }
+
+    private fun failedCountOf(kind: FailureKind): Int =
+        items.count { it.status == CheckSourceItemStatus.FAILED && it.failureKind == kind }
 }
 
 /**
@@ -179,13 +203,23 @@ object CheckSourceTaskStore {
         )
     }
 
+    /**
+     * 标记失败项。NEW-102：[failureKind] 由调用方从异常推出（`QualityReportApplier.failureKindOf`），
+     * 缺省 `NONE` = 维度判定失败（规则层）——横幅 / CSV / REST-MCP 出参的归因计数都读这一个字段。
+     */
     @Synchronized
-    fun markFailed(origin: String, message: String, durationMillis: Long) {
+    fun markFailed(
+        origin: String,
+        message: String,
+        durationMillis: Long,
+        failureKind: FailureKind = FailureKind.NONE,
+    ) {
         completeItem(
             origin = origin,
             status = CheckSourceItemStatus.FAILED,
             message = message,
             durationMillis = durationMillis,
+            failureKind = failureKind,
         )
     }
 
@@ -194,14 +228,23 @@ object CheckSourceTaskStore {
      *
      * [message] 传面向用户的原因（如 `存疑（登录依赖）`）——横幅「跳过 N」之外还需**逐项可见**
      * 为什么被跳过，否则用户在列表里只看到一条空消息。
+     *
+     * NEW-102：[suspect] 缺省 true —— 本入口的现有调用点（`CheckSourceService.checkSource`）只在
+     * 静态存疑源放行时进入，故默认即「存疑跳过」，该计数与失败归因**互斥**（不误杀口径）。
      */
     @Synchronized
-    fun markBlocked(origin: String, durationMillis: Long, message: String = "") {
+    fun markBlocked(
+        origin: String,
+        durationMillis: Long,
+        message: String = "",
+        suspect: Boolean = true,
+    ) {
         completeItem(
             origin = origin,
             status = CheckSourceItemStatus.BLOCKED,
             message = message,
             durationMillis = durationMillis,
+            suspect = suspect,
         )
     }
 
@@ -252,6 +295,8 @@ object CheckSourceTaskStore {
         message: String,
         durationMillis: Long,
         score: Int = 0,
+        failureKind: FailureKind = FailureKind.NONE,
+        suspect: Boolean = false,
     ) {
         updateItem(origin) { item ->
             item.copy(
@@ -259,6 +304,8 @@ object CheckSourceTaskStore {
                 message = message,
                 durationMillis = durationMillis,
                 score = score,
+                failureKind = failureKind,
+                suspect = suspect,
                 updatedAt = System.currentTimeMillis(),
             )
         }
@@ -315,9 +362,40 @@ fun CheckSourceTaskState.bannerText(): String? {
             append("校验完成 $totalCount 项 · 通过 $passedCount · 失败 $failedCount")
             if (blockedCount > 0) append(" · 跳过 $blockedCount")
             averageScore?.let { append(" · 平均分 $it") }
+            // NEW-102：失败归因摘要（超时 / 脚本 / 站点 / 规则）——用户可直接区分
+            // 「源站不可达」与「探测超时」「规则缺陷」，不必逐条点开源看消息
+            failureBreakdownText().takeIf { it.isNotBlank() }?.let { append(" · 归因 $it") }
         }
 
         CheckSourceTaskStatus.CANCELLED ->
             "已取消 · 已完成 $processedCount/$totalCount · 通过 $passedCount · 失败 $failedCount"
+    }
+}
+
+/**
+ * 归因摘要文案（NEW-102，**单源口径**）：`超时 3 · 脚本 1 · 站点 5 · 规则 2`；无失败则空串。
+ *
+ * 三端共用同一份文案：页内横幅（[bannerText]）/ 导出 CSV（`formatCheckSourceReportCsv`）/
+ * REST-MCP 出参（`SourceDebugKernel.checkSourceReport`）——避免各处各自拼串导致口径漂移。
+ */
+fun CheckSourceTaskState.failureBreakdownText(): String =
+    listOfNotNull(
+        "超时 $timeoutCount".takeIf { timeoutCount > 0 },
+        "脚本 $scriptFailCount".takeIf { scriptFailCount > 0 },
+        "站点 $siteFailCount".takeIf { siteFailCount > 0 },
+        "规则 $ruleFailCount".takeIf { ruleFailCount > 0 },
+    ).joinToString(" · ")
+
+/**
+ * 单源归因短文案（NEW-102）：仅 [CheckSourceItemStatus.FAILED] 有值（`超时` / `脚本` / `站点` / `规则`），
+ * 其余状态一律空串 ⇒ 通过/跳过行不产生噪声。供 CSV 逐行导出使用。
+ */
+fun CheckSourceItemState.failureKindText(): String {
+    if (status != CheckSourceItemStatus.FAILED) return ""
+    return when (failureKind) {
+        FailureKind.TIMEOUT -> "超时"
+        FailureKind.SCRIPT -> "脚本"
+        FailureKind.NETWORK -> "站点"
+        FailureKind.NONE -> "规则"
     }
 }

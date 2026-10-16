@@ -205,7 +205,11 @@ class CheckSourceService : BaseService() {
                 CheckSourceTaskStore.markFailed(
                     origin = source.bookSourceUrl,
                     message = it.localizedMessage.orEmpty(),
-                    durationMillis = System.currentTimeMillis() - start
+                    durationMillis = System.currentTimeMillis() - start,
+                    // NEW-102 归因内置化：异常短路路径的 FailureKind 由单源工具推出（超时 / 脚本 / 站点），
+                    // 无异常者为 NONE（维度判定失败 ⇒ 规则层）；横幅 / CSV / REST-MCP 三端读同一字段，
+                    // 使用户在「源站不可达」之外还能区分「探测超时」「规则缺陷」
+                    failureKind = QualityReportApplier.failureKindOf(it),
                 )
             }
         }
