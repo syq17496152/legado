@@ -48,8 +48,6 @@ object AudioCacheTaskManager {
     private val _states = MutableStateFlow<Map<String, AudioCacheTaskState>>(emptyMap())
     val states: StateFlow<Map<String, AudioCacheTaskState>> = _states.asStateFlow()
 
-    fun hasTask(bookUrl: String): Boolean = _states.value[bookUrl]?.active == true
-
     fun snapshot(bookUrl: String): AudioCacheTaskState? = _states.value[bookUrl]
 
     fun start(
