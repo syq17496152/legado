@@ -77,6 +77,7 @@ import io.legado.app.ui.book.read.config.rememberReaderMenuDialogStyle
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -314,7 +315,10 @@ class ReadMenu @JvmOverloads constructor(
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         composeView = ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { ReadMenuContent() }
+            setContent {
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme { ReadMenuContent() }
+            }
         }
         addView(composeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         upBrightnessState()

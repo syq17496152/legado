@@ -19,6 +19,7 @@ import io.legado.app.R
 import io.legado.app.help.update.AppUpdate
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.Download
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -82,58 +83,63 @@ class UpdateDialog() : ComposeDialogFragment() {
                     return@setContent
                 }
 
-                val context = LocalContext.current
-                val markwon = Markwon.builder(context)
-                    .usePlugin(GlideImagesPlugin.create(context))
-                    .usePlugin(HtmlPlugin.create())
-                    .usePlugin(TablePlugin.create(context))
-                    .build()
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                // ⚠ 早退（上方 `return@setContent`）必须留在 setContent 本层：`LegadoTheme` 是非内联
+                //   `@Composable` lambda，把早退移入其内会被 Kotlin 判 `'return' is prohibited here`
+                LegadoTheme {
+                    val context = LocalContext.current
+                    val markwon = Markwon.builder(context)
+                        .usePlugin(GlideImagesPlugin.create(context))
+                        .usePlugin(HtmlPlugin.create())
+                        .usePlugin(TablePlugin.create(context))
+                        .build()
 
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    AppDialogFrame(
-                        title = title,
-                        message = assetInfo,
-                        content = {
-                            AndroidView(
-                                modifier = Modifier.fillMaxWidth(),
-                                factory = { ctx ->
-                                    TextView(ctx).apply {
-                                        setTextColor(style.primaryText.toArgb())
-                                        typeface = ctx.uiTypeface()
-                                        setTextIsSelectable(true)
-                                        val pad = (12 * ctx.resources.displayMetrics.density).toInt()
-                                        setPadding(pad, pad, pad, pad)
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        AppDialogFrame(
+                            title = title,
+                            message = assetInfo,
+                            content = {
+                                AndroidView(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    factory = { ctx ->
+                                        TextView(ctx).apply {
+                                            setTextColor(style.primaryText.toArgb())
+                                            typeface = ctx.uiTypeface()
+                                            setTextIsSelectable(true)
+                                            val pad = (12 * ctx.resources.displayMetrics.density).toInt()
+                                            setPadding(pad, pad, pad, pad)
+                                        }
+                                    },
+                                    update = { textView ->
+                                        markwon.setMarkdown(textView, updateBody)
                                     }
-                                },
-                                update = { textView ->
-                                    markwon.setMarkdown(textView, updateBody)
-                                }
-                            )
-                        },
-                        actions = {
-                            val palette = style.toMiuixPalette()
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.cancel),
-                                palette = palette,
-                                onClick = { dismissAllowingStateLoss() },
-                                cornerRadius = style.actionRadius
-                            )
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.action_download),
-                                palette = palette,
-                                onClick = {
-                                    if (url != null && name != null) {
-                                        Download.start(requireContext(), url, name)
-                                        toastOnUi(R.string.download_start)
-                                    }
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    )
+                                )
+                            },
+                            actions = {
+                                val palette = style.toMiuixPalette()
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.cancel),
+                                    palette = palette,
+                                    onClick = { dismissAllowingStateLoss() },
+                                    cornerRadius = style.actionRadius
+                                )
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.action_download),
+                                    palette = palette,
+                                    onClick = {
+                                        if (url != null && name != null) {
+                                            Download.start(requireContext(), url, name)
+                                            toastOnUi(R.string.download_start)
+                                        }
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }

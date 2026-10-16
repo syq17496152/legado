@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppShapes
 import android.animation.ValueAnimator
 import android.animation.Animator
@@ -203,83 +204,86 @@ internal class ReadAloudSystemFloatingWindow(
         setViewTreeSavedStateRegistryOwner(viewTreeOwners)
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setContent {
-            val revision = themeRevision
-            val palette = remember(revision) { ReaderSheetStyle.resolve(context) }
-            val colors = rememberPlayerColors(palette)
-            FloatingWindowContent(
-                mode = mode,
-                capsuleExpansion = capsuleExpansion,
-                transitioning = transitioning,
-                state = uiState,
-                colors = colors,
-                fontSize = floatingFontSize,
-                backgroundAlpha = floatingBackgroundAlpha,
-                heightPercent = floatingHeightPercent,
-                settingsVisible = settingsVisible,
-                chapterPickerVisible = chapterPickerVisible,
-                onEdgeBallTap = {
-                    changeMode(WindowMode.FullBall, animate = true)
-                },
-                onFullBallTap = {
-                    expandFullBallToControls()
-                },
-                onCoverTap = onExpand,
-                onCoverLongPress = {
-                    noteInteraction()
-                    changeMode(WindowMode.Reader, animate = true)
-                },
-                onPlayPause = {
-                    noteInteraction()
-                    onPlayPause()
-                },
-                onStop = onClose,
-                onDragStart = ::startDrag,
-                onDrag = ::dragBy,
-                onDragEnd = ::finishDrag,
-                onFullscreen = {
-                    settingsVisible = false
-                    chapterPickerVisible = false
-                    changeMode(WindowMode.EdgeBall, animate = true)
-                    onExpand()
-                },
-                onMinimize = {
-                    settingsVisible = false
-                    chapterPickerVisible = false
-                    changeMode(WindowMode.EdgeBall, animate = true)
-                },
-                onSettings = {
-                    settingsVisible = !settingsVisible
-                    chapterPickerVisible = false
-                },
-                onChapterPicker = {
-                    chapterPickerVisible = !chapterPickerVisible
-                    settingsVisible = false
-                },
-                onChapterSelect = { index ->
-                    chapterPickerVisible = false
-                    onChapterSelect(index)
-                },
-                onCueSelect = onCueSelect,
-                onFontSizeChange = { floatingFontSize = it.coerceIn(14, 34) },
-                onFontSizeChangeFinished = {
-                    AppConfig.readAloudFloatingFontSize = floatingFontSize
-                },
-                onBackgroundAlphaChange = {
-                    floatingBackgroundAlpha = it.coerceIn(0, 100)
-                },
-                onBackgroundAlphaChangeFinished = {
-                    AppConfig.readAloudFloatingBackgroundAlpha = floatingBackgroundAlpha
-                },
-                onHeightPercentChange = {
-                    floatingHeightPercent = it.coerceIn(15, 90)
-                    if (mode == WindowMode.Reader) {
-                        applyFrame(targetFrame(WindowMode.Reader))
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                val revision = themeRevision
+                val palette = remember(revision) { ReaderSheetStyle.resolve(context) }
+                val colors = rememberPlayerColors(palette)
+                FloatingWindowContent(
+                    mode = mode,
+                    capsuleExpansion = capsuleExpansion,
+                    transitioning = transitioning,
+                    state = uiState,
+                    colors = colors,
+                    fontSize = floatingFontSize,
+                    backgroundAlpha = floatingBackgroundAlpha,
+                    heightPercent = floatingHeightPercent,
+                    settingsVisible = settingsVisible,
+                    chapterPickerVisible = chapterPickerVisible,
+                    onEdgeBallTap = {
+                        changeMode(WindowMode.FullBall, animate = true)
+                    },
+                    onFullBallTap = {
+                        expandFullBallToControls()
+                    },
+                    onCoverTap = onExpand,
+                    onCoverLongPress = {
+                        noteInteraction()
+                        changeMode(WindowMode.Reader, animate = true)
+                    },
+                    onPlayPause = {
+                        noteInteraction()
+                        onPlayPause()
+                    },
+                    onStop = onClose,
+                    onDragStart = ::startDrag,
+                    onDrag = ::dragBy,
+                    onDragEnd = ::finishDrag,
+                    onFullscreen = {
+                        settingsVisible = false
+                        chapterPickerVisible = false
+                        changeMode(WindowMode.EdgeBall, animate = true)
+                        onExpand()
+                    },
+                    onMinimize = {
+                        settingsVisible = false
+                        chapterPickerVisible = false
+                        changeMode(WindowMode.EdgeBall, animate = true)
+                    },
+                    onSettings = {
+                        settingsVisible = !settingsVisible
+                        chapterPickerVisible = false
+                    },
+                    onChapterPicker = {
+                        chapterPickerVisible = !chapterPickerVisible
+                        settingsVisible = false
+                    },
+                    onChapterSelect = { index ->
+                        chapterPickerVisible = false
+                        onChapterSelect(index)
+                    },
+                    onCueSelect = onCueSelect,
+                    onFontSizeChange = { floatingFontSize = it.coerceIn(14, 34) },
+                    onFontSizeChangeFinished = {
+                        AppConfig.readAloudFloatingFontSize = floatingFontSize
+                    },
+                    onBackgroundAlphaChange = {
+                        floatingBackgroundAlpha = it.coerceIn(0, 100)
+                    },
+                    onBackgroundAlphaChangeFinished = {
+                        AppConfig.readAloudFloatingBackgroundAlpha = floatingBackgroundAlpha
+                    },
+                    onHeightPercentChange = {
+                        floatingHeightPercent = it.coerceIn(15, 90)
+                        if (mode == WindowMode.Reader) {
+                            applyFrame(targetFrame(WindowMode.Reader))
+                        }
+                    },
+                    onHeightPercentChangeFinished = {
+                        AppConfig.readAloudFloatingHeightPercent = floatingHeightPercent
                     }
-                },
-                onHeightPercentChangeFinished = {
-                    AppConfig.readAloudFloatingHeightPercent = floatingHeightPercent
-                }
-            )
+                )
+            }
         }
     }
 

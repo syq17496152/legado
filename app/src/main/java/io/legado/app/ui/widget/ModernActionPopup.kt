@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.installViewTreeOwnersFrom
@@ -230,12 +231,15 @@ object ModernActionPopup {
             hostDetachListener = hostDetachListener
         )
         overlay.setContent {
-            ModernActionPopupOverlay(
-                snapshot = snapshot,
-                actions = actions,
-                visible = visibleState.value,
-                onDismiss = handle::dismiss
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                ModernActionPopupOverlay(
+                    snapshot = snapshot,
+                    actions = actions,
+                    visible = visibleState.value,
+                    onDismiss = handle::dismiss
+                )
+            }
         }
         host.addView(
             overlay,
@@ -355,12 +359,15 @@ object ModernActionPopup {
             hostDetachListener = hostDetachListener
         )
         overlay.setContent {
-            ModernActionPopupOverlay(
-                snapshot = snapshot,
-                actions = actions,
-                visible = visibleState.value,
-                onDismiss = handle::dismiss
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                ModernActionPopupOverlay(
+                    snapshot = snapshot,
+                    actions = actions,
+                    visible = visibleState.value,
+                    onDismiss = handle::dismiss
+                )
+            }
         }
         host.addView(
             overlay,

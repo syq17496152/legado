@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.AppDialogSize
@@ -187,43 +188,46 @@ class BookshelfConfigDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                val options = remember { buildBookshelfConfigOptions() }
-                val texts = remember { buildBookshelfConfigTexts() }
-                var values by remember { mutableStateOf(initialValues) }
-                BookshelfConfigPanel(
-                    texts = texts,
-                    style = style,
-                    content = {
-                        BookshelfConfigContent(
-                            values = values,
-                            options = options,
-                            texts = texts,
-                            style = style,
-                            onValuesChange = { nextValues ->
-                                val previousValues = values
-                                values = nextValues
-                                if (nextValues.margin != previousValues.margin) {
-                                    previewMarginChanged = true
-                                    onPreviewMarginChange?.invoke(nextValues.margin.coerceIn(0, 60))
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    val options = remember { buildBookshelfConfigOptions() }
+                    val texts = remember { buildBookshelfConfigTexts() }
+                    var values by remember { mutableStateOf(initialValues) }
+                    BookshelfConfigPanel(
+                        texts = texts,
+                        style = style,
+                        content = {
+                            BookshelfConfigContent(
+                                values = values,
+                                options = options,
+                                texts = texts,
+                                style = style,
+                                onValuesChange = { nextValues ->
+                                    val previousValues = values
+                                    values = nextValues
+                                    if (nextValues.margin != previousValues.margin) {
+                                        previewMarginChanged = true
+                                        onPreviewMarginChange?.invoke(nextValues.margin.coerceIn(0, 60))
+                                    }
                                 }
-                            }
-                        )
-                    },
-                    actions = {
-                        BookshelfFooterActions(
-                            style = style,
-                            cancelLabel = texts.cancelLabel,
-                            applyLabel = texts.applyLabel,
-                            onCancel = { dismissAllowingStateLoss() },
-                            onApply = {
-                                applied = true
-                                dismissAllowingStateLoss()
-                                onApply?.invoke(values)
-                            }
-                        )
-                    }
-                )
+                            )
+                        },
+                        actions = {
+                            BookshelfFooterActions(
+                                style = style,
+                                cancelLabel = texts.cancelLabel,
+                                applyLabel = texts.applyLabel,
+                                onCancel = { dismissAllowingStateLoss() },
+                                onApply = {
+                                    applied = true
+                                    dismissAllowingStateLoss()
+                                    onApply?.invoke(values)
+                                }
+                            )
+                        }
+                    )
+                }
             }
         }
     }

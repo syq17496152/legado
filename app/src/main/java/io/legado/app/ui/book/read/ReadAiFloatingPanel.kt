@@ -91,6 +91,7 @@ import io.legado.app.ui.main.ai.compose.AiProcessStepType
 import io.legado.app.ui.main.ai.compose.AiProcessStepUi
 import io.legado.app.ui.main.ai.compose.AiProcessTimelineCard
 import io.legado.app.ui.main.ai.compose.aiComposeStyle
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
@@ -175,32 +176,35 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         )
         composeView.setContent {
-            ReadAiPanelContent(
-                messages = messages,
-                historySessions = historySessions,
-                contextLabel = contextLabel,
-                showingHistory = showingHistory,
-                requesting = requesting,
-                modelLabel = modelLabel,
-                fullscreen = fullscreen,
-                timeFormat = timeFormat,
-                onTopDrag = ::handleDrag,
-                onToggleFullscreen = ::toggleFullscreen,
-                onSelectModel = ::selectModel,
-                onOpenAbilities = ::showWindowAbilityDialog,
-                onOpenSkills = ::showWindowSkillDialog,
-                onOpenMcp = ::showWindowMcpDialog,
-                onOpenWorldBooks = ::showReadAiWorldBookDialog,
-                onNewChat = ::startNewChat,
-                onToggleHistory = ::toggleHistory,
-                onClose = ::close,
-                onStop = ::stopAnswer,
-                onSend = ::submitQuestion,
-                onInputFocused = ::ensureAboveIme,
-                onOpenSession = ::openHistorySession,
-                onDeleteSession = ::deleteSession,
-                onClearHistory = ::confirmClearHistory
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                ReadAiPanelContent(
+                    messages = messages,
+                    historySessions = historySessions,
+                    contextLabel = contextLabel,
+                    showingHistory = showingHistory,
+                    requesting = requesting,
+                    modelLabel = modelLabel,
+                    fullscreen = fullscreen,
+                    timeFormat = timeFormat,
+                    onTopDrag = ::handleDrag,
+                    onToggleFullscreen = ::toggleFullscreen,
+                    onSelectModel = ::selectModel,
+                    onOpenAbilities = ::showWindowAbilityDialog,
+                    onOpenSkills = ::showWindowSkillDialog,
+                    onOpenMcp = ::showWindowMcpDialog,
+                    onOpenWorldBooks = ::showReadAiWorldBookDialog,
+                    onNewChat = ::startNewChat,
+                    onToggleHistory = ::toggleHistory,
+                    onClose = ::close,
+                    onStop = ::stopAnswer,
+                    onSend = ::submitQuestion,
+                    onInputFocused = ::ensureAboveIme,
+                    onOpenSession = ::openHistorySession,
+                    onDeleteSession = ::deleteSession,
+                    onClearHistory = ::confirmClearHistory
+                )
+            }
         }
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
             updateImeBottomInset(insets)

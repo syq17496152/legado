@@ -69,6 +69,7 @@ import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.main.ai.AiImageGalleryActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -213,13 +214,16 @@ class BookInfoModernActivity :
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         composeView.setContent {
-            BookInfoModernRoute(
-                state = uiState,
-                actions = composeActions(),
-                book = modernBook,
-                chapters = modernChapters,
-                extraMenuActions = modernExtraMenuActions()
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                BookInfoModernRoute(
+                    state = uiState,
+                    actions = composeActions(),
+                    book = modernBook,
+                    chapters = modernChapters,
+                    extraMenuActions = modernExtraMenuActions()
+                )
+            }
         }
         viewModel.bookData.observe(this) { book ->
             modernBook = book

@@ -58,6 +58,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -174,46 +175,49 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                val options = remember { buildSourceFolderConfigOptions() }
-                val texts = remember { buildSourceFolderConfigTexts() }
-                var values by remember { mutableStateOf(initialValues) }
-                SourceFolderConfigPanel(
-                    texts = texts,
-                    style = style,
-                    content = {
-                        SourceFolderConfigContent(
-                            values = values,
-                            options = options,
-                            texts = texts,
-                            style = style,
-                            showGroupStyle = showGroupStyle,
-                            isBookSource = isBookSource,
-                            onValuesChange = { next ->
-                                val previous = values
-                                values = next
-                                // 边距滑条实时预览（rss-classic-layout-align：对齐书架体验）
-                                if (next.margin != previous.margin) {
-                                    previewMarginChanged = true
-                                    onPreviewMarginChange?.invoke(next.margin.coerceIn(0, 60))
+                // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    val options = remember { buildSourceFolderConfigOptions() }
+                    val texts = remember { buildSourceFolderConfigTexts() }
+                    var values by remember { mutableStateOf(initialValues) }
+                    SourceFolderConfigPanel(
+                        texts = texts,
+                        style = style,
+                        content = {
+                            SourceFolderConfigContent(
+                                values = values,
+                                options = options,
+                                texts = texts,
+                                style = style,
+                                showGroupStyle = showGroupStyle,
+                                isBookSource = isBookSource,
+                                onValuesChange = { next ->
+                                    val previous = values
+                                    values = next
+                                    // 边距滑条实时预览（rss-classic-layout-align：对齐书架体验）
+                                    if (next.margin != previous.margin) {
+                                        previewMarginChanged = true
+                                        onPreviewMarginChange?.invoke(next.margin.coerceIn(0, 60))
+                                    }
                                 }
-                            }
-                        )
-                    },
-                    actions = {
-                        SourceFolderFooterActions(
-                            style = style,
-                            cancelLabel = texts.cancelLabel,
-                            applyLabel = texts.applyLabel,
-                            onCancel = { dismissAllowingStateLoss() },
-                            onApply = {
-                                applied = true
-                                applyConfig(values)
-                                dismissAllowingStateLoss()
-                            }
-                        )
-                    }
-                )
+                            )
+                        },
+                        actions = {
+                            SourceFolderFooterActions(
+                                style = style,
+                                cancelLabel = texts.cancelLabel,
+                                applyLabel = texts.applyLabel,
+                                onCancel = { dismissAllowingStateLoss() },
+                                onApply = {
+                                    applied = true
+                                    applyConfig(values)
+                                    dismissAllowingStateLoss()
+                                }
+                            )
+                        }
+                    )
+                }
             }
         }
     }

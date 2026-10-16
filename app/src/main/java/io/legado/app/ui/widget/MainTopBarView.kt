@@ -38,6 +38,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeThemeImageLayer
 import io.legado.app.ui.widget.compose.ComposeThemeImageCrop
 import io.legado.app.ui.widget.compose.ComposeThemeImageState
@@ -696,11 +697,14 @@ class MainTopBarView @JvmOverloads constructor(
             )
         }
         backgroundLayer.setContent {
-            ComposeThemeImageLayer(
-                state = state,
-                cornerRadius = (radius / resources.displayMetrics.density).dp,
-                stableWidthScale = true
-            )
+            // 宿主主题作用域前置（G-37 / 铁律 S1）：内容根必须包 `LegadoTheme`
+            LegadoTheme {
+                ComposeThemeImageLayer(
+                    state = state,
+                    cornerRadius = (radius / resources.displayMetrics.density).dp,
+                    stableWidthScale = true
+                )
+            }
         }
     }
 
