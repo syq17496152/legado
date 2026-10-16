@@ -1,10 +1,13 @@
 package io.legado.app.service.kernel
 
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.model.CheckDepth
+import io.legado.app.model.CheckSource
 import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.ProbeOptions
 import io.legado.app.model.SourceQualityChecker
@@ -14,8 +17,12 @@ import io.legado.app.model.failureBreakdownText
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import splitties.init.appCtx
 
 /**
  * 源调试域业务内核（web-mcp-productization 二期 · tasks 5.8 / §5.6–5.13）。
@@ -89,6 +96,44 @@ object SourceDebugKernel {
 
     /** 单个 L3 测试的硬超时：防慢源把 MCP 调用挂死（与 [RssSourceKernel.search] 同量级）。 */
     private const val TEST_TIMEOUT_MS = 30_000L
+
+    /**
+     * `startCheckSource`（B12）：以**内置批量巡检**（`CheckSourceService`）驱动一次校验任务。
+     *
+     * 为什么必须内置驱动：外部端到端巡检此前只能自行按「搜索」维度探测，导致「发现型源」被计为
+     * `no-search-entry` 这类**口径产物**（实测 200 样本里 113 条）；而内置链路**本就按维度路由**
+     * （搜索 / 发现，缺失即 `NOT_APPLICABLE`）且产出 NEW-102 的**失败归因**结构化结果
+     * （`/getCheckSourceReport`）⇒ 外部巡检改为「启动本任务 → 轮询报告」即消费同一份内置结论。
+     *
+     * @param keyword 校验关键词（空 = 沿用内置现值，默认「我的」）
+     * @param urls 指定源地址集合（空 = 全库启用源）
+     * @param limit 抽样条数上限（0 = 不限）
+     * @param step 抽样步长（1 = 不抽样）
+     *
+     * **动作异步**：本方法只负责「选中 + 起服务」并立刻返回 `{started,count,keyword,timeout,checkDomain}`；
+     * 进度/结果一律经 `/getCheckSourceReport` 读取（`runId` 由服务侧分配，故不在本次出参里）。
+     */
+    suspend fun startCheckSource(
+        keyword: String = "",
+        urls: List<String> = emptyList(),
+        limit: Int = 0,
+        step: Int = 1,
+    ): Map<String, Any?> {
+        val all = withContext(IO) { appDb.bookSourceDao.flowAll().first() }
+        val targets = sampleCheckTargets(all, urls.toSet(), limit, step)
+        if (targets.isEmpty()) {
+            return fail("source", "无可校验的启用书源（候选 ${all.size}，指定 ${urls.size}）")
+        }
+        if (keyword.isNotBlank()) CheckSource.keyword = keyword
+        CheckSource.start(appCtx, targets)
+        return mapOf(
+            "started" to true,
+            "count" to targets.size,
+            "keyword" to CheckSource.keyword,
+            "timeout" to CheckSource.timeout,
+            "checkDomain" to CheckSource.checkDomain,
+        )
+    }
 
     /** 正文片段返回长度上限（前 N 字）。 */
     private const val SNIPPET_LIMIT = 200
@@ -395,4 +440,27 @@ object SourceDebugKernel {
             )
         },
     )
+}
+
+/**
+ * 内置巡检的**选源口径**（B12，纯函数 ⇒ 供 JVM 单测覆盖）。
+ *
+ * 口径（与 UI「全选」对齐并叠加抽样）：①**只取启用中的源**；②`urls` 非空时只留集合内成员；
+ * ③`step > 1` 时按**过滤后序**取步长抽样（`index % step == 0`）；④`limit > 0` 时截断上限。
+ * 顺序固定为「启用 → urls → 步长 → 上限」⇒ 抽样结果可复现（同库同参数恒同集合）。
+ */
+internal fun sampleCheckTargets(
+    all: List<BookSourcePart>,
+    urls: Set<String> = emptySet(),
+    limit: Int = 0,
+    step: Int = 1,
+): List<BookSourcePart> {
+    var seq = all.asSequence().filter { it.enabled }
+    if (urls.isNotEmpty()) {
+        seq = seq.filter { it.bookSourceUrl in urls }
+    }
+    if (step > 1) {
+        seq = seq.filterIndexed { index, _ -> index % step == 0 }
+    }
+    return if (limit > 0) seq.take(limit).toList() else seq.toList()
 }

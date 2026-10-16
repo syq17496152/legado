@@ -11,7 +11,7 @@ import io.legado.app.web.TokenManager.Level
 import io.legado.app.web.api.ApiRoute
 
 /**
- * B 组 · 书源/订阅源调试修复闭环路由声明（web-mcp-productization 三期 · spec 4.1，共 10 端点）。
+ * B 组 · 书源/订阅源调试修复闭环路由声明（web-mcp-productization 三期 · spec 4.1，共 11 端点）。
  *
  * 设计原则（AD-3-01 / AD-10）：每端点 = 一个二期 kernel 方法投影；本文件只做
  * 「声明 + 取参 + 委派」，不内联任何业务逻辑；`HttpServer.kt` 全程零改动（REQ-3-109）。
@@ -114,6 +114,23 @@ object DebugRoutes {
             mcpToolName = "source_check_report"
         ) { _ ->
             ReturnData().setData(SourceDebugKernel.checkSourceReport())
+        },
+        // B12 启动内置批量巡检（B12 为**动作类** ⇒ MANAGE）。
+        // 目的：外部端到端巡检改为「启动本任务 → 轮询 B11 报告」即消费 App 内置统一结论
+        // （内置链路按维度路由 搜索/发现 ⇒ 消除 `no-search-entry` 口径产物；归因见 NEW-102）。
+        // 无 `mcpToolName`：本端点不投影 MCP（避免改动 MCP 工具计数契约）。
+        ApiRoute(Method.POST, "/startCheckSource", Level.MANAGE) { ctx ->
+            ReturnData().setData(
+                SourceDebugKernel.startCheckSource(
+                    keyword = ctx.param("keyword").orEmpty(),
+                    urls = ctx.param("urls").orEmpty()
+                        .split(',')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() },
+                    limit = ctx.intParam("limit", 0),
+                    step = ctx.intParam("step", 1),
+                )
+            )
         },
     )
 }
