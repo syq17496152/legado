@@ -73,20 +73,6 @@ object EpubCssCompat {
     }
 
     /**
-     * 判定一条声明是否进入渲染管线。
-     *
-     * @param canonicalName 已归一的属性名。
-     * @param isSupported 调用方给出的「本管线支持的标准属性」判据。
-     * @return true ⇒ 保留（含别名归一命中，或剥前缀后基名被支持）。
-     */
-    fun isRenderable(canonicalName: String, isSupported: (String) -> Boolean): Boolean {
-        if (isSupported(canonicalName)) return true
-        // 前缀旧式声明：基名被支持时同样保留（值语义在前缀与标准间一致）。
-        val base = basePropertyName(canonicalName)
-        return base != canonicalName && isSupported(base)
-    }
-
-    /**
      * 归一 + 判定一步到位。
      *
      * @return 应写入管线的属性名；返回 null 表示**未知属性 ⇒ 忽略该条声明**。
