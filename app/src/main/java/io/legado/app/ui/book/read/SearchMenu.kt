@@ -23,6 +23,7 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.book.read.config.ReaderSheetStyle
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.activity
@@ -104,11 +105,11 @@ class SearchMenu @JvmOverloads constructor(
             if (isBgLight) 1f else 0.14f
         )
         val menuOpacity = (AppConfig.readMenuAlpha / 100f).coerceIn(0.35f, 1f)
-        llBottomMenu.background = GradientDrawable().apply {
-            cornerRadius = UiCorner.scaledDp(18F)
-            setColor(ColorUtils.withAlpha(panelBaseColor, menuOpacity))
-            setStroke(1.dpToPx(), panelStrokeColor)
-        }
+        llBottomMenu.background = ReaderSheetStyle.blockDrawable(
+            ColorUtils.withAlpha(panelBaseColor, menuOpacity),
+            panelStrokeColor,
+            18F
+        )
         llSearchBaseInfo.background = GradientDrawable().apply {
             cornerRadius = UiCorner.searchRadius(14F)
             setColor(ColorUtils.withAlpha(panelInnerColor, menuOpacity))
