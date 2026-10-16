@@ -196,7 +196,6 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
     internal var pendingCardBackgroundBlur: Float? by mutableStateOf(null)
     internal var pendingFontScale by mutableStateOf(0)
     internal var pendingUiCornerSearchFollow by mutableStateOf(false)
-    internal var pendingUiCornerReplyFollow by mutableStateOf(false)
     internal var pendingUiFontPath: String? by mutableStateOf(null)
     internal var pendingTitleFontPath: String? by mutableStateOf(null)
     private var editingConfigNight: Boolean? = null
@@ -532,7 +531,6 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
             ?: defaultThemeTextColorHex(configNight)
         )
         pendingUiCornerSearchFollow = current.uiCornerSearchFollow ?: themeUiCornerSearchFollow(configNight)
-        pendingUiCornerReplyFollow = current.uiCornerReplyFollow ?: themeUiCornerReplyFollow(configNight)
         editPrimaryValue = normalizeColor(current.primaryColor, colorPrimary)
         editAccentValue = normalizeColor(current.accentColor, colorAccent)
         editBackgroundValue = normalizeColor(current.backgroundColor, colorBackground)
@@ -701,7 +699,6 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
                 cardShadow = pendingCardShadow,
                 cardBackgroundBlur = pendingCardBackgroundBlur,
                 uiCornerSearchFollow = pendingUiCornerSearchFollow,
-                uiCornerReplyFollow = pendingUiCornerReplyFollow,
                 fontScale = pendingFontScale,
                 uiFontPath = pendingUiFontPath,
                 titleFontPath = pendingTitleFontPath,
@@ -867,7 +864,6 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
                 .takeIf { it >= 0 }
                 ?.let { it / 10f },
             uiCornerSearchFollow = themeUiCornerSearchFollow(isNightTheme),
-            uiCornerReplyFollow = themeUiCornerReplyFollow(isNightTheme),
             fontScale = getPrefInt(ThemeRuntimeKeys.fontScale(isNightTheme), 0),
             uiFontPath = getPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme)).orEmpty(),
             titleFontPath = getPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme)).orEmpty(),
@@ -900,10 +896,6 @@ class ThemeManageActivity : BaseActivity<ViewBinding>(),
 
     private fun themeUiCornerSearchFollow(isNight: Boolean): Boolean {
         return getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNight), false)
-    }
-
-    private fun themeUiCornerReplyFollow(isNight: Boolean): Boolean {
-        return getPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNight), false)
     }
 
     override val curFontPath: String

@@ -21,7 +21,6 @@ object ThemeRuntimeKeys {
         PreferKey.uiLayoutAlpha to PreferKey.uiLayoutAlphaN,
         PreferKey.dialogAlpha to PreferKey.dialogAlphaN,
         PreferKey.uiCornerSearchFollow to PreferKey.uiCornerSearchFollowN,
-        PreferKey.uiCornerReplyFollow to PreferKey.uiCornerReplyFollowN,
         PreferKey.themeCardColor to PreferKey.themeCardColorN,
         PreferKey.themeMutedColor to PreferKey.themeMutedColorN,
         PreferKey.themeSearchFieldBackgroundColor to PreferKey.themeSearchFieldBackgroundColorN,
@@ -127,9 +126,6 @@ object ThemeRuntimeKeys {
     fun uiCornerSearchFollow(isNight: Boolean = AppConfig.isNightTheme): String =
         if (isNight) PreferKey.uiCornerSearchFollowN else PreferKey.uiCornerSearchFollow
 
-    fun uiCornerReplyFollow(isNight: Boolean = AppConfig.isNightTheme): String =
-        if (isNight) PreferKey.uiCornerReplyFollowN else PreferKey.uiCornerReplyFollow
-
     fun themeCardColor(isNight: Boolean = AppConfig.isNightTheme): String =
         if (isNight) PreferKey.themeCardColorN else PreferKey.themeCardColor
 
@@ -182,8 +178,6 @@ object ThemeRuntimeKeys {
         PreferKey.dialogAlphaN,
         PreferKey.uiCornerSearchFollow,
         PreferKey.uiCornerSearchFollowN,
-        PreferKey.uiCornerReplyFollow,
-        PreferKey.uiCornerReplyFollowN,
         PreferKey.themeCardColor,
         PreferKey.themeCardColorN,
         PreferKey.themeMutedColor,

@@ -74,7 +74,12 @@ object BackupConfig {
         // 两项功能已迁移（清除缓存并入缓存管理 / WebView 清理为缓存管理第 4 分项），
         // 旧处理逻辑与 XML 条目均已删 ⇒ 键声明退役，此处防旧备份写回（「删键三处」约定）。
         "cleanCache",
-        "clearWebViewData"
+        "clearWebViewData",
+        // NEW-87（2026-10-16）：「回复栏跟随圆角」幽灵设置 —— 键有存储有引用但开关无可感效果
+        //（`UiCorner.replyRadius` 零调用、仓内无「回复栏」视图，上游 Archive 亦零消费）⇒ 存储链退役，
+        // 此处防旧备份写回（「删键三处」约定）。
+        "uiCornerReplyFollow",
+        "uiCornerReplyFollowNight"
     )
 
     //阅读配置

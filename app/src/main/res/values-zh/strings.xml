@@ -1870,7 +1870,6 @@
         <string name="top_bar_day_default_name">默认日间顶栏</string>
         <string name="top_bar_name_exists">顶栏名称已存在</string>
         <string name="top_bar_night_default_name">默认夜间顶栏</string>
-        <string name="ui_corner_reply_follow">回复栏跟随圆角</string>
         <string name="ui_corner_scale">圆角倍率</string>
         <string name="ui_corner_search_follow">搜索栏跟随圆角</string>
         <string name="ui_font">界面字体</string>

@@ -2306,8 +2306,7 @@
         <string name="top_bar_day_default_name">Default day top bar</string>
         <string name="top_bar_name_exists">Top bar name already exists</string>
         <string name="top_bar_night_default_name">Default night top bar</string>
-        <string name="ui_corner_reply_follow">Reply bars follow corner scale</string>
-        <string name="ui_corner_scale">Corner radius scale</string>
+            <string name="ui_corner_scale">Corner radius scale</string>
         <string name="ui_corner_search_follow">Search bars follow corner scale</string>
         <string name="ui_font">UI font</string>
         <string name="ui_layout_alpha">Interface opacity</string>

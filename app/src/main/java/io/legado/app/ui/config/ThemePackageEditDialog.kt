@@ -426,11 +426,12 @@ private fun InterfaceGroup(host: ThemeManageActivity) {
         swatchColor = null,
         onClick = { host.pendingUiCornerSearchFollow = !host.pendingUiCornerSearchFollow }
     )
-    // 🔴 已移除「回复栏跟随圆角」开关（NEW-87，2026-10-16）：该设置**无可感效果** —— 唯一功能性消费点
+    // 🔴 已退役「回复栏跟随圆角」开关（NEW-87，2026-10-16）：该设置**无可感效果** —— 唯一功能性消费点
     // `UiCorner.replyRadius()` 全仓零调用，且仓内不存在任何「回复栏 / reply bar」视图或布局；
     // **上游 Archive 同样零消费**（`docs/analysis/archive-src` 中该符号仅出现在定义处）⇒ 给主题作者/用户
-    // 摆一个点了没反应的开关属误导，故退役 UI 入口。存储链（`PreferKey`/`ThemeConfig` 字段/`replyRadius`）
-    // 与 `ui_corner_reply_follow` 字符串随**主题 schema 批次**一并清理，避免中途改坏主题包兼容性。
+    // 摆一个点了没反应的开关属误导。**整条存储链已随之退役**（`PreferKey` 声明 / `ThemeRuntimeKeys`
+    // 昼夜键对与清单 / `AppConfig` / `ThemeConfig` 字段 / `ThemePackageManager` 默认值 /
+    // `UiCorner.replyRadius` / `ui_corner_reply_follow` 字符串；旧备份键已入 `BackupConfig.ignorePrefKeys`）。
 }
 
 @Composable

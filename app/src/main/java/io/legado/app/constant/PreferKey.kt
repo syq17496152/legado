@@ -408,8 +408,9 @@ object PreferKey {
     const val dialogAlphaN = "dialogAlphaNight"
     const val uiCornerSearchFollow = "uiCornerSearchFollow"
     const val uiCornerSearchFollowN = "uiCornerSearchFollowNight"
-    const val uiCornerReplyFollow = "uiCornerReplyFollow"
-    const val uiCornerReplyFollowN = "uiCornerReplyFollowNight"
+    // 🔴 已删除 `uiCornerReplyFollow` / `uiCornerReplyFollowNight`（2026-10-16 NEW-87 第二部分）：
+    // 「回复栏跟随圆角」无可感效果（消费点 `UiCorner.replyRadius` 零调用、仓内不存在任何「回复栏」视图，
+    // 上游 Archive 亦零消费）⇒ 退役整条存储链；旧备份中的该键由 `BackupConfig.ignorePrefKeys` 忽略，不再写回。
     const val themeCardColor = "themeCardColor"
     const val themeCardColorN = "themeCardColorNight"
     const val themeMutedColor = "themeMutedColor"

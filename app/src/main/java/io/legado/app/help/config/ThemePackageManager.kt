@@ -1024,7 +1024,6 @@ object ThemePackageManager {
             cardShadow = cardShadow?.coerceIn(0, 24),
             cardBackgroundBlur = cardBackgroundBlur?.coerceIn(0f, 25f),
             uiCornerSearchFollow = true,
-            uiCornerReplyFollow = true,
             fontScale = null,
             uiFontPath = null,
             titleFontPath = null

@@ -2229,9 +2229,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val uiCornerSearchFollow: Boolean
         get() = appCtx.getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), false)
 
-    val uiCornerReplyFollow: Boolean
-        get() = appCtx.getPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNightTheme), false)
-
     var liquidGlassLevel: Int
         get() = appCtx.getPrefInt(PreferKey.liquidGlassLevel, 68).coerceIn(0, 100)
         set(value) {

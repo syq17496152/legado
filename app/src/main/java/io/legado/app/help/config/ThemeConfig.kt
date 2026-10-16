@@ -421,9 +421,6 @@ object ThemeConfig {
             config.uiCornerSearchFollow?.let {
                 context.putPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), it)
             }
-            config.uiCornerReplyFollow?.let {
-                context.putPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNightTheme), it)
-            }
             config.fontScale?.let {
                 context.putPrefInt(ThemeRuntimeKeys.fontScale(isNightTheme), it.coerceIn(0, 16))
             }
@@ -567,10 +564,6 @@ object ThemeConfig {
         return getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), false)
     }
 
-    private fun Context.themeUiCornerReplyFollow(isNightTheme: Boolean): Boolean {
-        return getPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNightTheme), false)
-    }
-
     private fun getDayTheme(context: Context, name: String): Config {
         val primary =
             context.getPrefInt(PreferKey.cPrimary, context.getCompatColor(R.color.md_brown_500))
@@ -621,7 +614,6 @@ object ThemeConfig {
                 uiLayoutAlpha = stored?.uiLayoutAlpha ?: context.themeUiLayoutAlpha(false),
                 dialogAlpha = stored?.dialogAlpha ?: context.themeDialogAlpha(false),
                 uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: context.themeUiCornerSearchFollow(false),
-                uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: context.themeUiCornerReplyFollow(false),
                 fontScale = stored?.fontScale ?: context.getPrefInt(ThemeRuntimeKeys.fontScale(false), 0),
                 uiFontPath = stored?.uiFontPath ?: context.getPrefString(ThemeRuntimeKeys.uiFontPath(false)).orEmpty(),
                 titleFontPath = stored?.titleFontPath ?: context.getPrefString(ThemeRuntimeKeys.titleFontPath(false)).orEmpty(),
@@ -693,7 +685,6 @@ object ThemeConfig {
                 uiLayoutAlpha = stored?.uiLayoutAlpha ?: context.themeUiLayoutAlpha(true),
                 dialogAlpha = stored?.dialogAlpha ?: context.themeDialogAlpha(true),
                 uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: context.themeUiCornerSearchFollow(true),
-                uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: context.themeUiCornerReplyFollow(true),
                 fontScale = stored?.fontScale ?: context.getPrefInt(ThemeRuntimeKeys.fontScale(true), 0),
                 uiFontPath = stored?.uiFontPath ?: context.getPrefString(ThemeRuntimeKeys.uiFontPath(true)).orEmpty(),
                 titleFontPath = stored?.titleFontPath ?: context.getPrefString(ThemeRuntimeKeys.titleFontPath(true)).orEmpty(),
@@ -744,7 +735,6 @@ object ThemeConfig {
             cardShadow = config.cardShadow,
             cardBackgroundBlur = config.cardBackgroundBlur,
             uiCornerSearchFollow = config.uiCornerSearchFollow ?: stored.uiCornerSearchFollow,
-            uiCornerReplyFollow = config.uiCornerReplyFollow ?: stored.uiCornerReplyFollow,
             fontScale = config.fontScale ?: stored.fontScale,
             uiFontPath = config.uiFontPath ?: stored.uiFontPath,
             titleFontPath = config.titleFontPath ?: stored.titleFontPath,
@@ -1210,7 +1200,6 @@ object ThemeConfig {
         var cardShadow: Int? = null,
         var cardBackgroundBlur: Float? = null,
         var uiCornerSearchFollow: Boolean? = null,
-        var uiCornerReplyFollow: Boolean? = null,
         var fontScale: Int? = null,
         var uiFontPath: String? = null,
         var titleFontPath: String? = null,
@@ -1251,7 +1240,6 @@ object ThemeConfig {
                         && other.cardShadow == cardShadow
                         && other.cardBackgroundBlur == cardBackgroundBlur
                         && other.uiCornerSearchFollow == uiCornerSearchFollow
-                        && other.uiCornerReplyFollow == uiCornerReplyFollow
                         && other.fontScale == fontScale
                         && other.uiFontPath == uiFontPath
                         && other.titleFontPath == titleFontPath
@@ -1288,7 +1276,6 @@ object ThemeConfig {
             "cardShadow" to cardShadow,
             "cardBackgroundBlur" to cardBackgroundBlur,
             "uiCornerSearchFollow" to uiCornerSearchFollow,
-            "uiCornerReplyFollow" to uiCornerReplyFollow,
             "fontScale" to fontScale,
             "uiFontPath" to uiFontPath,
             "titleFontPath" to titleFontPath,

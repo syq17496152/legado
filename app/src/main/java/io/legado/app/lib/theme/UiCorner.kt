@@ -58,14 +58,6 @@ object UiCorner {
         }
     }
 
-    fun replyRadius(value: Float): Float {
-        return if (AppConfig.uiCornerReplyFollow) {
-            scaledDp(value)
-        } else {
-            value.dpToPx()
-        }
-    }
-
     fun effectMode(): String = "solid"
 
     fun layoutAlpha(): Float {
