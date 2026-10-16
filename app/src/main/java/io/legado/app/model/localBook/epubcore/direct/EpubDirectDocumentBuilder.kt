@@ -140,11 +140,11 @@ object EpubDirectDocumentBuilder {
             duokanGallery = duokanGallery,
             scripted = scripted,
             pageProgressionDirection = normalizeDirection(pageProgressionDirection) ?: rootDirection,
-            pageLayoutDirection = when (writingMode) {
-                "vertical-rl", "sideways-rl" -> "rtl"
-                "vertical-lr", "sideways-lr" -> "ltr"
-                else -> rootDirection ?: normalizeDirection(pageProgressionDirection)
-            },
+            pageLayoutDirection = resolvePageLayoutDirection(
+                writingMode = writingMode,
+                rootDirection = rootDirection,
+                packageDirection = pageProgressionDirection
+            ),
             publisherPageBackground = publisherPageBackground
         )
     }
@@ -596,21 +596,25 @@ object EpubDirectDocumentBuilder {
         return resolveRootProperty(document, WRITING_MODE) { normalizeWritingMode(it) }
     }
 
+    /**
+     * 页排方向（`rtl` / `ltr`）判定**单源**：竖排书写模式优先 → 根 `dir` → 出版方 `page-progression-direction`。
+     *
+     * 参数全部为调用方已解析出的值（不再在内部二次解析 DOM），因此 [buildChapter] 与本函数**共用同一判据**。
+     * 入参**容错**：两个方向入参都会再做一次归一化（非 `ltr`/`rtl` 一律丢弃）——单源函数不得假设调用方已清洗，
+     * 否则后人接线时传入未归一化值会漏出非法方向串。
+     * 修正背景：本函数此前零调用，而 [buildChapter] 内联复制了一份语义完全相同的 `when` 分支
+     * ⇒ 两处判据有漂移风险（见 `docs/specs/core-flow-test-coverage/issues-found.md` §四十三 NEW-86）。
+     */
     internal fun resolvePageLayoutDirection(
-        html: String,
-        packageDirection: String?,
-        writingMode: String? = resolveRootWritingMode(html)
+        writingMode: String?,
+        rootDirection: String?,
+        packageDirection: String?
     ): String? {
         return when (writingMode) {
             "vertical-rl", "sideways-rl" -> "rtl"
             "vertical-lr", "sideways-lr" -> "ltr"
-            else -> resolveRootDirection(html) ?: normalizeDirection(packageDirection)
+            else -> normalizeDirection(rootDirection) ?: normalizeDirection(packageDirection)
         }
-    }
-
-    private fun resolveRootDirection(html: String): String? {
-        val document = parseDocument(html) ?: return null
-        return resolveRootDirection(document)
     }
 
     private fun resolveRootDirection(document: Document): String? {
