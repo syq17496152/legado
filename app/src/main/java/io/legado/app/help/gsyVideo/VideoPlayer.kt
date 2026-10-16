@@ -525,11 +525,9 @@ class VideoPlayer: StandardGSYVideoPlayer {
         ivMute = findViewById(R.id.iv_mute)
         isMuted = VideoPlay.muteOnStart
         updateMuteIcon()
-        ivMute?.setOnClickListener {
-            isMuted = !isMuted
-            getGSYVideoManager().player?.setNeedMute(isMuted)
-            updateMuteIcon()
-        }
+        // 静音开关单源：点击回调和 `toggleMute()` 共用同一实现
+        // （NEW-86 续 —— 原内联回调体与 `toggleMute()` 逐字重复，属同一判据两份实现）
+        ivMute?.setOnClickListener { toggleMute() }
         //画面比例按钮
         tvRatio = findViewById(R.id.tv_ratio)
         tvRatio?.setOnClickListener {
