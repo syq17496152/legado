@@ -17,6 +17,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.CacheManager
 import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.JsExtensions
@@ -62,6 +63,7 @@ import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.Dns
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.ByteArrayInputStream
@@ -488,6 +490,14 @@ class AnalyzeUrl(
         AppLog.putDebugWithTag(AppLog.TAG_HTTP, "executeStrRequest 入口 method=$method, path=${url.take(50)}, useWebView=${this.useWebView && useWebView}", level = AppLog.Level.INFO)
         val strResponse: StrResponse
         try {
+            // NEW-104：规则产物 URL 为空 / 格式非法时抛**业务异常**（NoStackTraceException），
+            // 而非让 OkHttp 抛裸 `IllegalArgumentException: Invalid URL host: ""` ——
+            // 后者非 NoStackTraceException ⇒ 失败归因会落到「网站失效/网络」（QualityReportApplier.failureKindOf），
+            // 真因其实是**书源规则缺失**（实测：设备巡检 200 样本 #126 即此形态）。
+            // 放在 try 内 ⇒ 调试（isTest）路径照旧由下方 catch 转为错误码并回显本条可读 message。
+            if (isBlankOrBadHttpUrl(urlNoQuery)) {
+                throw NoStackTraceException("请求地址为空或格式非法（疑似书源规则缺失）：${url.take(60)}")
+            }
             if (this.useWebView && useWebView) {
                 strResponse = when (method) {
                     RequestMethod.POST -> {
@@ -1058,4 +1068,21 @@ class AnalyzeUrl(
         var frequency: Int
     )
 
+}
+
+/**
+ * 规则产物 URL 是否「为空 / 格式非法」（NEW-104，纯函数 ⇒ 供 JVM 单测覆盖）。
+ *
+ * 只对 `http` / `https` 起头的地址做 OkHttp 可解析性 + 主机存在性判定：其他 scheme（如 `file:` /
+ * `data:` / `@js:` 等规则串）不在 HTTP 请求面，交由既有分支处理，避免误伤。
+ * 判定分两段：①解析失败（`toHttpUrlOrNull()` 为 null，即生产环境裸 IAE 的前身）
+ * ②解析成功但**主机为空**（如 `http://` / `http://:8080` ⇒ 后续 `newBuilder().build()` 必抛
+ * `IllegalArgumentException: Invalid URL host: ""`）。注意 `https:///a` 会被 OkHttp 归一化为
+ * `https://a/`（host=a）⇒ 属可发起请求，不在此列。
+ */
+internal fun isBlankOrBadHttpUrl(url: String?): Boolean {
+    if (url.isNullOrBlank()) return true
+    if (!url.startsWith("http", true)) return false
+    val parsed = url.toHttpUrlOrNull() ?: return true
+    return parsed.host.isEmpty()
 }
