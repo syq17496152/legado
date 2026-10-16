@@ -168,9 +168,7 @@ object SpeechRouteSanitizer {
         val id = route.engineValue.toLongOrNull() ?: return false
         val httpTTS = httpTtsList.firstOrNull { it.id == id } ?: return false
         if (route.toneID.isBlank()) return true
-        val speakers = SpeechVoiceCatalogParser
-            .parseSpeakerGroups(httpTTS.speakersJson)
-            .flatMap { it.items }
+        val speakers = SpeechVoiceCatalogParser.flattenSpeakers(httpTTS.speakersJson)
         return speakers.any { it.toneID == route.toneID }
     }
 }

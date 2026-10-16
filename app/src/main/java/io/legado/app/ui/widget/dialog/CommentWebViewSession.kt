@@ -86,10 +86,6 @@ class CommentWebViewSession {
         }
     }
 
-    fun releaseAfterDelay(delayMillis: Long = 0L) {
-        destroy()
-    }
-
     fun destroy() {
         runOnMain {
             destroyOnMain()

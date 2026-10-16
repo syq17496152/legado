@@ -34,16 +34,6 @@ class DictRuleViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun upSortNumber() {
-        execute {
-            val rules = appDb.dictRuleDao.all
-            for ((index, rule) in rules.withIndex()) {
-                rule.sortNumber = index + 1
-            }
-            appDb.dictRuleDao.insert(*rules.toTypedArray())
-        }
-    }
-
     fun enableSelection(vararg dictRule: DictRule) {
         execute {
             val array = dictRule.map { it.copy(enabled = true) }.toTypedArray()

@@ -130,8 +130,7 @@ object SpeechVoiceGroupRepository {
                 val httpTts = item.engineValue.toLongOrNull()
                     ?.let { id -> httpTtsList.firstOrNull { it.id == id } }
                     ?: return false
-                val speakers = SpeechVoiceCatalogParser.parseSpeakerGroups(httpTts.speakersJson)
-                    .flatMap { it.items }
+                val speakers = SpeechVoiceCatalogParser.flattenSpeakers(httpTts.speakersJson)
                 when {
                     item.toneID.isBlank() -> true
                     speakers.isEmpty() -> false
