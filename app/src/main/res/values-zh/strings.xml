@@ -677,7 +677,8 @@
     <string name="gamepad_preset_conflict_title">键码冲突</string>
     <string name="gamepad_preset_conflict_message">预设键码与当前已设置的自定义键码冲突，继续将覆盖后者。是否继续？</string>
     <string name="gamepad_preset_applied">已套用预设，可继续手动修改</string>
-    <string name="no_group">未分组</string>
+    <string name="no_group">未分组</string>
+
     <string name="all_groups">全部</string>
     <string name="prev_sentence">上一句</string>
     <string name="next_sentence">下一句</string>
@@ -776,7 +777,8 @@
     <string name="disabled">已禁用</string>
     <string name="enabled_explore">已启用发现</string>
     <string name="disabled_explore">已禁用发现</string>
-
+
+
     <string name="default_cover">默认封面</string>
     <string name="restore_ignore">恢复忽略列表</string>
     <!-- R17（B3）：备份前按内容类别分选 -->
@@ -1262,7 +1264,7 @@
     <string name="c_blacklist">黑名单(contentBlacklist)</string>
     <string name="confirm">确认</string>
     <string name="jump_to_another_app">跳转其它应用</string>
-    <string name="clear_cache_title">清理缓存</string>
+
     <string name="dict_rule">字典规则</string>
     <string name="config_dict_rule">配置字典规则</string>
     <string name="create">新建</string>
