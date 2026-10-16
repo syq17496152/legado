@@ -11,8 +11,6 @@ import kotlin.math.sin
  */
 object HighlightGeometry {
 
-    data class Dot(val cx: Float, val cy: Float, val r: Float)
-
     /**
      * 波浪线采样点,返回 [x0,y0, x1,y1, ...](沿 baseY 上下振幅 amplitude, 周期 wavelength, 步进 step)。
      * 供 Canvas 用 Path 逐点连线绘制。
@@ -32,12 +30,6 @@ object HighlightGeometry {
             arr[i * 2 + 1] = (baseY + amplitude * sin(phase)).toFloat()
         }
         return arr
-    }
-
-    /** 每列一个着重点:starts/ends 为各列 x 区间,圆心取列中点 */
-    fun emphasisDots(starts: FloatArray, ends: FloatArray, cy: Float, r: Float): List<Dot> {
-        require(starts.size == ends.size) { "starts/ends size mismatch" }
-        return List(starts.size) { i -> Dot((starts[i] + ends[i]) / 2f, cy, r) }
     }
 
     /** R1a：填充带（相对行顶的上下边界；canvas 已在行级平移，故 y 为行内偏移） */

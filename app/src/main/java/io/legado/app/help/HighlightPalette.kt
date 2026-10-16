@@ -137,9 +137,6 @@ object HighlightPalette {
         return if (tone == Tone.NIGHT) pair.second else pair.first
     }
 
-    /** 槽位默认字色（兼容旧语义：跟随阅读字色时返回 0） */
-    fun colorOrZero(slot: String?, tone: Tone): Int = color(slot, tone)
-
     // ---------------- 阅读器态判定 ----------------
 
     /**
