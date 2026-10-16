@@ -10,9 +10,10 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import androidx.core.animation.doOnEnd
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.utils.findCenterViewPosition
+import io.legado.app.utils.findFirstVisibleViewPosition
+import io.legado.app.utils.findLastVisibleViewPosition
 import kotlin.math.abs
 
 
@@ -61,9 +62,12 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
     override fun onScrolled(dx: Int, dy: Int) {
         super.onScrolled(dx, dy)
-        val layoutManager = layoutManager as LinearLayoutManager
-        lastVisibleItemPosition = layoutManager.findLastVisibleItemPosition()
-        firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
+        // D 档收口（批 9）：原为 `layoutManager as LinearLayoutManager` —— **硬 cast**（崩溃面）：
+        // 一旦该列表挂上非 Linear 布局管理器，`onScrolled` 每次滚动都抛 ClassCastException。
+        // 改走 `utils/RecyclerViewExtensions` 的**单源封装**：非 Linear ⇒ 返回 -1（不再崩溃，
+        // 且与既有「-1 = 无可见项」语义一致）；Linear 情形取值与原实现逐字相同。
+        lastVisibleItemPosition = findLastVisibleViewPosition()
+        firstVisibleItemPosition = findFirstVisibleViewPosition()
 
         val position = findCenterViewPosition()
         if (position != NO_POSITION && position != mLastCenterViewPosition) {
