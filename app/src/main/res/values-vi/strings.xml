@@ -431,7 +431,7 @@
     <string name="web_dav_url">Địa chỉ máy chủ WebDav</string>
     <string name="web_dav_account">Tài khoản WebDav</string>
     <string name="web_dav_account_s">Nhập tài khoản WebDav của bạn</string>
-    <string name="rss_source">Nguồn RSS</string>
+
     <string name="rss_source_edit">Sửa nguồn RSS</string>
     <string name="screen">Bộ lọc</string>
     <string name="screen_find">Search Discovery sources</string>
@@ -539,7 +539,8 @@
     <string name="disabled">Đã tắt</string>
     <string name="enabled_explore">Đã bật khám phá</string>
     <string name="disabled_explore">Đã tắt khám phá</string>
-
+
+
     <string name="default_cover">Bìa mặc định</string>
     <string name="restore_ignore">Danh sách bỏ qua</string>
     <string name="restore_ignore_summary">Bỏ qua một số nội dung khi khôi phục</string>

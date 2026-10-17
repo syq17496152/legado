@@ -418,7 +418,7 @@
     <string name="web_dav_url">WebDav 服務器地址</string>
     <string name="web_dav_account">WebDav 賬號</string>
     <string name="web_dav_account_s">輸入你的 WebDav 賬號</string>
-    <string name="rss_source">訂閲源</string>
+
     <string name="rss_source_edit">編輯訂閲源</string>
     <string name="screen">篩選</string>
     <string name="screen_find">篩選發現源</string>
@@ -436,7 +436,8 @@
     <string name="custom_page_key">自定義翻頁按鍵</string>
     <string name="prev_page_key">上一頁按鍵</string>
     <string name="next_page_key">下一頁按鍵</string>
-    <string name="no_group">未分組</string>
+    <string name="no_group">未分組</string>
+
     <string name="all_groups">全部</string>
     <string name="prev_sentence">上一句</string>
     <string name="next_sentence">下一句</string>
@@ -527,7 +528,8 @@
     <string name="enabled_explore">已啟用發現</string>
     <string name="disabled_explore">已禁用發現</string>
     <string name="text_bottom_justify">文字底部對齊</string>
-
+
+
     <string name="default_cover">默認封面</string>
     <string name="restore_ignore">恢復忽略列表</string>
     <string name="restore_ignore_summary">恢復時忽略一些內容不恢復,方便不同手機配置不同</string>
@@ -828,7 +830,8 @@
     <string name="c_whitelist">白名单(contentWhitelist)</string>
     <string name="c_blacklist">黑名单(contentBlacklist)</string>
     <string name="confirm">确认</string>
-    <string name="jump_to_another_app">跳转其它应用</string>
+    <string name="jump_to_another_app">跳转其它应用</string>
+
     <string name="source_tab_list">列表</string>
     <string name="dict_rule">字典规则</string>
     <string name="config_dict_rule">配置字典规则</string>

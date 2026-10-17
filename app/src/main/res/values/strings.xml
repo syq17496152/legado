@@ -681,7 +681,7 @@
     <string name="web_dav_url">WebDav server address</string>
     <string name="web_dav_account">WebDav account</string>
     <string name="web_dav_account_s">Input your WebDav account</string>
-    <string name="rss_source">RSS source</string>
+
     <string name="rss_source_edit">Edit RSS source</string>
     <string name="screen">Filter</string>
     <string name="screen_find">Search Discovery sources</string>
@@ -707,7 +707,8 @@
     <string name="gamepad_preset_conflict_title">Key conflict</string>
     <string name="gamepad_preset_conflict_message">This preset conflicts with your current custom key codes; continuing will overwrite them. Continue?</string>
     <string name="gamepad_preset_applied">Preset applied, you can still edit manually</string>
-    <string name="no_group">Ungrouped</string>
+    <string name="no_group">Ungrouped</string>
+
     <string name="all_groups">All</string>
     <string name="prev_sentence">Prior sentence</string>
     <string name="next_sentence">Next sentence</string>
@@ -807,7 +808,8 @@
     <string name="disabled">Disabled</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-
+
+
     <string name="default_cover">Default cover</string>
     <string name="restore_ignore">Bypass list</string>
     <!-- R17（B3）：备份前按内容类别分选 -->
@@ -1631,7 +1633,7 @@
     <string name="float_permission_rationale">阅读需要悬浮窗权限来显示播放窗口</string>
     <string name="video">视频</string>
     <string name="float_window">悬浮窗</string>
-    <string name="video_play">视频播放</string>
+
     <string name="overlay">叠加</string>
     <string name="margin">间距</string>
     <string name="replace_to_js">js处理</string>
@@ -1985,10 +1987,10 @@
     <string name="source_folder_group_by_group">By Group</string>
     <string name="source_folder_group_by_type">By Type</string>
     <!-- source-layout-redesign: 类型筛选字符串 -->
-    <string name="type_text">文本</string>
-    <string name="type_audio">音频</string>
+
+
     <string name="type_image">图片</string>
-    <string name="type_file">文件</string>
+
     <string name="type_video">视频</string>
     <string name="type_web">网页</string>
     <!-- source-layout-deep-refactor: group style / view mode / sort -->
@@ -3016,7 +3018,7 @@ Selected text or question:
 <string name="bookshelf_list_intro_lines_1">1 line</string>
 <string name="bookshelf_list_intro_lines_2">2 lines</string>
 <string name="bookshelf_list_intro_lines_3">3 lines</string>
-<string name="share_note_template">模板</string>
+
 <string name="continue_">Continue</string>
 <string name="import_">Import</string>
 <string name="import_json_format_unrecognized">Unrecognized import content, please check the file type</string>

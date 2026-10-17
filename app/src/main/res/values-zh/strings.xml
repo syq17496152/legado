@@ -651,7 +651,7 @@
     <string name="web_dav_url">WebDav 服务器地址</string>
     <string name="web_dav_account">WebDav 账号</string>
     <string name="web_dav_account_s">输入你的 WebDav 账号</string>
-    <string name="rss_source">订阅源</string>
+
     <string name="rss_source_edit">编辑订阅源</string>
     <string name="screen">筛选</string>
     <string name="screen_find">筛选发现源</string>
@@ -1586,10 +1586,10 @@
     <string name="source_folder_group_by_group">按分组</string>
     <string name="source_folder_group_by_type">按类型</string>
     <!-- F-P1-8 源类型分类（书源: 文本/音频/图片/文件/视频；订阅源: 网页/图片/视频） -->
-    <string name="type_text">文本</string>
-    <string name="type_audio">音频</string>
+
+
     <string name="type_image">图片</string>
-    <string name="type_file">文件</string>
+
     <string name="type_video">视频</string>
     <string name="type_web">网页</string>
     <!-- source-layout-deep-refactor: 分组样式 / 视图模式 / 排序 -->
@@ -2532,7 +2532,7 @@ bookUrl：%7$s
 <string name="btn_previous">&#19978;&#20010;</string>
 <string name="btn_next">&#19979;&#20010;</string>
 <string name="replace_all">&#20840;&#37096;</string>
-<string name="video_play">&#35270;&#39057;&#25773;&#25918;</string>
+
 <string name="overlay">&#21472;&#21152;</string>
 <string name="margin">&#38388;&#36317;</string>
 <string name="replace_to_js">js&#22788;&#29702;</string>
