@@ -12,6 +12,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.AudioPlay
+import io.legado.app.model.AutoTask
 import io.legado.app.model.ReadBook
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.toastOnUi
@@ -56,6 +57,12 @@ class SourceLoginViewModel(application: Application) : BaseViewModel(application
                         "bookSource" ->  appDb.bookSourceDao.getBookSource(sourceKey)
                         "rssSource" -> appDb.rssSourceDao.getByKey(sourceKey)
                         "httpTts" -> appDb.httpTTSDao.get(sourceKey.toLong())
+                        // 自动任务：由规则合成临时 BaseSource（AutoTask.buildSource）。
+                        // 其 key = `auto_task:{ruleId}`，与 AutoTaskService 执行期构造的 key **同源**
+                        // ⇒ 登录写入的 Cookie 落到同一 CookieStore 槽位，任务请求可读到（生效闭环）。
+                        "autoTask" -> appDb.autoTaskRuleDao.getById(sourceKey)?.let {
+                            AutoTask.buildSource(it)
+                        }
                         else -> null
                     }
                     val bookUrl = intent.getStringExtra("bookUrl")

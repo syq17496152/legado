@@ -1899,7 +1899,6 @@
     <string name="auto_task_last_error">最后错误: %1$s</string>
     <string name="auto_task_not_run">未运行</string>
     <string name="auto_task_item_summary">Cron: %1$s | %2$s</string>
-    <string name="auto_task_debug_pending">调试功能待实现</string>
     <string name="auto_task_help_missing">帮助文档尚未创建</string>
     <string name="import_auto_task">导入自动任务</string>
     <string name="import_status_new">新增</string>

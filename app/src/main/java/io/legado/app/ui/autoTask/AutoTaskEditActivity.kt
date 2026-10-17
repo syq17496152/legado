@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Help
@@ -86,10 +85,6 @@ class AutoTaskEditActivity :
     private fun buildMenuActions(): List<MenuAction> {
         return listOf(
             MenuAction(Icons.Default.Save, getString(R.string.action_save)) { onSave() },
-            MenuAction(Icons.Default.BugReport, getString(R.string.debug)) {
-                // TODO: AutoTaskDebugActivity 尚未创建，创建后启用
-                toastOnUi(R.string.auto_task_debug_pending)
-            },
             MenuAction(Icons.Default.Login, getString(R.string.login)) { openLogin() },
             MenuAction(Icons.Default.ContentCopy, getString(R.string.copy_source)) {
                 sendToClip(GSON.toJson(buildTaskDraft()))
@@ -226,8 +221,9 @@ class AutoTaskEditActivity :
             toastOnUi(getString(R.string.source_no_login))
             return
         }
-        // TODO: SourceLoginViewModel 当前的 initData 仅支持 bookSource/rssSource/httpTts 三种 type,
-        //  需扩展支持 "autoTask" 类型（通过 AutoTask.buildSource(rule) 构造 BaseSource）
+        // 登录链已接线（2026-10-17）：`SourceLoginViewModel.initData` 新增 "autoTask" 分支 ——
+        // 按规则 id 取 `AutoTaskRule` 并经 `AutoTask.buildSource` 合成 BaseSource；
+        // 合成 key = `auto_task:{id}` 与 AutoTaskService 执行期同源 ⇒ 登录 Cookie 落同一槽位、任务可读。
         viewModel.save(rule) {
             startActivity<SourceLoginActivity> {
                 putExtra("type", "autoTask")
