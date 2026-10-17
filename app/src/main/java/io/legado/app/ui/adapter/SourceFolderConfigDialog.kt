@@ -6,77 +6,28 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
-import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
-import io.legado.app.ui.widget.compose.LegadoMiuixCard
-import io.legado.app.ui.widget.compose.LegadoMiuixSlider
-import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
-import io.legado.app.ui.widget.compose.toMiuixPalette
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
-import androidx.compose.material3.MaterialTheme
-import io.legado.app.ui.theme.bodyTertiary
-import io.legado.app.ui.theme.subtitleLarge
 
-private const val SOURCE_FOLDER_PANEL_ANIMATION_MS = 160
-private const val SOURCE_FOLDER_PANEL_DISMISS_MS = SOURCE_FOLDER_PANEL_ANIMATION_MS + 20L
+internal const val SOURCE_FOLDER_PANEL_ANIMATION_MS = 160
+internal const val SOURCE_FOLDER_PANEL_DISMISS_MS = SOURCE_FOLDER_PANEL_ANIMATION_MS + 20L
 
 /**
  * 书源/订阅源布局配置弹框（Compose 版，对齐书架布局 BookshelfConfigDialog 样式）
@@ -99,7 +50,7 @@ data class SourceFolderConfigValues(
     val margin: Int
 )
 
-private data class SourceFolderConfigOption(
+internal data class SourceFolderConfigOption(
     val label: String,
     val value: Int
 )
@@ -111,7 +62,7 @@ private data class SourceFolderConfigOptions(
     val sorts: List<SourceFolderConfigOption>
 )
 
-private data class SourceFolderConfigTexts(
+internal data class SourceFolderConfigTexts(
     val title: String,
     val layoutTitle: String,
     val groupStyleLabel: String,
@@ -125,7 +76,7 @@ private data class SourceFolderConfigTexts(
     val applyLabel: String
 )
 
-private data class SourceFolderConfigSpec(
+internal data class SourceFolderConfigSpec(
     val panelHorizontalPadding: Dp = 16.dp,
     val panelVerticalPadding: Dp = 14.dp,
     val contentMaxHeight: Dp = 460.dp,
@@ -138,7 +89,7 @@ private data class SourceFolderConfigSpec(
     val compactGap: Dp = 6.dp
 )
 
-private data class SourceFolderSelectItem(
+internal data class SourceFolderSelectItem(
     val key: String,
     val label: String,
     val options: List<SourceFolderConfigOption>,
@@ -429,472 +380,6 @@ private fun SourceFolderConfigContent(
             range = 0..60,
             style = style,
             onValueChange = { onValuesChange(values.copy(margin = it)) }
-        )
-    }
-}
-
-@Composable
-private fun SourceFolderConfigPanel(
-    texts: SourceFolderConfigTexts,
-    style: AppDialogStyle,
-    content: @Composable () -> Unit,
-    actions: @Composable () -> Unit
-) {
-    val spec = SourceFolderConfigSpec()
-    CompositionLocalProvider(
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-    ) {
-        LegadoMiuixCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 18.dp),
-            color = style.surface,
-            contentColor = style.primaryText,
-            cornerRadius = style.panelRadius,
-            insidePadding = PaddingValues(
-                horizontal = spec.panelHorizontalPadding,
-                vertical = spec.panelVerticalPadding
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-            ) {
-                Text(
-                    text = texts.title,
-                    color = style.primaryText,
-                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = style.titleFontFamily,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = spec.contentMaxHeight)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(spec.sectionGap)
-                ) {
-                    content()
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                actions()
-            }
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderConfigSection(
-    title: String,
-    style: AppDialogStyle,
-    spec: SourceFolderConfigSpec,
-    content: @Composable () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(style.actionRadius),
-        color = style.fieldSurface,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(modifier = Modifier.padding(spec.sectionPadding)) {
-            Text(
-                text = title,
-                color = style.accent,
-                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = spec.compactGap),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            content()
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderOptionGrid(
-    items: List<SourceFolderSelectItem>,
-    style: AppDialogStyle,
-    spec: SourceFolderConfigSpec
-) {
-    var expandedKey by remember { mutableStateOf<String?>(null) }
-    var panelVisible by remember { mutableStateOf(false) }
-    var transitionVersion by remember { mutableStateOf(0) }
-    val scope = rememberCoroutineScope()
-    val expandedItem = items.firstOrNull { it.key == expandedKey }
-    fun dismissPanel() {
-        val version = ++transitionVersion
-        panelVisible = false
-        scope.launch {
-            delay(SOURCE_FOLDER_PANEL_DISMISS_MS)
-            if (transitionVersion == version) {
-                expandedKey = null
-            }
-        }
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(spec.gridGap)
-    ) {
-        items.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(spec.gridGap)
-            ) {
-                rowItems.forEach { item ->
-                    SourceFolderSelectTile(
-                        item = item,
-                        expanded = item.key == expandedKey,
-                        style = style,
-                        spec = spec,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            if (expandedKey == item.key) {
-                                dismissPanel()
-                            } else {
-                                transitionVersion++
-                                panelVisible = false
-                                expandedKey = item.key
-                            }
-                        }
-                    )
-                }
-                if (rowItems.size < 2) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-    expandedItem?.let { item ->
-        Popup(
-            alignment = Alignment.Center,
-            onDismissRequest = { dismissPanel() },
-            properties = PopupProperties(focusable = true)
-        ) {
-            LaunchedEffect(item.key) {
-                panelVisible = true
-            }
-            SourceFolderChoicePopupPanel(
-                visible = panelVisible,
-                item = item,
-                style = style,
-                spec = spec,
-                onSelected = {
-                    item.onSelected(it)
-                    dismissPanel()
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderSelectTile(
-    item: SourceFolderSelectItem,
-    expanded: Boolean,
-    style: AppDialogStyle,
-    spec: SourceFolderConfigSpec,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val selected = item.options.firstOrNull { it.value == item.selectedValue }
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        label = "sourceFolderSelectTileArrow"
-    )
-    Surface(
-        modifier = modifier
-            .height(spec.tileHeight)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(style.actionRadius),
-        color = if (expanded) style.accent.copy(alpha = 0.10f) else style.surface,
-        contentColor = style.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.label,
-                    color = style.secondaryText,
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = selected?.label.orEmpty(),
-                    color = if (expanded) style.accent else style.primaryText,
-                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(
-                painter = painterResource(id = R.drawable.ic_expand_more),
-                contentDescription = null,
-                tint = if (expanded) style.accent else style.secondaryText,
-                modifier = Modifier
-                    .size(20.dp)
-                    .graphicsLayer { rotationZ = rotation }
-            )
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderChoicePopupPanel(
-    visible: Boolean,
-    item: SourceFolderSelectItem,
-    style: AppDialogStyle,
-    spec: SourceFolderConfigSpec,
-    onSelected: (Int) -> Unit
-) {
-    val progress by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = SOURCE_FOLDER_PANEL_ANIMATION_MS),
-        label = "sourceFolderChoicePopup"
-    )
-    val columns = 2
-    Surface(
-        modifier = Modifier
-            .width(spec.popupWidth)
-            .graphicsLayer {
-                alpha = progress
-                scaleX = 0.96f + 0.04f * progress
-                scaleY = 0.96f + 0.04f * progress
-                translationY = (1f - progress) * 12f
-            },
-        shape = RoundedCornerShape(style.panelRadius),
-        color = style.surface,
-        contentColor = style.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 12.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = item.label,
-                color = style.primaryText,
-                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                fontFamily = style.titleFontFamily,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            item.options.chunked(columns).forEach { rowOptions ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    rowOptions.forEach { option ->
-                        SourceFolderChoiceChip(
-                            option = option,
-                            selected = option.value == item.selectedValue,
-                            style = style,
-                            spec = spec,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onSelected(option.value) }
-                        )
-                    }
-                    repeat(columns - rowOptions.size) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderChoiceChip(
-    option: SourceFolderConfigOption,
-    selected: Boolean,
-    style: AppDialogStyle,
-    spec: SourceFolderConfigSpec,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = modifier
-            .height(spec.choiceHeight)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(style.actionRadius),
-        color = if (selected) style.accent.copy(alpha = 0.14f) else style.fieldSurface,
-        contentColor = if (selected) style.accent else style.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = option.label,
-                color = if (selected) style.accent else style.primaryText,
-                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderAscendingRow(
-    label: String,
-    checked: Boolean,
-    style: AppDialogStyle,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    // 升降序开关行（rss-classic-layout-align S2-a）：style 配色，无硬编码色
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(style.actionRadius),
-        color = style.surface,
-        contentColor = style.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable { onCheckedChange(!checked) }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                modifier = Modifier.weight(1f),
-                color = style.primaryText,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = if (checked) "↑" else "↓",
-                color = style.accent,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            // 开关主题化（ui-theme-governance-polish P1）：换托管 LegadoMiuixSwitch + style palette，
-            // 替换脱离取色基线的裸 M3 Switch（colorScheme 直读不随 ThemeStore主题色变化）
-            LegadoMiuixSwitch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                palette = style.toMiuixPalette()
-            )
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderSliderRow(
-    title: String,
-    value: Int,
-    range: IntRange,
-    style: AppDialogStyle,
-    onValueChange: (Int) -> Unit
-) {
-    val palette = style.toMiuixPalette()
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(style.actionRadius),
-        color = style.surface,
-        contentColor = style.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f),
-                    color = style.primaryText,
-                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = style.accent.copy(alpha = 0.12f),
-                    contentColor = style.accent,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Text(
-                        text = value.toString(),
-                        color = style.accent,
-                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
-                    )
-                }
-            }
-            LegadoMiuixSlider(
-                value = value.toFloat(),
-                onValueChange = {
-                    onValueChange(it.roundToInt().coerceIn(range.first, range.last))
-                },
-                palette = palette,
-                modifier = Modifier.height(28.dp),
-                valueRange = range.first.toFloat()..range.last.toFloat(),
-                steps = (range.last - range.first - 1).coerceAtLeast(0)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SourceFolderFooterActions(
-    style: AppDialogStyle,
-    cancelLabel: String,
-    applyLabel: String,
-    onCancel: () -> Unit,
-    onApply: () -> Unit
-) {
-    val palette = style.toMiuixPalette()
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        LegadoMiuixActionButton(
-            text = cancelLabel,
-            palette = palette,
-            onClick = onCancel,
-            modifier = Modifier.width(92.dp),
-            cornerRadius = style.actionRadius
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        LegadoMiuixActionButton(
-            text = applyLabel,
-            palette = palette,
-            onClick = onApply,
-            modifier = Modifier.width(108.dp),
-            primary = true,
-            cornerRadius = style.actionRadius
         )
     }
 }
