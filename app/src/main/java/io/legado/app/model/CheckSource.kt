@@ -26,11 +26,23 @@ object CheckSource {
     var checkContent = CacheManager.get("checkContent")?.toBoolean() ?: true
     val summary get() = upSummary()
 
-    fun start(context: Context, sources: List<BookSourcePart>) {
+    /**
+     * 启动一次「校验所选」批量巡检。
+     *
+     * @param runConfig **本次任务的运行期覆盖**（缺省空配置 ⇒ 全部沿用本对象持久化现值，行为零变化）。
+     *   `IntentData.get` 会**移除键**，故这里**总是**下发（空配置也下发）：否则上一次程序化启动
+     *   留下的配置会被本次 UI 启动误消费；而 `IntentData` 无 `remove` API（`put(key, null)` 亦被忽略）。
+     */
+    fun start(
+        context: Context,
+        sources: List<BookSourcePart>,
+        runConfig: CheckSourceRunConfig = CheckSourceRunConfig(),
+    ) {
         val selectedIds = sources.map {
             it.bookSourceUrl
         }
         IntentData.put("checkSourceSelectedIds", selectedIds)
+        IntentData.put(CheckSourceRunConfig.INTENT_KEY, runConfig)
         context.startService<CheckSourceService> {
             action = IntentAction.start
         }

@@ -129,6 +129,12 @@ object DebugRoutes {
                         .filter { it.isNotEmpty() },
                     limit = ctx.intParam("limit", 0),
                     step = ctx.intParam("step", 1),
+                    // 可选：下游维度档位 + 单源超时 + 显式三维覆盖（未携带 ⇒ null ⇒ 沿用服务现值）
+                    depth = ctx.param("depth"),
+                    timeoutMs = ctx.param("timeoutMs")?.let { ctx.longParam("timeoutMs") },
+                    checkInfo = ctx.param("checkInfo")?.let { ctx.boolParam("checkInfo") },
+                    checkCategory = ctx.param("checkCategory")?.let { ctx.boolParam("checkCategory") },
+                    checkContent = ctx.param("checkContent")?.let { ctx.boolParam("checkContent") },
                 )
             )
         },

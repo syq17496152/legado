@@ -8,6 +8,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.model.CheckDepth
 import io.legado.app.model.CheckSource
+import io.legado.app.model.CheckSourceRunConfig
 import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.ProbeOptions
 import io.legado.app.model.SourceQualityChecker
@@ -109,8 +110,12 @@ object SourceDebugKernel {
      * @param urls 指定源地址集合（空 = 全库启用源）
      * @param limit 抽样条数上限（0 = 不限）
      * @param step 抽样步长（1 = 不抽样）
+     * @param depth 下游维度档位（`L1`=只跑域名/搜索/发现；`L2`=+详情；`L3`=+目录+正文）；缺省 null = 沿用现值。
+     *   非法值 ⇒ 结构化 `fail("config", …)`，**不启动**。
+     * @param timeoutMs 单源硬超时（毫秒，>0 生效）；缺省 null = 沿用 [CheckSource.timeout]。
+     * @param checkInfo/checkCategory/checkContent 显式布尔（**优先于 `depth`**）；缺省 null = 沿用现值。
      *
-     * **动作异步**：本方法只负责「选中 + 起服务」并立刻返回 `{started,count,keyword,timeout,checkDomain}`；
+     * **动作异步**：本方法只负责「选中 + 起服务」并立刻返回 `{started,count,keyword,timeout,checkDomain,depth,…}`；
      * 进度/结果一律经 `/getCheckSourceReport` 读取（`runId` 由服务侧分配，故不在本次出参里）。
      */
     suspend fun startCheckSource(
@@ -118,20 +123,35 @@ object SourceDebugKernel {
         urls: List<String> = emptyList(),
         limit: Int = 0,
         step: Int = 1,
+        depth: String? = null,
+        timeoutMs: Long? = null,
+        checkInfo: Boolean? = null,
+        checkCategory: Boolean? = null,
+        checkContent: Boolean? = null,
     ): Map<String, Any?> {
+        // 运行期配置解析（纯函数）：非法 depth 不抛裸异常，转结构化配置错误
+        val runConfig = kotlin.runCatching {
+            CheckSourceRunConfig.resolve(depth, timeoutMs, checkInfo, checkCategory, checkContent)
+        }.getOrElse { e ->
+            return fail("config", e.localizedMessage ?: "启动参数非法")
+        }
         val all = withContext(IO) { appDb.bookSourceDao.flowAll().first() }
         val targets = sampleCheckTargets(all, urls.toSet(), limit, step)
         if (targets.isEmpty()) {
             return fail("source", "无可校验的启用书源（候选 ${all.size}，指定 ${urls.size}）")
         }
         if (keyword.isNotBlank()) CheckSource.keyword = keyword
-        CheckSource.start(appCtx, targets)
+        CheckSource.start(appCtx, targets, runConfig)
         return mapOf(
             "started" to true,
             "count" to targets.size,
             "keyword" to CheckSource.keyword,
-            "timeout" to CheckSource.timeout,
+            "timeout" to (runConfig.timeoutMs ?: CheckSource.timeout),
             "checkDomain" to CheckSource.checkDomain,
+            // 回显本次**生效**的下游三维（任务级覆盖优先，缺省沿用现值）⇒ 调用方可核对启动口径
+            "checkInfo" to (runConfig.checkInfo ?: CheckSource.checkInfo),
+            "checkCategory" to (runConfig.checkCategory ?: CheckSource.checkCategory),
+            "checkContent" to (runConfig.checkContent ?: CheckSource.checkContent),
         )
     }
 

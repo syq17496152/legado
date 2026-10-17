@@ -50,6 +50,34 @@ class ApiContext(
             ?: throw IllegalArgumentException("参数${name}须为整数：$raw")
     }
 
+    /** 取长整数参数；缺省用 [default]，非法格式抛 [IllegalArgumentException]（→ 400）。 */
+    fun longParam(name: String, default: Long? = null): Long {
+        val raw = param(name)
+        if (raw == null) {
+            return default ?: throw IllegalArgumentException("参数${name}不能为空")
+        }
+        return raw.toLongOrNull()
+            ?: throw IllegalArgumentException("参数${name}须为整数：$raw")
+    }
+
+    /**
+     * 取布尔参数；缺省用 [default]，非法值抛 [IllegalArgumentException]（→ 400）。
+     *
+     * 与 [intParam] 同口径：**未携带 ⇒ default**；显式 `true/false`（大小写不敏感）⇒ 该值。
+     * 这样可区分「未指定（沿用服务现值）」与「显式指定」两种语义。
+     */
+    fun boolParam(name: String, default: Boolean? = null): Boolean {
+        val raw = param(name)?.trim()
+        if (raw.isNullOrEmpty()) {
+            return default ?: throw IllegalArgumentException("参数${name}不能为空")
+        }
+        return when (raw.lowercase()) {
+            "true", "1" -> true
+            "false", "0" -> false
+            else -> throw IllegalArgumentException("参数${name}须为布尔值：$raw")
+        }
+    }
+
     /** 取上传文件；不存在抛 [IllegalArgumentException]（→ 400）。 */
     fun requireFile(name: String): String =
         files[name] ?: throw IllegalArgumentException("$name 不能为空")

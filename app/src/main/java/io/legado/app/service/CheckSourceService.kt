@@ -23,6 +23,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.BookCheckResult
 import io.legado.app.model.CheckSource
+import io.legado.app.model.CheckSourceRunConfig
 import io.legado.app.model.CheckSourceStage
 import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
@@ -78,6 +79,24 @@ class CheckSourceService : BaseService() {
     private var originSize = 0
     private var finishCount = 0
 
+    /**
+     * 本次任务的**运行期覆盖**（程序化启动经 `IntentData` 下发；字段 `null` ⇒ 沿用 [CheckSource] 现值）。
+     * 服务实例重建（非本次 start）时保持空配置 ⇒ 与旧版行为一致。
+     */
+    private var runConfig: CheckSourceRunConfig = CheckSourceRunConfig()
+
+    /** 生效超时：任务级覆盖优先，缺省取 [CheckSource.timeout]。 */
+    private val effTimeout: Long get() = runConfig.timeoutMs ?: CheckSource.timeout
+
+    /** 生效「详情」开关：任务级覆盖优先，缺省取单例现值。 */
+    private val effCheckInfo: Boolean get() = runConfig.checkInfo ?: CheckSource.checkInfo
+
+    /** 生效「目录」开关：任务级覆盖优先，缺省取单例现值。 */
+    private val effCheckCategory: Boolean get() = runConfig.checkCategory ?: CheckSource.checkCategory
+
+    /** 生效「正文」开关：任务级覆盖优先，缺省取单例现值。 */
+    private val effCheckContent: Boolean get() = runConfig.checkContent ?: CheckSource.checkContent
+
     private val notificationBuilder by lazy {
         NotificationCompat.Builder(this, AppConst.channelIdReadAloud)
             .setSmallIcon(R.drawable.ic_network_check)
@@ -97,8 +116,13 @@ class CheckSourceService : BaseService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            IntentAction.start -> IntentData.get<List<String>>("checkSourceSelectedIds")?.let {
-                check(it)
+            IntentAction.start -> {
+                // 消费程序化启动下发的运行期覆盖（`IntentData.get` 移除键 ⇒ 一次性；未下发时取空配置）
+                runConfig = IntentData.get<CheckSourceRunConfig>(CheckSourceRunConfig.INTENT_KEY)
+                    ?: CheckSourceRunConfig()
+                IntentData.get<List<String>>("checkSourceSelectedIds")?.let {
+                    check(it)
+                }
             }
 
             IntentAction.resume -> upNotification()
@@ -163,7 +187,7 @@ class CheckSourceService : BaseService() {
             source.bookSourceType
         )
         kotlin.runCatching {
-            withTimeout(CheckSource.timeout) {
+            withTimeout(effTimeout) {
                 doCheckSource(source)
             }
         }.onSuccess {
@@ -401,7 +425,7 @@ class CheckSourceService : BaseService() {
         var contentSuccess = false
 
         try {
-            if (!CheckSource.checkInfo) {
+            if (!effCheckInfo) {
                 return CheckBookDetailResult()
             }
             // 校验详情
@@ -411,7 +435,7 @@ class CheckSourceService : BaseService() {
             }
             infoSuccess = true
 
-            if (!CheckSource.checkCategory || source.bookSourceType == BookSourceType.file) {
+            if (!effCheckCategory || source.bookSourceType == BookSourceType.file) {
                 return CheckBookDetailResult(infoSuccess = infoSuccess)
             }
             // 校验目录
@@ -432,7 +456,7 @@ class CheckSourceService : BaseService() {
             categorySuccess = true
 
             val nextChapterUrl = toc.getOrNull(1)?.url ?: toc.first().url
-            if (!CheckSource.checkContent) {
+            if (!effCheckContent) {
                 return CheckBookDetailResult(infoSuccess = infoSuccess, categorySuccess = categorySuccess)
             }
             // 校验正文
