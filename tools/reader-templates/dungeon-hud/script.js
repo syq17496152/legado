@@ -1,6 +1,7 @@
 /* 幽夜回廊 · 行为脚本
-   ①蓝条（本章/本页序列剩余）随翻页递减 ②红条走后端整书进度（CSS 侧 --rp-percent）
-   ③整书进度触顶 ⇒ 页眉切「牺牲场景」 ④只读语义、无网络、无宿主对象。 */
+   ①段落语义分类（首段 / 对白段 / 场景分隔段，对齐 archive 的 as-lead / as-dialogue / as-scene）
+   ②蓝条（本章/本页序列剩余）随翻页递减 ③红条走后端整书进度（CSS 侧 --rp-percent）
+   ④整书进度触顶 ⇒ 页眉切「牺牲场景」 ⑤只读语义、无网络、无宿主对象。 */
 (function () {
   var rt = window.readerTemplate;
   if (!rt) return;
@@ -58,6 +59,44 @@
     if (fallen !== marked) root.classList.toggle('dh-fallen', fallen);
   }
 
+  /**
+   * 段落语义分类（**"分段正文样式"的可见主体**，2026-10-17 补齐）。
+   *
+   * 为什么必须有：archive 导出的主题无一例外都在 `beforeLayout` 里按**正文文本**给段落打语义类
+   * （首段 / 对白段 / 场景分隔段），CSS 再据此给首行加重、对白描边、场景居中留白。本主题此前
+   * 只在 CSS 里声明了 `.dh-lead` 规则，**没有任何代码给它加类** ⇒ 规则恒空（死规则），
+   * 与 archive 主题逐套比对时正是用户报的「段落元素缺失」。
+   *
+   * 分类阈值**与 archive 严格同口径**（`/^[*＊※·•—_\-\s]{3,}$/` 判场景分隔；`/^[“「『"]/` 判对白；
+   * 本章首个非分隔段判首段）⇒ 同一段正文在本主题与 archive 主题里得到**同一分类**，
+   * 保证"导入导出 + 换主题"后分段观感连续，而不是各家一套判据。
+   *
+   * 时机：正文由运行时注入后才发 `beforeLayout`（首屏）与 `beforePage`（**换壳**后重新注入正文），
+   * 二者都要挂 —— 只挂前者会让续页壳里的段落丢类（首屏有、翻页后没了）。
+   * 幂等：`classList.toggle` 与 `data-dh-seq` 的一次性写入都可重复调用。
+   */
+  function classifyParagraphs() {
+    var source = rt.source;                       // 正文根（与 archive 的 readerTemplate.source 同义）
+    if (!source || !source.querySelectorAll) return 0;
+    var paragraphs = source.querySelectorAll('.reader-paragraph');
+    var lead = true, seq = 0;
+    for (var i = 0; i < paragraphs.length; i++) {
+      var p = paragraphs[i];
+      var text = (p.textContent || '').trim();
+      var scene = /^[*＊※·•—_\-\s]{3,}$/.test(text);
+      p.classList.toggle('dh-scene', scene);
+      p.classList.toggle('dh-dialogue', /^[“「『"]/.test(text));
+      var isLead = lead && !!text && !scene;
+      p.classList.toggle('dh-lead', isLead);
+      if (text && !scene) lead = false;
+      // 段序号（场景分隔段不编号）：供 CSS 侧做"悬挂读数"类装饰，重复调用不重号
+      if (!p.hasAttribute('data-dh-seq')) p.setAttribute('data-dh-seq', String(++seq));
+    }
+    return paragraphs.length;
+  }
+
+  rt.on('beforeLayout', classifyParagraphs);
+  rt.on('beforePage', classifyParagraphs);
   rt.on('beforeLayout', sync);
   rt.on('afterLayout', sync);
   rt.on('pageChange', sync);

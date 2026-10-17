@@ -319,7 +319,38 @@ body {
   orphans: 1;
   widows: 1;
 }
+/* ===== 段落语义（对齐 archive 的 as-scene / as-dialogue / as-lead；2026-10-17 补齐）=====
+ * 背景：archive 导出的主题都在 `beforeLayout` 里按**正文文本**给段落打语义类 —— 那是"分段正文样式"
+ * 的可见主体；本主题此前只在 CSS 里写了 `.dh-lead` 规则，却**没有任何代码给它加类**（死规则）
+ * ⇒ 与 archive 主题逐套比对时表现为「段落元素缺失」。
+ * 分类由 `script.js` 的 classifyParagraphs 完成，阈值与 archive 同口径（同一段正文两边分类一致）。
+ * 取值全走**主题三态变量**（--dh-gold / --dh-hp / --reader-accent）⇒ 日间 / 夜间 / 水墨屏各自成立。 */
+.reader-paragraph.dh-scene {
+  text-indent: 0;
+  text-align: center;
+  letter-spacing: .5em;
+  font-size: .86em;
+  color: var(--dh-gold);
+}
+/* 场景分隔段的**悬挂读数**（段序号，来自 JS 的 `data-dh-seq`）：绝对定位 ⇒ 不参与正文测量
+   ⇔ 与 archive 主题的悬挂序号同构（那边也是装饰层不改变分页）。 */
+.reader-paragraph.dh-scene::after {
+  content: attr(data-dh-seq);
+  position: absolute;
+  left: 2px;
+  top: .15em;
+  font: 600 .62em/1 ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: .12em;
+  color: var(--dh-gold);
+  opacity: calc(.55 * var(--dh-deco));
+}
+.reader-paragraph.dh-dialogue {
+  border-left: 2px solid var(--dh-hp);
+  padding-left: 9px;
+  text-indent: 0;
+}
 .reader-paragraph.dh-lead:not([data-reader-continuation]):not([data-split-from]) { text-indent: 0 }
+.reader-paragraph.dh-lead::first-line { color: var(--reader-accent); font-weight: 600 }
 .reader-chapter-title {
   display: block;
   margin: .1em 0 .7em;
