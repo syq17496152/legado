@@ -21,9 +21,12 @@ import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
 import android.widget.Magnifier
 import android.widget.Scroller
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import io.legado.app.constant.PageAnim
 import io.legado.app.constant.AppLog
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.EpubLoadingTemplate
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.epubcore.layout.EpubCoreLayoutConfig
 import io.legado.app.model.localBook.epubcore.layout.EpubCorePage
@@ -41,6 +44,9 @@ import io.legado.app.model.localBook.epubcore.selector.EpubSelectableLine
 import io.legado.app.model.localBook.epubcore.selector.EpubTextHit
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionAction
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionPayload
+import io.legado.app.ui.book.read.epub.loading.EpubLoadingOverlay
+import io.legado.app.ui.book.read.epub.loading.LoadingOverlayState
+import io.legado.app.ui.book.read.epub.loading.LoadingTemplateChrome
 import kotlin.math.*
 
 @Suppress("DEPRECATION")
@@ -173,6 +179,14 @@ class EpubReadView @JvmOverloads constructor(
     private var simulationTouchX = 0.1f
     private var simulationTouchY = 0.1f
     private var loadingMessage: String? = null
+    // 首屏加载模板（reader-theme-family 3.12）：由 ReadBookActivity 在**整章切换**前经
+    // [setLoadingTemplate] 注入；为 null ⇒ 走既有遮罩（回落契约见 LoadingTemplateOverlayPolicy）。
+    // ⚠️ **边界加载路径不注入**（保持既有徽标）：边界是"翻到章末续取"，观感突变会误导用户。
+    // 状态收进 [LoadingOverlayState]（纯值对象）⇒「一轮结束必须清模板」这条不变量可被 JVM 断言。
+    private val loadingState = LoadingOverlayState()
+    private val loadingOverlay by lazy { EpubLoadingOverlay(resources) }
+    /** 上一次记录的首屏模式（避免高频绘制刷屏；见 [logLoadingOverlayMode]）。 */
+    private var lastLoggedLoadingOverlayMode: String? = null
     private var boundaryLoadingAnchorKey: String? = null
     private var selectedText: String = ""
     private var selectionAnchor: SelectionAnchor? = null
@@ -249,17 +263,32 @@ class EpubReadView @JvmOverloads constructor(
 
     fun showLoading(chapterIndex: Int, message: String) {
         loadingMessage = message
+        loadingState.beginLoading()
         invalidate()
     }
 
     fun setError(message: String) {
         loadingMessage = message
+        loadingState.markFailed()
+        invalidate()
+    }
+
+    /**
+     * 注入/清除首屏加载模板（`null` ⇒ 回落既有遮罩）。
+     *
+     * 为什么单开一个注入口而不改 `showLoading` 签名：`showLoading` 有 8 个调用点（含边界加载），
+     * 改签名会连带改所有调用点；而"模板只在整章切换时生效"这条口径**正好由"谁注入"表达**
+     * —— 只有 `ReadBookActivity` 的整章切换路径会调它。
+     */
+    fun setLoadingTemplate(template: EpubLoadingTemplate?, night: Boolean) {
+        loadingState.inject(template, night)
         invalidate()
     }
 
     fun clearLoading() {
         if (loadingMessage == null) return
         loadingMessage = null
+        loadingState.clearFailure()
         invalidate()
     }
 
@@ -275,6 +304,9 @@ class EpubReadView @JvmOverloads constructor(
         boundaryLoadingTransactionId = 0L
         boundaryLoadingTargetChapterIndex = -1
         loadingMessage = null
+        // 边界加载收尾即"本轮加载结束" ⇒ 模板必须一并清掉，否则它会**泄漏到下一次开书**
+        // （下一次若走边界路径就会顶着上一本书的首屏模板，观感错乱）。
+        loadingState.endRound()
         val currentKey = currentPage()?.pageKey()
         val filtered = pages.filterNot { it.chapterHref.startsWith(BoundaryLoadingPrefix) }
         if (filtered.size == pages.size) {
@@ -1656,8 +1688,58 @@ class EpubReadView @JvmOverloads constructor(
         return (textOffset + 1).coerceAtMost(line.textEnd)
     }
 
+    /**
+     * 首屏遮罩**走了哪条路**的正式自证（跨源/无调试器时这是唯一凭据，且 L2 真机脚本按它断言）。
+     *
+     * 只在**模式变化**时记一条（绘制会被高频调用；逐帧记录会把 logcat 冲掉）：
+     * `mode=template` = 模板已画；`legacy:no-template` = 未注入模板；`legacy:template-unusable`
+     * = 注入了但插画/尺寸不可用而回落 —— 这三态恰好覆盖 [LoadingTemplateOverlayPolicy] 的判据，
+     * 使"模板机制有没有真正接管首屏"可在真机上被证明（本项目的失守多半是"设置了没反应"）。
+     */
+    private fun logLoadingOverlayMode(drewTemplate: Boolean, template: EpubLoadingTemplate?) {
+        val mode = when {
+            drewTemplate -> "template"
+            template == null -> "legacy:no-template"
+            else -> "legacy:template-unusable"
+        }
+        if (mode == lastLoggedLoadingOverlayMode) return
+        lastLoggedLoadingOverlayMode = mode
+        AppLog.putDebugWithTag(
+            AppLog.TAG_READER_TEMPLATE,
+            "loading overlay mode=$mode, id=${template?.id.orEmpty()}"
+        )
+    }
+
+    /**
+     * 取系统栏 insets（供首屏模板避让刘海/手势条）。取不到（未 attach / 早期内核）⇒ `null`，
+     * 由 `LoadingTemplateChrome.clampInsets` 视作全 0 并再做一次夹取，不会吃掉半屏。
+     */
+    private fun windowInsetsForOverlay(): LoadingTemplateChrome.EdgeInsets? {
+        val insets = ViewCompat.getRootWindowInsets(this) ?: return null
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+        return LoadingTemplateChrome.EdgeInsets(
+            maxOf(bars.left, cutout.left),
+            maxOf(bars.right, cutout.right),
+            maxOf(bars.top, cutout.top),
+            maxOf(bars.bottom, cutout.bottom)
+        )
+    }
+
     private fun drawLoadingOverlay(canvas: Canvas) {
         val message = loadingMessage ?: return
+        // 模板路径（reader-theme-family 3.12）：**可用则整帧接管**（无论当前是否已有旧页 ——
+        // 整章切换时常是"旧页还在但新章在加载"，此时正是用户最需要看模板首屏的时刻）。
+        // 返回 false（无模板 / 插画解析失败 / 尺寸非法）⇒ **逐行走既有遮罩**，保证"最差也不比改造前差"。
+        val template = loadingState.template
+        val drewTemplate = template != null &&
+            loadingOverlay.draw(
+                canvas, template, loadingState.night, message, loadingState.failed, windowInsetsForOverlay()
+            )
+        logLoadingOverlayMode(drewTemplate, template)
+        if (drewTemplate) {
+            return
+        }
         loadingTextPaint.color = renderer.textColor
         loadingTextPaint.textSize = renderer.textPaint.textSize
         if (currentPage() == null) {

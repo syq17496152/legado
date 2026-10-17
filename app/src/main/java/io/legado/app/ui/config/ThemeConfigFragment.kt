@@ -8,6 +8,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.EpubLoadingTemplateManager
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.ui.config.compose.ComposeSettingFragment
 import io.legado.app.ui.config.compose.SettingActionSpec
@@ -163,6 +164,16 @@ class ThemeConfigFragment : ComposeSettingFragment() {
                             onClick = { startActivity<ReaderTemplateManageActivity>() }
                         ),
                         SettingActionSpec(
+                            key = KEY_EPUB_LOADING_TEMPLATE_MANAGE,
+                            title = getString(R.string.epub_loading_template_manage),
+                            summary = getString(
+                                R.string.epub_loading_template_manage_summary,
+                                EpubLoadingTemplateManager.selected(requireContext()).name
+                            ),
+                            searchKeys = listOf("首屏加载", "加载模板", "开书首屏", "首屏模板"),
+                            onClick = { startActivity<EpubLoadingTemplateManageActivity>() }
+                        ),
+                        SettingActionSpec(
                             key = ConfigTag.COVER_CONFIG,
                             title = getString(R.string.cover_config),
                             summary = getString(R.string.cover_config_summary),
@@ -217,5 +228,6 @@ class ThemeConfigFragment : ComposeSettingFragment() {
         private const val KEY_BUBBLE_MANAGE = "bubble_manage"
         private const val KEY_SHARE_NOTE_TEMPLATE_MANAGE = "share_note_template_manage"
         private const val KEY_READER_TEMPLATE_MANAGE = "reader_template_manage"
+        private const val KEY_EPUB_LOADING_TEMPLATE_MANAGE = "epub_loading_template_manage"
     }
 }

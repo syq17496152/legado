@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 首屏加载模板插画 · 「墨晕」（项目自研手写 SVG，可重放；配色占位符由绘制期替换）
+     viewBox 0 0 360 336 —— 与 Scene.ART_ASPECT(336/360) 同源；仅使用 rect/ellipse/path/line/g/linearGradient/radialGradient -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 360 336" width="360" height="336">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="34%" r="62%">
+      <stop offset="0%" stop-color="{{glow}}" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="{{glow}}" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="{{glow}}" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="horizon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="{{horizon}}" stop-opacity="0"/>
+      <stop offset="100%" stop-color="{{horizon}}" stop-opacity="0.85"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ⚠️ 刻意**不铺不透明底色**：底色由绘制器以 `Palette.background` 铺满整帧并叠光晕梯度；
+       此处再铺一层同色不透明矩形会**截断外层光晕**、在插画边界留下可见矩形痕迹（真机预览实测）。 -->
+
+  <!-- 顶部晕光 -->
+  <ellipse cx="180" cy="112" rx="196" ry="132" fill="url(#glow)"/>
+
+  <!-- 淡墨远山（三层弧，越远越淡） -->
+  <g fill="{{ink}}">
+    <path d="M -14 214 C 52 168 92 182 138 206 C 178 226 212 200 254 186 C 300 170 336 194 374 216 L 374 258 L -14 258 Z"
+          fill-opacity="0.12"/>
+    <path d="M -14 236 C 48 206 96 216 142 236 C 190 256 236 226 286 220 C 320 216 350 232 374 244 L 374 268 L -14 268 Z"
+          fill-opacity="0.2"/>
+    <path d="M -14 264 C 62 248 118 258 168 272 C 226 288 286 264 374 274 L 374 300 L -14 300 Z"
+          fill-opacity="0.3"/>
+  </g>
+
+  <!-- 地平线渐隐带 -->
+  <rect x="0" y="196" width="360" height="140" fill="url(#horizon)"/>
+
+  <!-- 水平细线（纸面折痕） -->
+  <g stroke="{{muted}}" stroke-width="1" stroke-opacity="0.55">
+    <line x1="34" y1="84" x2="326" y2="84"/>
+    <line x1="34" y1="92" x2="206" y2="92" stroke-opacity="0.3"/>
+  </g>
+
+  <!-- 朱印（右下留白处） -->
+  <g>
+    <rect x="292" y="252" width="34" height="34" rx="3" fill="{{accent}}" fill-opacity="0.9"/>
+    <path d="M 301 261 L 318 261 M 301 270 L 318 270 M 301 279 L 312 279 M 318 279 L 322 279"
+          stroke="{{background}}" stroke-width="2.2" stroke-opacity="0.85"/>
+  </g>
+</svg>

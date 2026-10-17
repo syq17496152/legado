@@ -609,6 +609,11 @@ object PreferKey {
     const val videoGestureGuideShown = "videoGestureGuideShown"
     // F48：发现分类页「长按书籍可预览」一次性提示是否已展示（展示后关闭或首次成功长按即置 true）
     const val exploreShowPreviewHintShown = "exploreShowPreviewHintShown"
+    // EPUB 首屏加载模板（reader-theme-family 3.12）：当前选定的首屏模板 id；
+    // 空串 = 默认内置第一套（哨兵值单源 ReaderFeatureDefaults.LOADING_TEMPLATE_ID）。
+    const val epubLoadingTemplate = "epubLoadingTemplate"
+    // 自定义首屏加载模板库（JSON 数组文本）。内置三套是常量、**不进本键**（不可被用户改写）。
+    const val epubLoadingTemplates = "epubLoadingTemplates"
 
     // ===== web-mcp-productization 一期：Web 鉴权（三级令牌 + 过渡开关 + 首启引导）=====
     // 令牌在 Preferences 中只存 SHA-256 摘要（十六进制），永不落明文（REQ-1-102）

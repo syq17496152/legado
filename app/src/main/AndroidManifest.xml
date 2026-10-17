@@ -309,6 +309,10 @@
             android:name=".ui.config.ReaderTemplateManageActivity"
             android:launchMode="standard" />
         <activity
+            android:name=".ui.config.EpubLoadingTemplateManageActivity"
+            android:exported="false"
+            android:launchMode="standard" />
+        <activity
             android:name=".ui.config.AiProviderManageActivity"
             android:launchMode="standard" />
         <activity

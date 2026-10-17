@@ -2664,6 +2664,23 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.readerTemplateFocusMode, ReaderFeatureDefaults.READER_TEMPLATE_FOCUS_MODE)
         set(value) = appCtx.putPrefBoolean(PreferKey.readerTemplateFocusMode, value)
 
+    /**
+     * EPUB 首屏加载模板**当前选定 id**（reader-theme-family 3.12）。
+     *
+     * 空串 = 默认内置第一套（哨兵见 [ReaderFeatureDefaults.LOADING_TEMPLATE_ID]）；
+     * 若指向的模板已被删除，由 `EpubLoadingTemplateManager.selected()` 回落默认 ——
+     * 不会出现"开书时首屏无模板/白屏"。
+     */
+    var epubLoadingTemplate: String
+        get() = appCtx.getPrefString(PreferKey.epubLoadingTemplate, ReaderFeatureDefaults.LOADING_TEMPLATE_ID)
+            ?: ReaderFeatureDefaults.LOADING_TEMPLATE_ID
+        set(value) = appCtx.putPrefString(PreferKey.epubLoadingTemplate, value)
+
+    /** 自定义首屏加载模板库（JSON 数组文本）；内置三套为常量，**不进本键**。 */
+    var epubLoadingTemplates: String
+        get() = appCtx.getPrefString(PreferKey.epubLoadingTemplates, "").orEmpty()
+        set(value) = appCtx.putPrefString(PreferKey.epubLoadingTemplates, value)
+
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")
 

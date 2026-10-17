@@ -1,0 +1,41 @@
+{
+  "theme": "epub-loading-template",
+  "license": "项目自有（自研手写）",
+  "notice": "本目录素材均为项目自研手写 SVG，非官方、不代表任何第三方作品方；不随包分发任何第三方插画/字体",
+  "generation": "手写 SVG 直接入库（AGENTS.md §11 合规路径①）；配色以 {{token}} 占位符参数化，绘制期按模板 Palette 替换 —— 全程零 AI 生图、零外部资源。三份 SVG 刻意不铺不透明底色：底色由绘制器铺满整帧并叠光晕梯度，插画内再铺同色不透明矩形会截断光晕、在边界留下可见矩形痕迹（真机预览实测）",
+  "assets": [
+    {
+      "name": "loading_ink",
+      "scene": "ink",
+      "path": "app/src/main/res/raw/loading_ink.svg",
+      "bytes": 2497,
+      "sha256": "91b5c3194c4fbe60",
+      "author": "项目自研",
+      "license": "项目自有",
+      "sourceUrl": "",
+      "generation": "手写 SVG（宣纸底 + 淡墨远山三层弧 + 朱印；viewBox 0 0 360 336）"
+    },
+    {
+      "name": "loading_orbit",
+      "scene": "orbit",
+      "path": "app/src/main/res/raw/loading_orbit.svg",
+      "bytes": 2637,
+      "sha256": "fdbedd1314a7d35d",
+      "author": "项目自研",
+      "license": "项目自有",
+      "sourceUrl": "",
+      "generation": "手写 SVG（深空底 + 三层环状光带 + 航迹强调弧 + 确定性星点；viewBox 0 0 360 336）"
+    },
+    {
+      "name": "loading_bloom",
+      "scene": "bloom",
+      "path": "app/src/main/res/raw/loading_bloom.svg",
+      "bytes": 2431,
+      "sha256": "9d5ee79d872ec11c",
+      "author": "项目自研",
+      "license": "项目自有",
+      "sourceUrl": "",
+      "generation": "手写 SVG（奶油纸面 + 枝叶剪影 + 花瓣点缀；viewBox 0 0 360 336）"
+    }
+  ]
+}

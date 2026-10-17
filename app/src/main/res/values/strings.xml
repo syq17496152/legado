@@ -2172,6 +2172,8 @@
     <string name="theme_time_unknown">No time recorded</string>
     <string name="theme_apply">Apply</string>
     <string name="theme_applied_state">Applied</string>
+    <string name="epub_loading_template_manage">首屏加载模板</string>
+    <string name="epub_loading_template_manage_summary">当前：%1$s</string>
     <string name="theme_zip_exported">Theme ZIP exported</string>
     <string name="theme_background_downloading">Downloading background image...</string>
     <string name="theme_background_downloaded">Background image downloaded</string>

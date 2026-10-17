@@ -65,4 +65,13 @@ object ReaderFeatureDefaults {
      * 默认关也与"默认档位=中"自洽（若默认专注，装饰强度设置将形同虚设）。
      */
     const val READER_TEMPLATE_FOCUS_MODE = false
+
+    /**
+     * EPUB 首屏加载模板**默认选定值**（reader-theme-family 3.12）。
+     *
+     * 空串 = 默认内置第一套（见 [EpubLoadingTemplate.DEFAULT]）。**故意不硬写某个 id**：
+     * "默认是哪一套"的单源留在 `EpubLoadingTemplate.BUILT_IN.first()` —— 调整内置顺序或换默认款时
+     * 只需改模型一处，不会出现"常量与模型各说一套"的漂移。
+     */
+    const val LOADING_TEMPLATE_ID = ""
 }

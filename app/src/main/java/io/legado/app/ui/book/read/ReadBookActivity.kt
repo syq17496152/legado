@@ -102,6 +102,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.EpubLoadingTemplateManager
 import io.legado.app.help.config.ReaderMetrics
 import io.legado.app.help.config.ReaderTemplateManager
 import io.legado.app.help.config.BubblePackageManager
@@ -3540,6 +3541,13 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.epubReadView.layoutConfig = config
         switchEpubCore(true)
         epubCoreSuppressProgressSync = true
+        // 首屏加载模板（reader-theme-family 3.12）：**只在整章切换**这条路径注入 ——
+        // 边界加载（章末续取）不注入 ⇒ 保持既有底部徽标（见 EpubReadView.setLoadingTemplate 的说明）。
+        // 读取失败/未选 ⇒ 传 null ⇒ 回落既有遮罩（模板机制**永不阻断**开书）。
+        binding.epubReadView.setLoadingTemplate(
+            runCatching { EpubLoadingTemplateManager.selected(this) }.getOrNull(),
+            AppConfig.isNightTheme
+        )
         binding.epubReadView.showLoading(chapterIndex, getString(R.string.loading))
         upSeekBarProgress()
     }
