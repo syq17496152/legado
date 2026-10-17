@@ -105,7 +105,8 @@ bak/
 /.trae/cache/
 /.trae/*.png
 /.trae/*.xml
-/.trae/tmp_*.py
+/.trae/tmp_*
+/.trae/documents/
 
 # === APK 发布脚本配置（含 API token，禁止提交）===
 scripts/publish_config.json

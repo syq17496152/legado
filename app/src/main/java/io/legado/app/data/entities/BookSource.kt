@@ -156,12 +156,13 @@ data class BookSource(
         return rule
     }
 
-//    fun getReviewRule(): ReviewRule {
-//        ruleReview?.let { return it }
-//        val rule = ReviewRule()
-//        ruleReview = rule
-//        return rule
-//    }
+    /** 段评规则（段落评论）：与 `getContentRule` 同构，未配置时新建空规则并挂回实体（保证保存链可回填）。 */
+    fun getReviewRule(): ReviewRule {
+        ruleReview?.let { return it }
+        val rule = ReviewRule()
+        ruleReview = rule
+        return rule
+    }
 
     fun getDisPlayNameGroup(): String {
         return if (bookSourceGroup.isNullOrBlank()) {
