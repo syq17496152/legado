@@ -63,6 +63,10 @@
   `-font-family` / `-text-color` / `-page-background` / `-accent` / `-paragraph-indent` /
   `-paragraph-spacing` / `-safe-*` / `-padding-*`），取值与 Archive 的**兼容默认值**同口径 ⇒
   从 Archive 导出的模板可**零改动**正确继承字号、纸色、缩进与安全区，无需改写变量名。
+  ⚠️ 这组默认值以 `:root{}` **样式表**下发、且**先于你的作者样式表** ⇒ **你在自己 CSS 的 `:root{}`
+  里声明的同名变量会覆盖它**（与 Archive 一致）。注意**段距**：`--reader-paragraph-spacing` 会被
+  分页用的「整行网格」量化（`.reader-paragraph` 的 `margin-bottom` 只能取 `0` 或**整行**）⇒
+  小数倍段距（如 `.72em`）在本引擎里**不可逐字表达**；段落其它语义样式（居中/字距/左边框等）不受影响。
 
 ## 四·五、作者脚本接口（`readerTemplate`，Archive 兼容）
 

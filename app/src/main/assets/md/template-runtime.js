@@ -102,7 +102,8 @@
    *
    * archive 主题（如 `builtin.asuka_sync`）的 CSS 依赖这一组 `--reader-*`。取值与 archive
    * 的**兼容默认值**同口径（archive `EpubTemplateDocument.baseCss`）：**固定默认值**，
-   * 不跟随阅读主题；模板可自行覆盖。缺这组变量时作者的 `var(--reader-font-size)` 等
+   * 不跟随阅读主题；**模板可用自己的 `:root{}` 覆盖**（覆盖能力由 [applyReaderVars] 的
+   * "写样式表而非内联"保证）。缺这组变量时作者的 `var(--reader-font-size)` 等
    * 全部回落 UA 值 ⇒ 字号/纸色/缩进/安全区全线错位（用户实测「完全效果都不一样」）。
    *
    * 与既有 `--md-*` / `--rp-*` **并存**（不改写、不替换）：`--md-*` 仍供我方内置模板消费。
@@ -128,17 +129,49 @@
     '--reader-selection-color': 'rgba(70,138,255,.2)'
   };
 
-  /** 把契约变量写到 `<html>`；`config.readerVars` 可逐项覆盖默认值（宿主留出的升级位）。 */
+  /** 契约变量样式表 id（**先于作者样式表**落位，见 [applyReaderVars] 的理由）。 */
+  var READER_VARS_STYLE_ID = 'reader-reader-vars';
+
+  /**
+   * 契约变量以 `:root{}` **样式表**形式落位（2026-10-17 用户报「archive 主题分段正文样式在我方不兼容展示」的根因修复）。
+   *
+   * ⚠️ 为什么不能写 `<html>` 的**内联** style：内联声明优先级高于**任何**没有 `!important` 的作者样式表规则
+   * ⇒ archive 主题在 `:root{}` 里声明的 `--reader-line-height` / `--reader-font-family` /
+   * `--reader-paragraph-spacing` / `--reader-page-background` / `--reader-accent` 会被我方默认值**全部压掉**。
+   * 而 archive 主题恰恰靠这些变量排版（`builtin.asuka_sync`：`.as-flow{font:var(--reader-font-size)/var(--reader-line-height)
+   * var(--reader-font-family)}`、`.as-flow .reader-paragraph{margin-bottom:var(--reader-paragraph-spacing)}`）
+   * ⇒ 观感与 archive 全线不一致。
+   *
+   * 离线 A/B 实测（真实 Chromium，2026-10-17）：内联写法下 computed 值 = 我方默认（`1.7` / `serif` / `.65em` / `#fff`），
+   * 改走样式表后 = 主题声明值（`1.84` / `'Noto Serif CJK SC', …` / `.72em` / `#b42d2d`）。
+   *
+   * 与 archive 同口径：archive 把同款默认值放进**作者样式表之前**的 `baseCss` 样式表，同为 `:root{}` 声明时
+   * "后到即胜" ⇒ 作者声明照常生效。落位规则因此是**插到 `<head>` 最前**（[mountStyles] 把作者 CSS 追加到 head 末尾
+   * ⇒ 作者样式表恒在我方之后）；重复调用只改写同一张表的文本，表位置不变。
+   */
+  function mountReaderVars(css) {
+    var style = document.getElementById(READER_VARS_STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = READER_VARS_STYLE_ID;
+      var head = document.head || document.documentElement;
+      head.insertBefore(style, head.firstChild);
+    }
+    style.textContent = css;
+  }
+
+  /** 契约变量默认值 + 宿主逐项覆盖（`config.readerVars`，如真机实测的安全区）⇒ 落成一张 `:root{}` 样式表。 */
   function applyReaderVars(config) {
-    var root = document.documentElement;
     var overrides = (config && config.readerVars) || {};
+    var css = '';
     for (var name in READER_VAR_DEFAULTS) {
       if (!Object.prototype.hasOwnProperty.call(READER_VAR_DEFAULTS, name)) continue;
       var value = Object.prototype.hasOwnProperty.call(overrides, name)
         ? overrides[name] : READER_VAR_DEFAULTS[name];
       if (value === null || value === undefined) continue;
-      root.style.setProperty(name, String(value));
+      css += name + ':' + String(value) + ';';
     }
+    mountReaderVars(':root{' + css + '}');
   }
 
   /**
@@ -1036,7 +1069,7 @@
     // 的实际宽，直接定位"是谁窄了"，不必再靠截图反推。
     var winW = -1, docW = -1, rootW = -1, slotW = -1, bodyW = -1, bodyPad = '-';
     var bodyStyleAttr = '-', safeVars = '-', htmlPad = '-', padRules = '-';
-    var bodyBorder = '-', rootGap = '-';
+    var bodyBorder = '-', rootGap = '-', readerVarsFacts = '-';
     try {
       winW = window.innerWidth;
       docW = document.documentElement.clientWidth;
@@ -1057,6 +1090,19 @@
         .map(function (name) { return String(rootCs2.getPropertyValue(name)).trim() || '(empty)'; })
         .join('/');
       htmlPad = parseFloat(rootCs2.paddingLeft).toFixed(1) + '/' + parseFloat(rootCs2.paddingRight).toFixed(1);
+      // 契约变量**落点自证**（2026-10-17 修「archive 主题 `:root{}` 里的 `--reader-*` 被我方**内联默认值**压掉」）：
+      // 报 4 个代表性**计算值** + 变量来源 —— `src=inline` 即回归（有人把 `--reader-*` 写回 `<html>` 内联，
+      // 内联优先级高于任何无 `!important` 的作者样式表规则 ⇒ 主题声明的行高/段距/字体族会再次静默失效）。
+      // 真机（跨源读不到沙箱 DOM）只有这条自证能区分「主题没声明」与「主题声明被压掉」。
+      readerVarsFacts = ['--reader-line-height', '--reader-paragraph-spacing', '--reader-font-size',
+        '--reader-page-background']
+        .map(function (name) {
+          return name.slice('--reader-'.length) + '=' +
+            (String(rootCs2.getPropertyValue(name)).trim() || '(empty)');
+        })
+        .join(',') +
+        ',src=' + ((String(document.documentElement.getAttribute('style') || '').indexOf('--reader-') >= 0)
+          ? 'inline' : 'css');
       // CSSOM 反查（决定性）：直接在沙箱里枚举**所有样式表规则**，报出"选择器命中 body 且声明了 padding"
       // 的那几条 —— 静态扫描已排除我方基线与作者 CSS，只剩运行时/第三方样式表这一可能。
       try {
@@ -1169,7 +1215,7 @@
     return ',iw=' + winW + '/' + docW + ',shell=' + shellFacts +
       ',rootW=' + rootW + ',slotW=' + slotW +
       ',bodyW=' + bodyW + ',bodyPad(L/R/mL/mR)=' + bodyPad +
-      ',bodyStyle=' + bodyStyleAttr + ',safe=' + safeVars + ',htmlPad=' + htmlPad +
+      ',bodyStyle=' + bodyStyleAttr + ',safe=' + safeVars + ',rvars=' + readerVarsFacts + ',htmlPad=' + htmlPad +
       ',padRules=' + padRules + ',bodyBord(L/R/T/B)=' + bodyBorder + ',rootGap=' + rootGap +
       ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes +
       // 装饰自证（4.8d）：装饰档位与实际被标记的装饰元素数 —— 缺了它"选了档位却看不出差别"
