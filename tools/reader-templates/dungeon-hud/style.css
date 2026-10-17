@@ -19,21 +19,21 @@
   /* 可平铺石墙纹理（512×512）：纸页的岩石底纹 */
   --dh-stone: url("{{asset:isigaki}}");
 
-  /* 三态之一「日间」—— 烛光下的冷灰石室（暗黑系，非暖羊皮） */
-  --reader-text-color: #1b1a18;
-  --reader-page-background: #cbc7be;
-  --dh-paper: #c6c2b9;
-  --dh-paper-edge: #8e8b84;
-  --dh-dim: #5b5850;
+  /* 三态之一「日间」—— 冷灰石室（暗黑系石质，非暖羊皮；与软件浅色主题协调） */
+  --reader-text-color: #171614;
+  --reader-page-background: #bcb8af;
+  --dh-paper: #b5b1a8;
+  --dh-paper-edge: #7c7972;
+  --dh-dim: #4e4b45;
   --dh-line: rgba(20, 19, 17, .26);
   --dh-hp: #7a1c17;
   --dh-mp: #39506a;
   --dh-gold: #6b5a2a;
   --dh-hud: rgba(20, 19, 17, .12);
   --dh-requiem-glow: rgba(122, 28, 23, .42);
-  --dh-veil: rgba(14, 14, 15, .50);
-  --dh-fade: rgba(199, 195, 186, .90);
-  --dh-veil-strong: rgba(198, 194, 185, .86);
+  --dh-veil: rgba(14, 14, 15, .56);
+  --dh-fade: rgba(182, 178, 169, .92);
+  --dh-veil-strong: rgba(181, 177, 168, .84);
   --dh-deco: .72;
 }
 
