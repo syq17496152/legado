@@ -1,0 +1,1000 @@
+{
+  "root": "E:\\sinisistar2_extracted\\Design",
+  "count": 142,
+  "items": [
+    {
+      "key": "hero_head_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_000.png",
+      "file": "hero_head_000.png",
+      "bytes": 1904,
+      "sha256": "df6424bee3ab4c866e597eff5e298d1a24e12bfc653ec4b706a0a1504cb1e5f6"
+    },
+    {
+      "key": "hero_head_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_001.png",
+      "file": "hero_head_001.png",
+      "bytes": 1860,
+      "sha256": "1f086194013faf95d8c1a2033b8a22ee78c14168fcbec96d22909bbb108d3892"
+    },
+    {
+      "key": "hero_head_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_002.png",
+      "file": "hero_head_002.png",
+      "bytes": 1887,
+      "sha256": "36af0c72d7f75330c7ac4d6be473d5ca453c0998fb2157a4637d2d0944cab7bf"
+    },
+    {
+      "key": "hero_head_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_003.png",
+      "file": "hero_head_003.png",
+      "bytes": 1796,
+      "sha256": "6ad32428d359a4672179d19f36aa8e4f836a604bfb811d5e9f1ac8d671a6619e"
+    },
+    {
+      "key": "hero_head_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_004.png",
+      "file": "hero_head_004.png",
+      "bytes": 1802,
+      "sha256": "05cf4601e96beb5e195c3c30dbc13ff9f403dd532be65110ef29fa10b229a349"
+    },
+    {
+      "key": "hero_head_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_005.png",
+      "file": "hero_head_005.png",
+      "bytes": 1779,
+      "sha256": "fcd7f8fb90dfb41affe9db3f816525a118ac92e0c921d62ce8f87def3f38caf6"
+    },
+    {
+      "key": "hero_head_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_006.png",
+      "file": "hero_head_006.png",
+      "bytes": 1876,
+      "sha256": "2424429866d4f8b7d1eeae2af52a452f6b3cef53a23a55e331849d36fb6d2cde"
+    },
+    {
+      "key": "hero_head_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_007.png",
+      "file": "hero_head_007.png",
+      "bytes": 1839,
+      "sha256": "c51f1b96135cf22cf8b5c29b403517323f66ca2d1d033026d35ab6f1b3635002"
+    },
+    {
+      "key": "hero_head_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_008.png",
+      "file": "hero_head_008.png",
+      "bytes": 1868,
+      "sha256": "e80f10a08a2df49f0ee2adb507ad6669790374b9cc2a572c1736c8f9d0dc43f3"
+    },
+    {
+      "key": "hero_head_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/head_009.png",
+      "file": "hero_head_009.png",
+      "bytes": 1796,
+      "sha256": "5a86246f08434b7a8dd5d665567d36ed617d41e968f343b4b739bf3a895edef6"
+    },
+    {
+      "key": "hero_hair_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_000.png",
+      "file": "hero_hair_000.png",
+      "bytes": 1609,
+      "sha256": "5dd7a0023431f556fb512dccabc99d560b76460f1dfaf86a90c11dcbcb636e8a"
+    },
+    {
+      "key": "hero_hair_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_001.png",
+      "file": "hero_hair_001.png",
+      "bytes": 1652,
+      "sha256": "b1671ad685b2df549b9f52de07e98cfc8a2c40f3c69cedb52108d65297c0dbb5"
+    },
+    {
+      "key": "hero_hair_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_002.png",
+      "file": "hero_hair_002.png",
+      "bytes": 1674,
+      "sha256": "3cd6014ac6e3de81416951729bb149e98cc856779c5ce2ee7aca5bdc279ab447"
+    },
+    {
+      "key": "hero_hair_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_003.png",
+      "file": "hero_hair_003.png",
+      "bytes": 1611,
+      "sha256": "587ba047a7d306b5897393cc3d1845bfc7e78cbdd9a827dba6532191eed92d8e"
+    },
+    {
+      "key": "hero_hair_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_004.png",
+      "file": "hero_hair_004.png",
+      "bytes": 1596,
+      "sha256": "214c6a52f17deaf68bfb8ca8cca5124131e011e8edfcccb9d36fdd7c0b673a76"
+    },
+    {
+      "key": "hero_hair_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_005.png",
+      "file": "hero_hair_005.png",
+      "bytes": 1593,
+      "sha256": "d938a51c1db13409b4e15d2cec00b751774efde9f400252e49100c44955fa618"
+    },
+    {
+      "key": "hero_hair_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_006.png",
+      "file": "hero_hair_006.png",
+      "bytes": 1495,
+      "sha256": "1ff336798d29144bebc4b01576e840153dfa12b4661b5dceb1b2385eb87ddd7d"
+    },
+    {
+      "key": "hero_hair_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_007.png",
+      "file": "hero_hair_007.png",
+      "bytes": 1676,
+      "sha256": "17deb33267342e7e091397683a46f2db9ebebb0080adbeac44eced77a353414c"
+    },
+    {
+      "key": "hero_hair_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_008.png",
+      "file": "hero_hair_008.png",
+      "bytes": 1650,
+      "sha256": "9bd808e812f245caaaf6f26c6646bda54842724b734e5426ccef249e72eed376"
+    },
+    {
+      "key": "hero_hair_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/hair_009.png",
+      "file": "hero_hair_009.png",
+      "bytes": 1450,
+      "sha256": "d56b3a07b5e99ff1332798aaf0bc341b5d3f1890041588897006f673c520dfb8"
+    },
+    {
+      "key": "hero_body_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_000.png",
+      "file": "hero_body_000.png",
+      "bytes": 1203,
+      "sha256": "43f1ca8498fc87c9a360194c4db68c2ff2911ad3af0c788ba9091d4a1d11d733"
+    },
+    {
+      "key": "hero_body_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_001.png",
+      "file": "hero_body_001.png",
+      "bytes": 1188,
+      "sha256": "8b0d6eefe093c1dfb70c1b11420427bd0bb716a03e5b71db3a973880d9e05495"
+    },
+    {
+      "key": "hero_body_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_002.png",
+      "file": "hero_body_002.png",
+      "bytes": 1204,
+      "sha256": "eb096cb495e384ea4bf6684eff029613edd254cab6f1f1c323b8a5269568e93e"
+    },
+    {
+      "key": "hero_body_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_003.png",
+      "file": "hero_body_003.png",
+      "bytes": 1201,
+      "sha256": "6ef63e9852c4911f1f4d9a637726fa0c4518248eae60b79d8ce4eb3d50a2578d"
+    },
+    {
+      "key": "hero_body_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_004.png",
+      "file": "hero_body_004.png",
+      "bytes": 1179,
+      "sha256": "78624b73191c7b709a1e84a9ccc0ba2b52c72a821dcba5be4e886cd9008acec8"
+    },
+    {
+      "key": "hero_body_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_005.png",
+      "file": "hero_body_005.png",
+      "bytes": 1173,
+      "sha256": "5f76757621ea0cbd391f7dec6ae47171f556310287bb82c9e8c6923d945d7cf3"
+    },
+    {
+      "key": "hero_body_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_006.png",
+      "file": "hero_body_006.png",
+      "bytes": 1186,
+      "sha256": "974b94f2676fa311fcdedda6ebedaf3e1fae77d78f2d604bb73bc6c159abdedc"
+    },
+    {
+      "key": "hero_body_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_007.png",
+      "file": "hero_body_007.png",
+      "bytes": 1191,
+      "sha256": "6870887e1948919181c49a4751e2f5ae6caa3d9ca4b7fc1374593f4595709d10"
+    },
+    {
+      "key": "hero_body_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_008.png",
+      "file": "hero_body_008.png",
+      "bytes": 1191,
+      "sha256": "cf21fa67121ae24b7fe4f7bc78354dc35c34f55a4e6d75faf822fd0818b839fe"
+    },
+    {
+      "key": "hero_body_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/body_009.png",
+      "file": "hero_body_009.png",
+      "bytes": 1215,
+      "sha256": "41bc7a9e80d64a51d0b12cd4c3d4189e1dcbd39cfe09a6530bfb1e4b282ef8cf"
+    },
+    {
+      "key": "hero_chest_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_000.png",
+      "file": "hero_chest_000.png",
+      "bytes": 1904,
+      "sha256": "15a64664e2625ac74fa1064601b0e0de8bdfd6b6411acffdfe338ad730590ffe"
+    },
+    {
+      "key": "hero_chest_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_001.png",
+      "file": "hero_chest_001.png",
+      "bytes": 1765,
+      "sha256": "051264a0272328b1218dc08ce5afd5e3e728fcd1e627bb05ff5530553077240e"
+    },
+    {
+      "key": "hero_chest_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_002.png",
+      "file": "hero_chest_002.png",
+      "bytes": 1786,
+      "sha256": "ed2a11072aed9965326f76ad8850faf22f1fcb70d71e096e946cc3cead62e9a9"
+    },
+    {
+      "key": "hero_chest_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_003.png",
+      "file": "hero_chest_003.png",
+      "bytes": 1850,
+      "sha256": "1fcb19f94323e90aad1126d17bf6b2d4e12e4d03c10f2d7db41f15cec1dea0c0"
+    },
+    {
+      "key": "hero_chest_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_004.png",
+      "file": "hero_chest_004.png",
+      "bytes": 1618,
+      "sha256": "b88b4de7980892337d7c9502762a77d21460d688aa470b0539be8da028cd3a63"
+    },
+    {
+      "key": "hero_chest_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_005.png",
+      "file": "hero_chest_005.png",
+      "bytes": 1753,
+      "sha256": "192b493179c668011951e5f5c73c074228e6b96aa6314ed2cd3e205dc0675ad3"
+    },
+    {
+      "key": "hero_chest_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_006.png",
+      "file": "hero_chest_006.png",
+      "bytes": 1893,
+      "sha256": "d69a95cd08c48a1c6239ba9f480c3daedee32724457a5e380e86dee3d6051044"
+    },
+    {
+      "key": "hero_chest_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_007.png",
+      "file": "hero_chest_007.png",
+      "bytes": 1906,
+      "sha256": "c87f800c1a336777aa97039622996d3f2f1d2794de1f537db9585b7f2fec481b"
+    },
+    {
+      "key": "hero_chest_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_008.png",
+      "file": "hero_chest_008.png",
+      "bytes": 1848,
+      "sha256": "1c321d13bd6ddcacba20ebb85e48c0d09376abd06b80a518deb50c28a25ff43b"
+    },
+    {
+      "key": "hero_chest_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/chest_009.png",
+      "file": "hero_chest_009.png",
+      "bytes": 1841,
+      "sha256": "16d336eff0975ba4b4a53c9db700dc5aeb4df96b3d1bc69ee00cf26ac19eb7a9"
+    },
+    {
+      "key": "hero_skirt_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_000.png",
+      "file": "hero_skirt_000.png",
+      "bytes": 1624,
+      "sha256": "51edf77c47961093d8dbf4caf192d7d5262d5b802ea82229c52cfd1f25dc25be"
+    },
+    {
+      "key": "hero_skirt_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_001.png",
+      "file": "hero_skirt_001.png",
+      "bytes": 1665,
+      "sha256": "97e1cb1af1990ece27f8ee92485320cdfe1d17afadcf23ff6b38fac93d18027a"
+    },
+    {
+      "key": "hero_skirt_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_002.png",
+      "file": "hero_skirt_002.png",
+      "bytes": 1671,
+      "sha256": "c298feae095672be590ead73a63da72861a6e1f9d2383ecdc6ee06008a4632cc"
+    },
+    {
+      "key": "hero_skirt_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_003.png",
+      "file": "hero_skirt_003.png",
+      "bytes": 1597,
+      "sha256": "e71332dce2c703cb89db8671de04da059117b32dd21475ec4f83d99e6d322225"
+    },
+    {
+      "key": "hero_skirt_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_004.png",
+      "file": "hero_skirt_004.png",
+      "bytes": 1526,
+      "sha256": "0c5b69f6bd1c29010126006de757988f905acf5e9b64b2ecba424b3551201a94"
+    },
+    {
+      "key": "hero_skirt_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_005.png",
+      "file": "hero_skirt_005.png",
+      "bytes": 1600,
+      "sha256": "85ae4fc02c6efe28b8f840b38ce97c40d71cffb3101bb3b5333a9e1f4dde79dc"
+    },
+    {
+      "key": "hero_skirt_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_006.png",
+      "file": "hero_skirt_006.png",
+      "bytes": 1674,
+      "sha256": "3ee5628b20736630a24339b7edd5fbc1d255882e73eafb9fde03c56ab55e4ce0"
+    },
+    {
+      "key": "hero_skirt_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_007.png",
+      "file": "hero_skirt_007.png",
+      "bytes": 1663,
+      "sha256": "b72dce4b6a55d240bc828705a1f24b6ab04b3f1ab93d25a9a3ab26c672d28660"
+    },
+    {
+      "key": "hero_skirt_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_008.png",
+      "file": "hero_skirt_008.png",
+      "bytes": 1619,
+      "sha256": "0817a34f0f122c133f28bc33f554f107acee03a60689d6ae96f6ea17f46d35a3"
+    },
+    {
+      "key": "hero_skirt_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/skirt_009.png",
+      "file": "hero_skirt_009.png",
+      "bytes": 1791,
+      "sha256": "569445129f198a958a1432e7bf6582e2a35f50473ff52e67e51c5c9ffb69f88b"
+    },
+    {
+      "key": "hero_arm_left_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_000.png",
+      "file": "hero_arm_left_000.png",
+      "bytes": 1393,
+      "sha256": "67df4dead964fecb9d5a5f4bbabedae464eeec5f83d81f5b8ce3caac7c24c78a"
+    },
+    {
+      "key": "hero_arm_left_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_001.png",
+      "file": "hero_arm_left_001.png",
+      "bytes": 1353,
+      "sha256": "9965465c2fd30ac67676759e59adc53ab94efceb88100f996880e4dba9fe0c1b"
+    },
+    {
+      "key": "hero_arm_left_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_002.png",
+      "file": "hero_arm_left_002.png",
+      "bytes": 1390,
+      "sha256": "d4e2e331f31895c503efc1746377af6bb57973df7ff27e9684f96c35d10276b3"
+    },
+    {
+      "key": "hero_arm_left_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_003.png",
+      "file": "hero_arm_left_003.png",
+      "bytes": 1296,
+      "sha256": "b0032745995ff3b0e1fba990da720c11c4f8fa5bd1022c0e730dfa6fc31d31b3"
+    },
+    {
+      "key": "hero_arm_left_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_004.png",
+      "file": "hero_arm_left_004.png",
+      "bytes": 1403,
+      "sha256": "df010362bfb631a3a280ee1079a79fdc1e9869b76d4b690c75e8e347c814084b"
+    },
+    {
+      "key": "hero_arm_left_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_005.png",
+      "file": "hero_arm_left_005.png",
+      "bytes": 1407,
+      "sha256": "d0e257ed2cb6f176cb82c5e1a732a91312af6eb2ce961940442a2a4a768382a3"
+    },
+    {
+      "key": "hero_arm_left_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_006.png",
+      "file": "hero_arm_left_006.png",
+      "bytes": 1409,
+      "sha256": "8c5667c69be60a9ea2665ec95393dc2d3d6878f829550a85539e3b8d261d2b0b"
+    },
+    {
+      "key": "hero_arm_left_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_007.png",
+      "file": "hero_arm_left_007.png",
+      "bytes": 1411,
+      "sha256": "b9c540f7f902cb8040aa4cbcc858b1e6ad45f8e06592d18f8f5de76122626872"
+    },
+    {
+      "key": "hero_arm_left_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_008.png",
+      "file": "hero_arm_left_008.png",
+      "bytes": 1278,
+      "sha256": "50a5497dbb87efb8a37308efed8684352007150ad58b9290f00a1207b599aa0c"
+    },
+    {
+      "key": "hero_arm_left_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_left_009.png",
+      "file": "hero_arm_left_009.png",
+      "bytes": 1353,
+      "sha256": "895a278f6f0594351848b364567a937b23b1880c84bde42b82f95fa138f3888b"
+    },
+    {
+      "key": "hero_arm_right_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_000.png",
+      "file": "hero_arm_right_000.png",
+      "bytes": 1524,
+      "sha256": "39b0a50c7bb6677f8ef1b6c8a0f823ae1c3c9858482e36661b4886e62e705655"
+    },
+    {
+      "key": "hero_arm_right_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_001.png",
+      "file": "hero_arm_right_001.png",
+      "bytes": 1478,
+      "sha256": "72735844c28a28863e0c26e3eeb4fca7fce3b717a34f4e7d33901ff4d34b7531"
+    },
+    {
+      "key": "hero_arm_right_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_002.png",
+      "file": "hero_arm_right_002.png",
+      "bytes": 1469,
+      "sha256": "3611736831ed9a45cd9e44e8662cec7b9a8cbd59ab0336e972e109e333f7f21a"
+    },
+    {
+      "key": "hero_arm_right_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_003.png",
+      "file": "hero_arm_right_003.png",
+      "bytes": 1517,
+      "sha256": "e7e80f5b58b7c7ae2bc2409dc17dafbdeb190d6c90ac4faad9ce873b02b33ec0"
+    },
+    {
+      "key": "hero_arm_right_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_004.png",
+      "file": "hero_arm_right_004.png",
+      "bytes": 1575,
+      "sha256": "1e4eca64c0d58f2ce33c30d5d869fcb056921559fafcfc00a640c4960aae5a74"
+    },
+    {
+      "key": "hero_arm_right_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_005.png",
+      "file": "hero_arm_right_005.png",
+      "bytes": 1419,
+      "sha256": "fd18775c2760c33c3be99d55605646c4185259984968f7cca75a4378711d02c0"
+    },
+    {
+      "key": "hero_arm_right_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_006.png",
+      "file": "hero_arm_right_006.png",
+      "bytes": 1500,
+      "sha256": "67ed3ff83c33a86db10278dc0535d0ce0d86523e451cb752d42c0879081ee278"
+    },
+    {
+      "key": "hero_arm_right_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_007.png",
+      "file": "hero_arm_right_007.png",
+      "bytes": 1458,
+      "sha256": "378e0b70b37bdef84e0e98badda383221a013aff2b9d54826aca2dbd607619a1"
+    },
+    {
+      "key": "hero_arm_right_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_008.png",
+      "file": "hero_arm_right_008.png",
+      "bytes": 1390,
+      "sha256": "24254c0b00ed25fe992d284e171f36aa4cd21079f511a7e819a23600735a7442"
+    },
+    {
+      "key": "hero_arm_right_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/arm_right_009.png",
+      "file": "hero_arm_right_009.png",
+      "bytes": 1537,
+      "sha256": "8c4c99f3e38750d9313bad5362f426918e9a1dd9812be02af4f6b446d68250d0"
+    },
+    {
+      "key": "hero_leg_left_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_000.png",
+      "file": "hero_leg_left_000.png",
+      "bytes": 1145,
+      "sha256": "0be9dfe6bdca4f2a0799a3496905574449e353db7ab995dc477ecd8f0220243c"
+    },
+    {
+      "key": "hero_leg_left_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_001.png",
+      "file": "hero_leg_left_001.png",
+      "bytes": 1164,
+      "sha256": "6366f79794ad8060a5515ab51cf9026a39a4903a698936718f19bec044167fbc"
+    },
+    {
+      "key": "hero_leg_left_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_002.png",
+      "file": "hero_leg_left_002.png",
+      "bytes": 1266,
+      "sha256": "306a9761f64a50dba183af94f20e0b62de8360a56a7972591f594b5394dae158"
+    },
+    {
+      "key": "hero_leg_left_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_003.png",
+      "file": "hero_leg_left_003.png",
+      "bytes": 1268,
+      "sha256": "a1d28c74d1f52208ae3d489c880754195363f95997a2933d5410fd4e423a4010"
+    },
+    {
+      "key": "hero_leg_left_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_004.png",
+      "file": "hero_leg_left_004.png",
+      "bytes": 1287,
+      "sha256": "41fc0ef6bceafa51b3ae8a4d79d80b66296c6641d7861282be81ef66f2f66fd4"
+    },
+    {
+      "key": "hero_leg_left_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_005.png",
+      "file": "hero_leg_left_005.png",
+      "bytes": 1279,
+      "sha256": "3950210fc8abafdac64c558fb319406ba96f7587f3f49e983be627a0d4d0c5dd"
+    },
+    {
+      "key": "hero_leg_left_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_006.png",
+      "file": "hero_leg_left_006.png",
+      "bytes": 1205,
+      "sha256": "03b8efccfbd428f562bf34f96c340bc6a12da6331e697d359fe22549924c19ee"
+    },
+    {
+      "key": "hero_leg_left_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_007.png",
+      "file": "hero_leg_left_007.png",
+      "bytes": 1183,
+      "sha256": "f256be601a69222e8bc7f02a2ff2efa7a4b2b50a4944d6fafdb911ddeae0b5c7"
+    },
+    {
+      "key": "hero_leg_left_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_008.png",
+      "file": "hero_leg_left_008.png",
+      "bytes": 1255,
+      "sha256": "532531057d0d1189d45dbb15c5eac6ff71d103e550e1fa42d3a6658fa39bd7be"
+    },
+    {
+      "key": "hero_leg_left_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_left_009.png",
+      "file": "hero_leg_left_009.png",
+      "bytes": 1331,
+      "sha256": "110f6e312b68d20134b095ad49c494d80baf4d2dd344081baf9c88a663120fb3"
+    },
+    {
+      "key": "hero_leg_right_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_000.png",
+      "file": "hero_leg_right_000.png",
+      "bytes": 1477,
+      "sha256": "07f2a59056836067cbc9a1c86c961c683810f926d4276e0bb243f804f63288e6"
+    },
+    {
+      "key": "hero_leg_right_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_001.png",
+      "file": "hero_leg_right_001.png",
+      "bytes": 1529,
+      "sha256": "d5d7038a72beea79fee70a4c8d19356adabee21a7b0c897a4900c11e0722cb8b"
+    },
+    {
+      "key": "hero_leg_right_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_002.png",
+      "file": "hero_leg_right_002.png",
+      "bytes": 1507,
+      "sha256": "2a1c5be0114d2db298dfd066a14c11dfc5699a7bba164e512fa9fe444d6ec799"
+    },
+    {
+      "key": "hero_leg_right_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_003.png",
+      "file": "hero_leg_right_003.png",
+      "bytes": 1343,
+      "sha256": "b40c703b630b9e97f8be11f0db6cbbbed3cca59953d0c3fa81001bc56bade6f0"
+    },
+    {
+      "key": "hero_leg_right_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_004.png",
+      "file": "hero_leg_right_004.png",
+      "bytes": 1576,
+      "sha256": "93c59e368c2d7d94e26200e3e13349306dcdc9b1bc74b0ef9b1227fa46352cc9"
+    },
+    {
+      "key": "hero_leg_right_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_005.png",
+      "file": "hero_leg_right_005.png",
+      "bytes": 1519,
+      "sha256": "6ae4f0e13015f05a2bc5bc6a80ccd30f280228d45dfe1374cb80d735ee232a65"
+    },
+    {
+      "key": "hero_leg_right_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_006.png",
+      "file": "hero_leg_right_006.png",
+      "bytes": 1357,
+      "sha256": "a95b5ead308864d6ec1b600f22db8559c9394aef79908f25cf814edc8cf23563"
+    },
+    {
+      "key": "hero_leg_right_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_007.png",
+      "file": "hero_leg_right_007.png",
+      "bytes": 1420,
+      "sha256": "d2bea794078b35c4755190b206c95d178e1b380bb9e4b38590e303b7d3259fe4"
+    },
+    {
+      "key": "hero_leg_right_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_008.png",
+      "file": "hero_leg_right_008.png",
+      "bytes": 1494,
+      "sha256": "1de3b02ee99a1f3f8f1ba6f2a14245ec0208f1851b98cbec726f182bd0f41415"
+    },
+    {
+      "key": "hero_leg_right_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/leg_right_009.png",
+      "file": "hero_leg_right_009.png",
+      "bytes": 1457,
+      "sha256": "fcc00be14351e47f1567b65ec4ae4f93d49d9fa1dafa8ff2f7fc6a89dc7aba76"
+    },
+    {
+      "key": "hero_foot_left_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_000.png",
+      "file": "hero_foot_left_000.png",
+      "bytes": 1319,
+      "sha256": "cfa3f033f9bb3543adafb6e22ee6e671ad40c64966bae1b25fe54d97d9517fa1"
+    },
+    {
+      "key": "hero_foot_left_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_001.png",
+      "file": "hero_foot_left_001.png",
+      "bytes": 1317,
+      "sha256": "157997a35cdf2234b99e2fdcdcff0fd7155d49612132ee73de1cd30378a7fc30"
+    },
+    {
+      "key": "hero_foot_left_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_002.png",
+      "file": "hero_foot_left_002.png",
+      "bytes": 1225,
+      "sha256": "2bb0a39b0055e10118e6d7702c803af088ca7daa5c776a8ba3498897f6eb0629"
+    },
+    {
+      "key": "hero_foot_left_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_003.png",
+      "file": "hero_foot_left_003.png",
+      "bytes": 1180,
+      "sha256": "f31c6a0d7f1f6852f4c35093171f759366fddcc2c5bffdaf766ec87ab1c7d92a"
+    },
+    {
+      "key": "hero_foot_left_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_004.png",
+      "file": "hero_foot_left_004.png",
+      "bytes": 1190,
+      "sha256": "b1ff846ec94180205338cf785d9f180bfa81b57786f5a593a8593b8086d97cf5"
+    },
+    {
+      "key": "hero_foot_left_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_005.png",
+      "file": "hero_foot_left_005.png",
+      "bytes": 1186,
+      "sha256": "adc9ff4ece3b08ac9fff2cb126c7bb0d236e1a40074ce21a881a53a7bbb027f6"
+    },
+    {
+      "key": "hero_foot_left_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_006.png",
+      "file": "hero_foot_left_006.png",
+      "bytes": 1287,
+      "sha256": "5a808379b2857e8832e1b75b2904a08c66b521f781ed3d543d7efe762df6c976"
+    },
+    {
+      "key": "hero_foot_left_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_007.png",
+      "file": "hero_foot_left_007.png",
+      "bytes": 1309,
+      "sha256": "d918f07c221080456253df78e657ac31648e0d6e6ec00fb631895f1f894035c7"
+    },
+    {
+      "key": "hero_foot_left_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_008.png",
+      "file": "hero_foot_left_008.png",
+      "bytes": 1309,
+      "sha256": "ba8c25a475a6cebbb5289b6e35e650849896a303bd6029548f62b8b1c654eba2"
+    },
+    {
+      "key": "hero_foot_left_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_left_009.png",
+      "file": "hero_foot_left_009.png",
+      "bytes": 1186,
+      "sha256": "7dab42820a9a9b5cc38bcc9e29b3defa6a006fae2a1e296e8ec84c78222f32a6"
+    },
+    {
+      "key": "hero_foot_right_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_000.png",
+      "file": "hero_foot_right_000.png",
+      "bytes": 1281,
+      "sha256": "287dbee899aa67a6035f7df2b1f3fda031f6c3c7ad5bc411011e7412a39acdaa"
+    },
+    {
+      "key": "hero_foot_right_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_001.png",
+      "file": "hero_foot_right_001.png",
+      "bytes": 1285,
+      "sha256": "6e5860c7aafa315bdd7f1e9d05afdc82712542c10b2036789f0aff1de55e6027"
+    },
+    {
+      "key": "hero_foot_right_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_002.png",
+      "file": "hero_foot_right_002.png",
+      "bytes": 1335,
+      "sha256": "7792ba230490cd0329bae4e8cc89008d90d3f602c177f1693ae9d9098adb8ef9"
+    },
+    {
+      "key": "hero_foot_right_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_003.png",
+      "file": "hero_foot_right_003.png",
+      "bytes": 1505,
+      "sha256": "05613a3d61dd0470fc0f0fce71ef0a7f82edb119a4609b28d4b28dfb29844218"
+    },
+    {
+      "key": "hero_foot_right_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_004.png",
+      "file": "hero_foot_right_004.png",
+      "bytes": 1426,
+      "sha256": "324ffcc65eb3032afa9444d1676f130330fd734c2636fa0bcb433225f04dbd32"
+    },
+    {
+      "key": "hero_foot_right_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_005.png",
+      "file": "hero_foot_right_005.png",
+      "bytes": 1466,
+      "sha256": "35722b38b387e9ca1d06710448011086abe6ac6d7d4a1c22e681865e13e29bb4"
+    },
+    {
+      "key": "hero_foot_right_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_006.png",
+      "file": "hero_foot_right_006.png",
+      "bytes": 1353,
+      "sha256": "7029c97d3d49ca8aaa61a11276ee4b42e252fb26cd7c26cb3b9da169bef24c6e"
+    },
+    {
+      "key": "hero_foot_right_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_007.png",
+      "file": "hero_foot_right_007.png",
+      "bytes": 1344,
+      "sha256": "144beb1cbbe49644494a9388e835157977ebba38dd3f42e0e88a5363fc60a06e"
+    },
+    {
+      "key": "hero_foot_right_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_008.png",
+      "file": "hero_foot_right_008.png",
+      "bytes": 1287,
+      "sha256": "c866aa927fb1bd30bec1103d08c4ec8230155c716fd64ac2de4539d5aaa3863e"
+    },
+    {
+      "key": "hero_foot_right_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/foot_right_009.png",
+      "file": "hero_foot_right_009.png",
+      "bytes": 1344,
+      "sha256": "77223b7603766d513ed8622c248bfa8286b28fa51ae8b3fb47bb513d756ef69c"
+    },
+    {
+      "key": "hero_shoulder_right_000",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_000.png",
+      "file": "hero_shoulder_right_000.png",
+      "bytes": 1422,
+      "sha256": "88e4a2b2b2312ff031bdf4e780f08c62119e403e7171a52524de4ac8432d8758"
+    },
+    {
+      "key": "hero_shoulder_right_001",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_001.png",
+      "file": "hero_shoulder_right_001.png",
+      "bytes": 1486,
+      "sha256": "2e62ac31ca61b8f1bf2975fee3b16f090c2aec0d1433d51649585eafb7010b57"
+    },
+    {
+      "key": "hero_shoulder_right_002",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_002.png",
+      "file": "hero_shoulder_right_002.png",
+      "bytes": 1473,
+      "sha256": "8508eb82e99f1290a4c337fcef90986c697f64b13c9bc9ea9477b5a613e8368c"
+    },
+    {
+      "key": "hero_shoulder_right_003",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_003.png",
+      "file": "hero_shoulder_right_003.png",
+      "bytes": 1473,
+      "sha256": "8508eb82e99f1290a4c337fcef90986c697f64b13c9bc9ea9477b5a613e8368c"
+    },
+    {
+      "key": "hero_shoulder_right_004",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_004.png",
+      "file": "hero_shoulder_right_004.png",
+      "bytes": 1434,
+      "sha256": "bb635abe64ee15cb5c85cfe9215d4ca2ec45f054c73c466722c68d604c250688"
+    },
+    {
+      "key": "hero_shoulder_right_005",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_005.png",
+      "file": "hero_shoulder_right_005.png",
+      "bytes": 1446,
+      "sha256": "b414770c0d31796705d288bff874f8345a62d60002737ce14e8991c4a2cc228b"
+    },
+    {
+      "key": "hero_shoulder_right_006",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_006.png",
+      "file": "hero_shoulder_right_006.png",
+      "bytes": 1419,
+      "sha256": "2390045b16d7a5fce35909ccd7d89d6552054897467b6621c10277f59664f8b3"
+    },
+    {
+      "key": "hero_shoulder_right_007",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_007.png",
+      "file": "hero_shoulder_right_007.png",
+      "bytes": 1444,
+      "sha256": "36469283b67e92bafc45e0cf988cb37b053e4fc7dce583fdcb7433b4b5470565"
+    },
+    {
+      "key": "hero_shoulder_right_008",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_008.png",
+      "file": "hero_shoulder_right_008.png",
+      "bytes": 1425,
+      "sha256": "13de948fe075d06b45bd1433a29bd7f112b784d926dd8375403a95dcebc8b0d4"
+    },
+    {
+      "key": "hero_shoulder_right_009",
+      "sourcePath": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_009.png",
+      "file": "hero_shoulder_right_009.png",
+      "bytes": 1451,
+      "sha256": "54d363a06b0f4333ed062d4a157e6c2868fc4df6e29efa84fa360fcfe60413ee"
+    },
+    {
+      "key": "boss_walk_000",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_000.png",
+      "file": "boss_walk_000.png",
+      "bytes": 2719,
+      "sha256": "2812d339d4d798b85d0078cd4b72f5137de0133975ad7d47d91cb5aac42acd61"
+    },
+    {
+      "key": "boss_walk_001",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_001.png",
+      "file": "boss_walk_001.png",
+      "bytes": 2434,
+      "sha256": "0e2a5b92f5820fa6ba6ce72acf39b46f6965ac377d5e49bc166e9d3cb510a84b"
+    },
+    {
+      "key": "boss_walk_002",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_002.png",
+      "file": "boss_walk_002.png",
+      "bytes": 2440,
+      "sha256": "f2e738b8ade792281f65f740e78d444dfe72dd01a04de2473c45d164acc98369"
+    },
+    {
+      "key": "boss_walk_003",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_003.png",
+      "file": "boss_walk_003.png",
+      "bytes": 2450,
+      "sha256": "406872df815e2c0e9e4aebe8024e8ec0cbc7d674664d5c2ae8d398ae2a5faad4"
+    },
+    {
+      "key": "boss_walk_004",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_004.png",
+      "file": "boss_walk_004.png",
+      "bytes": 2422,
+      "sha256": "84480ebe1f720205bdbc1eb1e9563ec53c6300fde73f1a4f752ec0ec284c1953"
+    },
+    {
+      "key": "boss_walk_005",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_005.png",
+      "file": "boss_walk_005.png",
+      "bytes": 2475,
+      "sha256": "703ea697e57ae3e0f2bd11d368c9f0e8b953e65ff5b41a057946c26945ab1f04"
+    },
+    {
+      "key": "boss_walk_006",
+      "sourcePath": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_006.png",
+      "file": "boss_walk_006.png",
+      "bytes": 2427,
+      "sha256": "ca912f62939fe8c76f981eeec41f3d23a5912a919896ff437c8744b9a9c9db7e"
+    },
+    {
+      "key": "spider_body_000",
+      "sourcePath": "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_000.png",
+      "file": "spider_body_000.png",
+      "bytes": 2186,
+      "sha256": "77641704b05284130cde39635ec8e7ec117e8de6b8ec6dd560661373d7311028"
+    },
+    {
+      "key": "spider_body_001",
+      "sourcePath": "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_001.png",
+      "file": "spider_body_001.png",
+      "bytes": 2265,
+      "sha256": "ff85ad5e6cd6fa56e65f890cfcc03edbfb9e8e1da208afc97a89239a9c7e1614"
+    },
+    {
+      "key": "spider_body_002",
+      "sourcePath": "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_002.png",
+      "file": "spider_body_002.png",
+      "bytes": 2247,
+      "sha256": "03ea1e3b137819697bb8ac80ab64d8a177f30d5934e60ff713f6f0cc7b419c18"
+    },
+    {
+      "key": "book_deco2",
+      "sourcePath": "Bg/Object/Cathedral/book_deco2.png",
+      "file": "book_deco2.png",
+      "bytes": 883,
+      "sha256": "2bb9aebb7374f36d3123ad6eaa4557832b3a8d407e7323fb29501347b49e8e3e"
+    },
+    {
+      "key": "book_deco3",
+      "sourcePath": "Bg/Object/Cathedral/book_deco3.png",
+      "file": "book_deco3.png",
+      "bytes": 1262,
+      "sha256": "b27addcf2938e7c1632a501746df9e0b2fb0863a5cf6bacd616a8160f1d10ced"
+    },
+    {
+      "key": "book_face_spine1",
+      "sourcePath": "Bg/Object/Cathedral/book_face_spine1.png",
+      "file": "book_face_spine1.png",
+      "bytes": 348,
+      "sha256": "ad9bfb0df4425dbc44da18da5fb55914973b13cc94adc9f40d123b6ddf313443"
+    },
+    {
+      "key": "birdcage3",
+      "sourcePath": "Bg/Object/Cathedral/birdcage3.png",
+      "file": "birdcage3.png",
+      "bytes": 812,
+      "sha256": "6c8302ff164317061335401ca307d058a8dfa1acc253e967d4a73d1e62e82fff"
+    },
+    {
+      "key": "barrel4",
+      "sourcePath": "Bg/Object/Cathedral/barrel4.png",
+      "file": "barrel4.png",
+      "bytes": 1187,
+      "sha256": "bf9eee6ab29bb5c4ca014ea790885d1f30af517f604b62dd5be7809dc5678e5b"
+    },
+    {
+      "key": "lectern2",
+      "sourcePath": "Bg/Object/Home/Monastery/lectern2.png",
+      "file": "lectern2.png",
+      "bytes": 1368,
+      "sha256": "89056aaa8869825eb460ebaf7736390e7f93d77a641145acafc8a4a1d381136f"
+    },
+    {
+      "key": "sample_box",
+      "sourcePath": "Bg/Terrain/Dungeon_Sewage/Area_Boss/sample_box.png",
+      "file": "sample_box.png",
+      "bytes": 1402,
+      "sha256": "a33a55e3caa59c71128eda9fa544f6cb2dffd7e6097c10abac94dbcb2fe87a7b"
+    },
+    {
+      "key": "treasure_box1_004",
+      "sourcePath": "Bg/Terrain/Dungeon_Sewage/Area_Boss/treasure_box1_004.png",
+      "file": "treasure_box1_004.png",
+      "bytes": 3437,
+      "sha256": "1c761aec809186f3e77d99fe268da88054b3b1e7dee7b62a9131ae7c9dbdbf1d"
+    },
+    {
+      "key": "spider_bullet_hold1",
+      "sourcePath": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png",
+      "file": "spider_bullet_hold1.png",
+      "bytes": 270,
+      "sha256": "d7c1a69b27d03b05b4863583a63fe712fa07a39cc8f5c1aada3065d61f5cd2e6"
+    },
+    {
+      "key": "spider_bullet_hold2",
+      "sourcePath": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png",
+      "file": "spider_bullet_hold2.png",
+      "bytes": 276,
+      "sha256": "70e9c4ffb9a753ab112b39bbc42e6be85a2b0a550c61d0c76925208c8eebd2aa"
+    },
+    {
+      "key": "bg_cathedral_library_boss",
+      "sourcePath": "Bg/Object/Cathedral/bg_cathedral_library_boss.png",
+      "file": "bg_cathedral_library_boss.png",
+      "bytes": 321759,
+      "sha256": "013c3c794c1fb0208d04f517d191deda85f72cd68cd9921dcd1f88f8eafa6c0a"
+    },
+    {
+      "key": "isigaki",
+      "sourcePath": "Bg/Sirohone/StoneWall_1031/isigaki.png",
+      "file": "isigaki.png",
+      "bytes": 70242,
+      "sha256": "31491bc12826d5713a83f6c843022f88a616158e4a636092da845b76f592576c"
+    }
+  ]
+}

@@ -1,0 +1,453 @@
+/* 幽夜回廊 · 结构样式（壳 / 页眉活场景 / 纸页 / 页脚 HUD / 三态）
+   契约面：--reader-* 变量族（与 --md-* 同源）、data-reader-theme 三态、
+           装饰层一律 aria-hidden + 绝对定位（不参与正文测量）。
+   配色来源：**从游戏原图实测**（大教堂图书馆全景 + 石墙），主调为近黑/冷灰石/暗血红/烛光金，
+             —— 见 tools/reader-templates/dungeon-hud/SOURCES.md。 */
+
+:root {
+  --md-font-size: 18px;
+  --md-line-height: 1.92;
+  --reader-font-size: var(--md-font-size);
+  --reader-line-height: var(--md-line-height);
+  --reader-font-family: "Noto Serif CJK SC", "Source Han Serif SC", "Noto Sans CJK SC", Georgia, serif;
+  --reader-paragraph-indent: 2em;
+  --reader-paragraph-spacing: .62em;
+  --reader-accent: #7a1c17;
+
+  /* 全幅底图单源：同一张图在页眉/纸页/页脚三处取不同景位 ⇒ 只内联一份字节 */
+  --dh-scene: url("{{asset:bg_cathedral_library_boss}}");
+  /* 可平铺石墙纹理（512×512）：纸页的岩石底纹 */
+  --dh-stone: url("{{asset:isigaki}}");
+
+  /* 三态之一「日间」—— 烛光下的冷灰石室（暗黑系，非暖羊皮） */
+  --reader-text-color: #1b1a18;
+  --reader-page-background: #cbc7be;
+  --dh-paper: #c6c2b9;
+  --dh-paper-edge: #8e8b84;
+  --dh-dim: #5b5850;
+  --dh-line: rgba(20, 19, 17, .26);
+  --dh-hp: #7a1c17;
+  --dh-mp: #39506a;
+  --dh-gold: #6b5a2a;
+  --dh-hud: rgba(20, 19, 17, .12);
+  --dh-requiem-glow: rgba(122, 28, 23, .42);
+  --dh-veil: rgba(14, 14, 15, .50);
+  --dh-fade: rgba(199, 195, 186, .90);
+  --dh-veil-strong: rgba(198, 194, 185, .86);
+  --dh-deco: .72;
+}
+
+html[data-reader-theme="night"] {
+  --reader-text-color: #ddd8ce;
+  --reader-page-background: #0c0d0f;
+  --reader-accent: #c9a24a;
+  --dh-paper: #101113;
+  --dh-paper-edge: #34373c;
+  --dh-dim: #8b8781;
+  --dh-line: rgba(201, 162, 74, .22);
+  --dh-hp: #a8261f;
+  --dh-mp: #4a6b8e;
+  --dh-gold: #c9a24a;
+  --dh-hud: rgba(255, 255, 255, .06);
+  --dh-requiem-glow: rgba(168, 38, 31, .46);
+  --dh-veil: rgba(5, 5, 7, .58);
+  --dh-fade: rgba(12, 13, 15, .90);
+  --dh-veil-strong: rgba(9, 10, 12, .88);
+  --dh-deco: .88;
+}
+
+html[data-reader-theme="eink"] {
+  --reader-text-color: #141414;
+  --reader-page-background: #ececeb;
+  --reader-accent: #2c2c2c;
+  --dh-paper: #f2f2f1;
+  --dh-paper-edge: #b6b6b4;
+  --dh-dim: #555555;
+  --dh-line: rgba(0, 0, 0, .18);
+  --dh-hp: #262626;
+  --dh-mp: #6a6a6a;
+  --dh-gold: #3a3a3a;
+  --dh-hud: rgba(0, 0, 0, .07);
+  --dh-requiem-glow: rgba(40, 40, 40, .32);
+  --dh-veil: rgba(70, 70, 70, .46);
+  --dh-fade: rgba(236, 236, 235, .92);
+  --dh-veil-strong: rgba(238, 238, 237, .88);
+  --dh-deco: .28;
+}
+
+/* 装饰强度档位（宿主下发 html[data-rp-decoration]） */
+html[data-rp-decoration="none"] { --dh-deco: 0 }
+html[data-rp-decoration="light"] { --dh-deco: .45 }
+html[data-rp-decoration="medium"] { --dh-deco: .72 }
+html[data-rp-decoration="strong"] { --dh-deco: 1 }
+
+body {
+  margin: 0;
+  color: var(--reader-text-color);
+  background: var(--reader-page-background);
+  font: 400 var(--reader-font-size) / var(--reader-line-height) var(--reader-font-family);
+}
+
+/* —— 三行约束壳：场景带 / 正文 1fr / HUD ——
+   装饰与插画全部 absolute ⇒ 增删装饰不改变正文测量与页数。 */
+.dh-page {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: clamp(96px, 13.5vh, 138px) minmax(0, 1fr) 62px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 14px 10px;
+  background: var(--reader-page-background);
+}
+.dh-marching { grid-template-rows: clamp(72px, 10.5vh, 108px) minmax(0, 1fr) 62px }
+
+/* 整页叠加层：暗角 + 石纹斜纹（z-index:-1，不参与测量） */
+.dh-page::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 8px, rgba(0, 0, 0, calc(.05 * var(--dh-deco))) 8px 9px),
+    radial-gradient(130% 70% at 50% -12%, rgba(0, 0, 0, calc(.30 * var(--dh-deco))) 0, transparent 62%),
+    radial-gradient(100% 60% at 92% 110%, rgba(122, 28, 23, calc(.20 * var(--dh-deco))) 0, transparent 62%);
+}
+.dh-grain {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(.10 * var(--dh-deco));
+  background: radial-gradient(rgba(0, 0, 0, .55) .4px, transparent .8px) 0 0/6px 6px;
+}
+
+/* —— 页眉 · 活场景：**游戏原图全幅铺底** + 暗幕 + 底部渐隐接纸页 —— */
+.dh-stage {
+  position: relative;
+  margin: -6px -14px 0;
+  overflow: hidden;
+  background-color: #08090b;
+  background-image: var(--dh-scene);
+  background-size: cover;
+  background-position: 30% 42%;
+  background-repeat: no-repeat;
+}
+/* 续页换景：同一张图换取景位 + 偏冷的幕（观感像换了场地，且零额外字节） */
+.dh-marching .dh-stage { background-position: 76% 68% }
+.dh-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(80% 120% at 50% 118%, rgba(122, 28, 23, calc(.30 * var(--dh-deco))) 0, transparent 58%),
+    linear-gradient(180deg, rgba(4, 4, 6, .34) 0%, var(--dh-veil) 58%, var(--dh-fade) 100%);
+}
+.dh-sky { display: none }
+/* 场景道具（原作建筑/陈设小图，绝对定位散布，不吃正文高度） */
+.dh-props { position: absolute; inset: 0; pointer-events: none; opacity: calc(.92 * var(--dh-deco)) }
+.dh-props i { position: absolute; background-position: center bottom; background-size: contain; background-repeat: no-repeat }
+.dh-prop-a { left: 4%; bottom: 0; width: 64px; height: 30px; background-image: url("{{asset:book_deco3}}") }
+.dh-prop-b { left: 27%; bottom: 2px; width: 12px; height: 28px; background-image: url("{{asset:book_face_spine1}}") }
+/* c / d 为 CSS 自绘的石柱与光台（不使用素材） */
+.dh-prop-c { right: 4%; bottom: 0; width: 36px; height: 54px; background-image: linear-gradient(180deg, #4a4741, #171614); clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%); opacity: .7 }
+.dh-prop-d { right: 25%; bottom: 0; width: 64px; height: 26px; background-image: linear-gradient(180deg, #55514a, #201f1c); opacity: .65 }
+
+/* 主角：12 层部件（180×180 对齐画布，人物实际只占画布中部 ~25×80）同帧号叠加。
+   以画布底为原点缩放 ⇒ 人物脚底恒落在场景带底边上 4px（与带宽无关，稳定不裁头）。 */
+.dh-rig { position: absolute; width: 180px; height: 180px; transform-origin: 50% 100% }
+.dh-hero { left: 12%; bottom: -64px; transform: scale(1.3) }
+.dh-rig .dh-p {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 1800px 180px;
+  background-position: 0 0;
+}
+/* 层序（背 → 前）：躯体 → 腿脚 → 裙 → 胸 → 臂 → 头 → 发 → 披肩 */
+.dh-p { background-image: none }
+.dh-p-body { background-image: url("{{asset:sheet_hero_body}}") }
+.dh-p-leg_left { background-image: url("{{asset:sheet_hero_leg_left}}") }
+.dh-p-leg_right { background-image: url("{{asset:sheet_hero_leg_right}}") }
+.dh-p-foot_left { background-image: url("{{asset:sheet_hero_foot_left}}") }
+.dh-p-foot_right { background-image: url("{{asset:sheet_hero_foot_right}}") }
+.dh-p-skirt { background-image: url("{{asset:sheet_hero_skirt}}") }
+.dh-p-chest { background-image: url("{{asset:sheet_hero_chest}}") }
+.dh-p-arm_left { background-image: url("{{asset:sheet_hero_arm_left}}") }
+.dh-p-arm_right { background-image: url("{{asset:sheet_hero_arm_right}}") }
+.dh-p-head { background-image: url("{{asset:sheet_hero_head}}") }
+.dh-p-hair { background-image: url("{{asset:sheet_hero_hair}}") }
+.dh-p-shoulder_right { background-image: url("{{asset:sheet_hero_shoulder_right}}") }
+
+/* 敌方：整帧序列（页眉 = 对峙，向主角方向推进）。画布取素材原生尺寸，
+   精灵表按原生宽高做背景（绝不能 contain —— 会破坏 steps() 的步进像素）。 */
+.dh-foe { position: absolute; transform-origin: 50% 100% }
+.dh-foe .dh-f {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  transform-origin: 50% 100%;
+}
+.dh-foe-boss { right: 10%; bottom: -88px; width: 92px; height: 160px }
+.dh-foe-boss .dh-f { background-image: url("{{asset:sheet_boss_walk}}"); background-size: 644px 160px; transform: scale(1.15) }
+.dh-foe-spider { left: 8%; bottom: -75px; width: 140px; height: 140px }
+.dh-foe-spider .dh-f { background-image: url("{{asset:sheet_spider_body}}"); background-size: 420px 140px; transform: scale(1.15) }
+/* 弹道（绝对定位，周期飞过，不占正文） */
+.dh-bullet { position: absolute; left: 30%; top: 42%; width: 15px; height: 16px; opacity: calc(var(--dh-deco)) }
+.dh-bullet i { display: block; width: 100%; height: 100%; background: url("{{asset:spider_bullet_hold1}}") center/contain no-repeat }
+/* 斩击闪光（CSS 自绘，不用素材） */
+.dh-slash {
+  position: absolute;
+  left: 34%;
+  bottom: 12px;
+  width: 74px;
+  height: 46px;
+  pointer-events: none;
+  opacity: 0;
+  border-top: 2px solid rgba(240, 236, 226, .92);
+  border-radius: 50%;
+  transform: rotate(-24deg);
+}
+/* 关卡/书名标牌 */
+.dh-plate {
+  position: absolute;
+  left: 14px;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
+  background: rgba(6, 6, 8, .66);
+  border: 1px solid rgba(201, 162, 74, calc(.55 * var(--dh-deco)));
+  color: #e9e3d5;
+  font-family: var(--reader-font-family);
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+.dh-plate b { font-size: 9px; letter-spacing: .18em; color: var(--dh-gold) }
+.dh-plate span { max-width: 200px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+/* 牺牲场景（血条归零时显形；**不用原作剧情 CG** —— 以姿态/灯光/排字表达） */
+.dh-requiem {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0;
+  background: radial-gradient(70% 100% at 50% 100%, var(--dh-requiem-glow) 0, rgba(4, 3, 3, .80) 76%);
+  color: #ecdfc6;
+  pointer-events: none;
+}
+.dh-requiem b { font-size: 9px; letter-spacing: .34em; color: var(--dh-hp) }
+.dh-requiem em { font-style: normal; font-size: 17px; letter-spacing: .30em }
+.dh-page.dh-fallen .dh-requiem { opacity: 1 }
+.dh-page.dh-fallen .dh-hero { filter: grayscale(1) brightness(.45); transform: scale(1.3) rotate(12deg) translate(-8px, 16px) }
+.dh-page.dh-fallen .dh-foe { filter: grayscale(.7) brightness(.55) }
+.dh-page.dh-fallen .dh-slash { opacity: 0 }
+
+/* —— 正文纸页：**游戏原图第二取景位铺底** + 石色幕（保正文可读） —— */
+.dh-paper {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+  margin-top: 8px;
+  padding: 14px 15px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--dh-paper-edge);
+  background-color: var(--dh-paper);
+  background-image: var(--dh-stone), var(--dh-scene);
+  background-size: 168px 168px, cover;
+  background-position: 0 0, 66% 92%;
+  background-repeat: repeat, no-repeat;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, calc(.28 * var(--dh-deco)));
+}
+.dh-paper::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: var(--dh-veil-strong);
+}
+.dh-frame { position: absolute; inset: 4px; pointer-events: none; border: 1px solid rgba(201, 162, 74, calc(.42 * var(--dh-deco))) }
+.dh-corner { position: absolute; width: 14px; height: 14px; border: 2px solid var(--dh-gold); opacity: calc(.9 * var(--dh-deco)); pointer-events: none }
+.dh-c-tl { left: -1px; top: -1px; border-right: 0; border-bottom: 0 }
+.dh-c-tr { right: -1px; top: -1px; border-left: 0; border-bottom: 0 }
+.dh-c-bl { left: -1px; bottom: -1px; border-right: 0; border-top: 0 }
+.dh-c-br { right: -1px; bottom: -1px; border-left: 0; border-top: 0 }
+.dh-tab {
+  position: absolute;
+  top: -9px;
+  right: 16px;
+  height: 18px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  background: #1a1210;
+  border: 1px solid rgba(201, 162, 74, calc(.5 * var(--dh-deco)));
+  color: #d8b775;
+  font-size: 9px;
+  letter-spacing: .16em;
+  pointer-events: none;
+}
+.dh-body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  text-align: justify;
+  --legado-highlight-room-left: 10px;
+  --legado-highlight-room-right: 10px;
+}
+.reader-paragraph {
+  position: relative;
+  display: block;
+  margin: 0 0 var(--reader-paragraph-spacing);
+  text-indent: var(--reader-paragraph-indent);
+  break-inside: auto;
+  page-break-inside: auto;
+  orphans: 1;
+  widows: 1;
+}
+.reader-paragraph.dh-lead:not([data-reader-continuation]):not([data-split-from]) { text-indent: 0 }
+.reader-chapter-title {
+  display: block;
+  margin: .1em 0 .7em;
+  padding-bottom: .5em;
+  text-indent: 0;
+  font-size: 1.3em;
+  font-weight: 650;
+  letter-spacing: .03em;
+  border-bottom: 1px solid rgba(201, 162, 74, calc(.45 * var(--dh-deco)));
+}
+[data-reader-continuation], .reader-paragraph[data-split-from] { text-indent: 0 }
+/* 续页底部对话框：CSS 自绘暗色切角框（省下 205KB 原作底图内联，底图预算让给全幅场景图） */
+.dh-dialog {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: linear-gradient(180deg, rgba(12, 12, 14, .93), rgba(6, 6, 8, .97));
+  border: 1px solid rgba(201, 162, 74, calc(.42 * var(--dh-deco)));
+  clip-path: polygon(0 5px, 5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px));
+  color: #e6ded0;
+  font-size: 11px;
+  opacity: calc(.95 * var(--dh-deco));
+}
+.dh-dialog i { flex: none; width: 13px; height: 15px; background: url("{{asset:spider_bullet_hold2}}") center/contain no-repeat }
+.dh-dialog span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+/* 对话框会压住正文末行 ⇒ 续页正文预留底部安全边距 */
+.dh-marching .dh-body { padding-bottom: 34px }
+
+/* —— 页脚 HUD：**游戏原图第三取景位铺底** + 红/蓝状态条 + 物品栏 + 读数 —— */
+.dh-hud {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 6px;
+  padding: 0 4px;
+}
+.dh-hud::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -5px 0 -8px;
+  pointer-events: none;
+  background-color: #0a0b0d;
+  background-image: var(--dh-scene);
+  background-size: cover;
+  background-position: 46% 94%;
+  background-repeat: no-repeat;
+  opacity: calc(.62 + .0 * var(--dh-deco));
+  border-top: 1px solid var(--dh-line);
+}
+.dh-bars { flex: 0 0 40%; display: flex; flex-direction: column; gap: 5px; min-width: 0 }
+.dh-bar {
+  position: relative;
+  height: 9px;
+  border: 1px solid var(--dh-line);
+  background: rgba(8, 8, 10, .62);
+  overflow: hidden;
+}
+.dh-bar .dh-fill { position: absolute; inset: 0 auto 0 0; width: 100% }
+.dh-bar .dh-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 4px, rgba(0, 0, 0, .28) 4px 5px);
+}
+.dh-bar b {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 6px;
+  letter-spacing: .12em;
+  color: #e8e2d6;
+  opacity: .8;
+}
+/* 红条 = 整本剩余（宿主整书进度 --rp-percent ⇒ 读到末页归零） */
+.dh-bar-hp .dh-fill { background: linear-gradient(90deg, rgba(122, 28, 23, .30), var(--dh-hp)); width: calc(100% - var(--rp-percent, 0) * 1%) }
+/* 蓝条 = 本章/本页序列剩余（JS 下发 --dh-stamina） */
+.dh-bar-mp .dh-fill { background: linear-gradient(90deg, rgba(57, 80, 106, .30), var(--dh-mp)); width: calc(var(--dh-stamina, 100) * 1%) }
+.dh-slots { flex: 1 1 auto; display: flex; gap: 2px; min-width: 0; justify-content: flex-end }
+.dh-slot {
+  flex: none;
+  width: 17px;
+  height: 20px;
+  border: 1px solid var(--dh-line);
+  background-color: rgba(8, 8, 10, .55);
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  opacity: calc(.92 * var(--dh-deco));
+}
+.dh-s-active { border-color: var(--dh-gold); box-shadow: 0 0 0 1px rgba(201, 162, 74, calc(.5 * var(--dh-deco))) inset }
+.dh-s-book { background-image: url("{{asset:book_deco2}}") }
+.dh-s-cage { background-image: url("{{asset:birdcage3}}") }
+.dh-s-barrel { background-image: url("{{asset:barrel4}}") }
+.dh-s-box { background-image: url("{{asset:sample_box}}") }
+.dh-s-chest { background-image: url("{{asset:treasure_box1_004}}") }
+.dh-s-lectern { background-image: url("{{asset:lectern2}}") }
+.dh-readout {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.dh-folio { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: #e9e3d5 }
+.dh-folio em { font-style: normal; color: var(--dh-dim); font-size: 10px }
+.dh-folio span { font-size: 10px; color: var(--dh-dim) }
+.dh-time { font-size: 8px; letter-spacing: .16em; color: var(--dh-dim) }
+
+/* 浮尘：绝对定位细粒（不参与测量） */
+.dh-motes { position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none }
+.dh-motes i {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(222, 208, 176, calc(.72 * var(--dh-deco)));
+}
+.dh-motes i:nth-child(1) { left: 18%; bottom: 18% }
+.dh-motes i:nth-child(2) { left: 44%; bottom: 12% }
+.dh-motes i:nth-child(3) { left: 68%; bottom: 22% }
+.dh-motes i:nth-child(4) { left: 82%; bottom: 9% }
+.dh-motes i:nth-child(5) { left: 32%; bottom: 30% }

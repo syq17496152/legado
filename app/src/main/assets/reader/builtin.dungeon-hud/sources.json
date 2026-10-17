@@ -1,0 +1,547 @@
+{
+  "id": "builtin.dungeon-hud",
+  "name": "幽夜回廊",
+  "note": "非官方阅读页主题。素材来自用户提供的《SiNiSistar2》解密资源（原始 PNG 原样内联，仅按帧横向拼接为精灵表，像素零改动）；成人向/恐怖向素材已剔除。",
+  "notice": "素材版权归原作方所有；本主题不代表原作方，也不将其重新声明为开源或 CC0。",
+  "provenance": {
+    "root": "E:\\sinisistar2_extracted\\Design",
+    "script": "tools/reader-templates/prepare-dungeon-hud-assets.py",
+    "rawCount": 142
+  },
+  "assets": [
+    {
+      "alias": "sheet_hero_body",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "d4ace3c87e75502aab12aaf9266920afefd89b4b21cf109dd1b3718183b51448",
+      "bytes": 4384,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/body_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/body_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/body_000.png；Character/Player/Lelia/Animation/Normal/Base/body_001.png；Character/Player/Lelia/Animation/Normal/Base/body_002.png；Character/Player/Lelia/Animation/Normal/Base/body_003.png；Character/Player/Lelia/Animation/Normal/Base/body_004.png；Character/Player/Lelia/Animation/Normal/Base/body_005.png；Character/Player/Lelia/Animation/Normal/Base/body_006.png；Character/Player/Lelia/Animation/Normal/Base/body_007.png；Character/Player/Lelia/Animation/Normal/Base/body_008.png；Character/Player/Lelia/Animation/Normal/Base/body_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_leg_left",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "ff9b137ff7496d8230138b58c84e1b61aac26a935e4a27fe11ba282b1fd51623",
+      "bytes": 5046,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_left_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/leg_left_000.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_001.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_002.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_003.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_004.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_005.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_006.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_007.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_008.png；Character/Player/Lelia/Animation/Normal/Base/leg_left_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_leg_right",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "d441ed8fca52af85f306b901c7b0790cade911c745f6e5d6535d459e5871de8e",
+      "bytes": 7308,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/leg_right_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/leg_right_000.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_001.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_002.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_003.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_004.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_005.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_006.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_007.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_008.png；Character/Player/Lelia/Animation/Normal/Base/leg_right_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_foot_left",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "1ba37c728de9ae0b36b03dc572fc4ffa157de0a096bfbf8e7b34986789857617",
+      "bytes": 5776,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_left_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/foot_left_000.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_001.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_002.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_003.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_004.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_005.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_006.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_007.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_008.png；Character/Player/Lelia/Animation/Normal/Base/foot_left_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_foot_right",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "3df53766f82a2bc4eade2a32edb343cf91e9cddf55a19d2f9546206d098f8525",
+      "bytes": 6483,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/foot_right_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/foot_right_000.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_001.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_002.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_003.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_004.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_005.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_006.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_007.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_008.png；Character/Player/Lelia/Animation/Normal/Base/foot_right_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_skirt",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "0df5a9470f5e28985eec1b055f49337fecd50cb718edcff5e84f98dd5bcd0981",
+      "bytes": 9374,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/skirt_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/skirt_000.png；Character/Player/Lelia/Animation/Normal/Base/skirt_001.png；Character/Player/Lelia/Animation/Normal/Base/skirt_002.png；Character/Player/Lelia/Animation/Normal/Base/skirt_003.png；Character/Player/Lelia/Animation/Normal/Base/skirt_004.png；Character/Player/Lelia/Animation/Normal/Base/skirt_005.png；Character/Player/Lelia/Animation/Normal/Base/skirt_006.png；Character/Player/Lelia/Animation/Normal/Base/skirt_007.png；Character/Player/Lelia/Animation/Normal/Base/skirt_008.png；Character/Player/Lelia/Animation/Normal/Base/skirt_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_chest",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "6c5f905cf471187cd25489c929526348936bbe0e6b4b7831c7fa68aec0fffd6c",
+      "bytes": 10232,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/chest_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/chest_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/chest_000.png；Character/Player/Lelia/Animation/Normal/Base/chest_001.png；Character/Player/Lelia/Animation/Normal/Base/chest_002.png；Character/Player/Lelia/Animation/Normal/Base/chest_003.png；Character/Player/Lelia/Animation/Normal/Base/chest_004.png；Character/Player/Lelia/Animation/Normal/Base/chest_005.png；Character/Player/Lelia/Animation/Normal/Base/chest_006.png；Character/Player/Lelia/Animation/Normal/Base/chest_007.png；Character/Player/Lelia/Animation/Normal/Base/chest_008.png；Character/Player/Lelia/Animation/Normal/Base/chest_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_arm_left",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "e723fb1e8be86d90034b8e1ee18b6ade8d1a87879b2170360988b54461de886b",
+      "bytes": 6415,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_left_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/arm_left_000.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_001.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_002.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_003.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_004.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_005.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_006.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_007.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_008.png；Character/Player/Lelia/Animation/Normal/Base/arm_left_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_arm_right",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "3173340366cd1b819ebce42c1308e41bfb0721cb74117e00471f322b38929bbe",
+      "bytes": 6742,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/arm_right_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/arm_right_000.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_001.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_002.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_003.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_004.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_005.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_006.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_007.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_008.png；Character/Player/Lelia/Animation/Normal/Base/arm_right_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_head",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "c8a57ab29f0fc6f25151f64ba69d115f65fd8cba175e1121f722b38f4404b4d0",
+      "bytes": 9300,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/head_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/head_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/head_000.png；Character/Player/Lelia/Animation/Normal/Base/head_001.png；Character/Player/Lelia/Animation/Normal/Base/head_002.png；Character/Player/Lelia/Animation/Normal/Base/head_003.png；Character/Player/Lelia/Animation/Normal/Base/head_004.png；Character/Player/Lelia/Animation/Normal/Base/head_005.png；Character/Player/Lelia/Animation/Normal/Base/head_006.png；Character/Player/Lelia/Animation/Normal/Base/head_007.png；Character/Player/Lelia/Animation/Normal/Base/head_008.png；Character/Player/Lelia/Animation/Normal/Base/head_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_hair",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "4f05257926f09b7c8af7039df00d8324bc5357e6bd78a3af0222cc2e6a4829e5",
+      "bytes": 7554,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/hair_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/hair_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/hair_000.png；Character/Player/Lelia/Animation/Normal/Base/hair_001.png；Character/Player/Lelia/Animation/Normal/Base/hair_002.png；Character/Player/Lelia/Animation/Normal/Base/hair_003.png；Character/Player/Lelia/Animation/Normal/Base/hair_004.png；Character/Player/Lelia/Animation/Normal/Base/hair_005.png；Character/Player/Lelia/Animation/Normal/Base/hair_006.png；Character/Player/Lelia/Animation/Normal/Base/hair_007.png；Character/Player/Lelia/Animation/Normal/Base/hair_008.png；Character/Player/Lelia/Animation/Normal/Base/hair_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_hero_shoulder_right",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 10,
+      "frameSize": "180x180",
+      "sha256": "8da46b29da6b69ce1d61b48289e33e81c99c4717697dd29b5a96c75758dd3e90",
+      "bytes": 5990,
+      "sources": [
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_000.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_001.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_002.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_003.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_004.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_005.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_006.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_007.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_008.png",
+        "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_009.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Player/Lelia/Animation/Normal/Base/shoulder_right_000.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_001.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_002.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_003.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_004.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_005.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_006.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_007.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_008.png；Character/Player/Lelia/Animation/Normal/Base/shoulder_right_009.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_boss_walk",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 7,
+      "frameSize": "92x160",
+      "sha256": "73018072a952e202ae7295c5267c79c8cb66e952a10629d486c3b1730301dbca",
+      "bytes": 6529,
+      "sources": [
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_000.png",
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_001.png",
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_002.png",
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_003.png",
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_004.png",
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_005.png",
+        "Character/Enemy/Slug_Boss/Go/slug_boss_go1_006.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Slug_Boss/Go/slug_boss_go1_000.png；Character/Enemy/Slug_Boss/Go/slug_boss_go1_001.png；Character/Enemy/Slug_Boss/Go/slug_boss_go1_002.png；Character/Enemy/Slug_Boss/Go/slug_boss_go1_003.png；Character/Enemy/Slug_Boss/Go/slug_boss_go1_004.png；Character/Enemy/Slug_Boss/Go/slug_boss_go1_005.png；Character/Enemy/Slug_Boss/Go/slug_boss_go1_006.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_spider_body",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 3,
+      "frameSize": "140x140",
+      "sha256": "b06eb54d49be21af4aa3824255763e0e0f4bc6ccf7fb67824a1b37c9722fa97a",
+      "bytes": 3964,
+      "sources": [
+        "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_000.png",
+        "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_001.png",
+        "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_002.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_000.png；Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_001.png；Character/Enemy/Spider_Huntsman/Front/spider_huntsman_front_body_002.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "book_deco2",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "2bb9aebb7374f36d3123ad6eaa4557832b3a8d407e7323fb29501347b49e8e3e",
+      "bytes": 883,
+      "sources": [
+        "Bg/Object/Cathedral/book_deco2.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Cathedral/book_deco2.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "book_deco3",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "b27addcf2938e7c1632a501746df9e0b2fb0863a5cf6bacd616a8160f1d10ced",
+      "bytes": 1262,
+      "sources": [
+        "Bg/Object/Cathedral/book_deco3.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Cathedral/book_deco3.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "book_face_spine1",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "ad9bfb0df4425dbc44da18da5fb55914973b13cc94adc9f40d123b6ddf313443",
+      "bytes": 348,
+      "sources": [
+        "Bg/Object/Cathedral/book_face_spine1.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Cathedral/book_face_spine1.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "birdcage3",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "6c8302ff164317061335401ca307d058a8dfa1acc253e967d4a73d1e62e82fff",
+      "bytes": 812,
+      "sources": [
+        "Bg/Object/Cathedral/birdcage3.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Cathedral/birdcage3.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "barrel4",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "bf9eee6ab29bb5c4ca014ea790885d1f30af517f604b62dd5be7809dc5678e5b",
+      "bytes": 1187,
+      "sources": [
+        "Bg/Object/Cathedral/barrel4.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Cathedral/barrel4.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "lectern2",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "89056aaa8869825eb460ebaf7736390e7f93d77a641145acafc8a4a1d381136f",
+      "bytes": 1368,
+      "sources": [
+        "Bg/Object/Home/Monastery/lectern2.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Home/Monastery/lectern2.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sample_box",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "a33a55e3caa59c71128eda9fa544f6cb2dffd7e6097c10abac94dbcb2fe87a7b",
+      "bytes": 1402,
+      "sources": [
+        "Bg/Terrain/Dungeon_Sewage/Area_Boss/sample_box.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Terrain/Dungeon_Sewage/Area_Boss/sample_box.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "treasure_box1_004",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "1c761aec809186f3e77d99fe268da88054b3b1e7dee7b62a9131ae7c9dbdbf1d",
+      "bytes": 3437,
+      "sources": [
+        "Bg/Terrain/Dungeon_Sewage/Area_Boss/treasure_box1_004.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Terrain/Dungeon_Sewage/Area_Boss/treasure_box1_004.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "spider_bullet_hold1",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "d7c1a69b27d03b05b4863583a63fe712fa07a39cc8f5c1aada3065d61f5cd2e6",
+      "bytes": 270,
+      "sources": [
+        "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "spider_bullet_hold2",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "70e9c4ffb9a753ab112b39bbc42e6be85a2b0a550c61d0c76925208c8eebd2aa",
+      "bytes": 276,
+      "sources": [
+        "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "bg_cathedral_library_boss",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "013c3c794c1fb0208d04f517d191deda85f72cd68cd9921dcd1f88f8eafa6c0a",
+      "bytes": 321759,
+      "sources": [
+        "Bg/Object/Cathedral/bg_cathedral_library_boss.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Cathedral/bg_cathedral_library_boss.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "isigaki",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "31491bc12826d5713a83f6c843022f88a616158e4a636092da845b76f592576c",
+      "bytes": 70242,
+      "sources": [
+        "Bg/Sirohone/StoneWall_1031/isigaki.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Sirohone/StoneWall_1031/isigaki.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    }
+  ]
+}

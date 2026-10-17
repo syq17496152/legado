@@ -1,0 +1,74 @@
+/* 幽夜回廊 · 动效（逐帧精灵动画 / 战斗节奏 / 浮尘 / 牺牲场景 / 进页动效）
+   纪律（对齐 archive）：只做有限动效、无计时器、无 WebGL；`html[data-reader-motion="paused"]` 即全部停摆。 */
+
+/* 主角：12 层部件共用一个 steps(10) 时间基 ⇒ 严格同步 */
+@keyframes dh-walk { from { background-position: 0 0 } to { background-position: -1800px 0 } }
+
+/* 敌方逐帧序列（整帧精灵表横向拼接，像素零改动） */
+@keyframes dh-boss { from { background-position: 0 0 } to { background-position: -644px 0 } }
+@keyframes dh-spider { from { background-position: 0 0 } to { background-position: -420px 0 } }
+
+/* 回合推进：敌方在页眉内向主角方向压近（原地往返，不触发整页重排） */
+@keyframes dh-advance { 0% { transform: translateX(0) } 100% { transform: translateX(-22px) } }
+
+/* 斩击闪光（CSS 自绘；不用素材） */
+@keyframes dh-slash {
+  0%, 72% { opacity: 0; transform: rotate(-24deg) scaleX(.2) }
+  80% { opacity: .95; transform: rotate(-24deg) scaleX(1) }
+  90%, 100% { opacity: 0; transform: rotate(-24deg) scaleX(1.12) }
+}
+
+/* 弹道飞行（一次飞行 = 一条弧线；循环即"下一发"，无累积对象） */
+@keyframes dh-flight {
+  0% { transform: translate(0, 0); opacity: 0 }
+  14% { opacity: 1 }
+  62% { transform: translate(178px, -26px); opacity: 1 }
+  72%, 100% { transform: translate(214px, -34px); opacity: 0 }
+}
+
+/* 浮尘上升 */
+@keyframes dh-rise {
+  0% { transform: translate(0, 0); opacity: 0 }
+  42% { opacity: .9 }
+  100% { transform: translate(6px, -48px); opacity: 0 }
+}
+
+/* 牺牲场景渐显 */
+@keyframes dh-requiem-in { from { opacity: 0 } to { opacity: 1 } }
+
+/* —— 挂载 —— */
+.dh-rig .dh-p { animation: dh-walk .82s steps(10) infinite }
+.dh-foe-boss .dh-f { animation: dh-boss .72s steps(7) infinite }
+.dh-foe-boss { animation: dh-advance 3s ease-in-out infinite alternate }
+.dh-foe-spider .dh-f { animation: dh-spider .94s steps(3) infinite }
+.dh-foe-spider { animation: dh-advance 3.8s ease-in-out infinite alternate }
+.dh-slash { animation: dh-slash 2.6s ease-out infinite }
+.dh-bullet { animation: dh-flight 3.4s linear infinite }
+.dh-motes i { animation: dh-rise 5.2s ease-in-out infinite }
+.dh-page.dh-fallen .dh-requiem { animation: dh-requiem-in .6s ease-out both }
+
+/* 浮尘错相位（动画延迟不计入声明预算） */
+.dh-motes i:nth-child(2) { animation-delay: -1s }
+.dh-motes i:nth-child(3) { animation-delay: -2.2s }
+.dh-motes i:nth-child(4) { animation-delay: -3.1s }
+.dh-motes i:nth-child(5) { animation-delay: -4.3s }
+.dh-foe-spider { animation-delay: -.6s }
+.dh-bullet { animation-delay: -1.4s }
+
+/* 进页动效（archive 契约 R6：data-reader-entry pending → playing）：用过渡实现，不额外占帧序列预算 */
+.dh-hero, .dh-paper, .dh-hud, .dh-stage { transition: opacity .5s ease-out }
+.dh-hero, .dh-hud { transition-delay: .1s }
+[data-reader-entry="pending"] .dh-hero,
+[data-reader-entry="pending"] .dh-paper,
+[data-reader-entry="pending"] .dh-hud,
+[data-reader-entry="pending"] .dh-stage { opacity: 0; transition: none }
+
+/* 动效闸门：专注模式 / 水墨屏 / 省电 ⇒ running→paused 时全部停摆并保留姿态 */
+html[data-reader-motion="paused"] .dh-page,
+html[data-reader-motion="paused"] .dh-page * { animation-play-state: paused }
+
+/* 尊重系统"减少动态效果"：整页动效静默，静态帧与装饰保留（观感不塌） */
+@media (prefers-reduced-motion: reduce) {
+  .dh-page, .dh-page * { animation: none !important }
+  .dh-hero, .dh-paper, .dh-hud, .dh-stage { transition: none !important; opacity: 1 !important }
+}

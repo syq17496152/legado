@@ -151,6 +151,17 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 - **铁律**：禁止删 hook / 改门禁为恒 PASS / 注释 CI job 绕卡点；跳过唯一通道 `SKIP_GATES=1` + 三处留痕
 > 起因：26 份子规范卡点散落、无归属矩阵、无裸奔清单 ⇒ AI 不知「哪一步必须做什么」⇒ 必然漏（本轮已实证 5 条强制子规范漏载 + 取色门禁从未接线）。
 
+### 11. 素材生产禁令（禁调用生图模型｜2026-10-17 用户裁定）
+**禁止调用 AI 生图模型（内置 `GenerateImage` / 外部文生图接口）产出任何入库图片素材**。图片一律通过**代码化手段**产出：
+① **Python 程序化绘图**（Pillow / pycairo / skia / SVG 生成）；
+② **前端页面渲染后截图**（自包含 HTML/SVG/Canvas + 无头浏览器 Playwright 截图）；
+③ 手写 **SVG/CSS/Canvas** 直接入库。
+适用范围：主题素材、插画、纹理、图标、页眉页脚饰品等**一切进入仓库的图片**。
+- **理由**：生图模型产物不可复现、不可版本化、许可与来源不可控
+- **落地要求**：每个图片资产必须**能由随仓脚本或渲染页重放生成**（生成脚本/渲染页面与资产一并入库；`sources.json` 登记生成方式）
+- **门禁**：新增图片必须登记素材台账并可由脚本复现；交付前审计（见 `docs/specs/reader-theme-family/analysis/asset-rules.md`）
+> 判定：违反即视为素材不合规，**不得交付**。
+
 ## 记忆系统（memory-mechanism-redesign，AD-11 已启用）
 | 配置项 | 值 |
 |--------|-----|

@@ -21,15 +21,16 @@ internal object ReaderTemplateSelection {
     const val FollowTheme = ""
 
     /** 暗色主题默认款偏好序列（首位为设计指定的默认模板）。 */
-    val NightPreference = listOf("builtin.neon-night")
+    val NightPreference = listOf("builtin.dungeon-hud")
 
     /**
      * 浅色主题默认款偏好序列。
      *
-     * 设计指定浅色默认款为「极简科技」（A4）；A4（`builtin.minimal-tech`）已随 4.12 交付 ⇒
-     * 插到首位生效；其后为「素笺」兜底（老用户若只保留旧套系也不会落空）。
+     * 2026-10-17 用户裁定：原有 11 套内置主题（霓虹夜行 / 素笺 / 极简科技 …）**全部删除**，
+     * 内置仅保留新主题「幽夜回廊」（游戏渲染界面范式，日/夜/水墨屏三态由同一套自适配）。
+     * ⇒ 昼夜两序列当前指向同一套；后续新增内置主题时按设计插到对应序列首位即可，无需改本策略。
      */
-    val DayPreference = listOf("builtin.minimal-tech", "builtin.minimal-ink")
+    val DayPreference = listOf("builtin.dungeon-hud")
 
     fun isFollowTheme(appliedTemplateId: String): Boolean = appliedTemplateId.isBlank()
 
