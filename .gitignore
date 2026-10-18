@@ -255,3 +255,8 @@ git_log.txt
 # modules/web 已迁移为独立 git 仓库（remote: syq17496152/legadoM-web），主仓库不再跟踪其内容；
 # 本地目录与文件保持不变，仅做「主仓库忽略 + 目录内关联远端」。
 /modules/web/
+
+# === 书源批量治理本地产物（不入库：含业务数据/一次性工具，2026-10-18）===
+/皮皮喵漫画书源_*.json
+/ppcat2legado转换器.py
+/.trae-html-share-packages/
