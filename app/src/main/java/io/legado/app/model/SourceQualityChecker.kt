@@ -140,6 +140,17 @@ class SourceQualitySession(val options: ProbeOptions) {
         domainCache[domainCacheKey(url)] = reachable
     }
 
+    /** 【AD-04，2026-10-18】**域名缓存只缓存正向**：
+     * 负向结果受**瞬时网络 / 站点盾 / 限流**影响，一旦跨源复用就把「一个源失败」连坐成**整 host 全失败**
+     * （真机巡检 2502 条 DOMAIN 失败里含大量同 host 源；8282 事故同族）。⇒ 负向不缓存、逐源复探。
+     */
+    fun cacheDomainPositiveOnly(url: String, reachable: Boolean) {
+        positiveOnlyCacheValue(reachable)?.let { putDomainCached(url, it) }
+    }
+
+    /** 【AD-03，2026-10-18】最近一次「真实请求探测」的结构化失败原因（旧实现 `runCatching` 吞错 ⇒ 报告里恒 `NONE`）。 */
+    var lastDomainError: String? = null
+
     /**
      * 同 host 试采限额：返回 null 表示超限（调用方按该 host 首次结果推断），否则返回是否允许本次真实试采
      */
@@ -163,6 +174,12 @@ class SourceQualitySession(val options: ProbeOptions) {
         const val HOST_PROBE_LIMIT = 8
     }
 }
+
+/**
+ * 【AD-04】域名缓存决策（**纯函数**，便于 JVM 单测 —— 会话对象含 Android 依赖，JVM 下不可实例化）。
+ * 返回 `null` = **不入缓存**（负向；避免跨源复用造成整 host 连坐）。
+ */
+internal fun positiveOnlyCacheValue(reachable: Boolean): Boolean? = if (reachable) true else null
 
 /**
  * 源质量校验公共组件（单源探测核心）
@@ -429,19 +446,22 @@ object SourceQualityChecker {
         }
         // Socket 快探（平移自 CheckSourceService.isDomainReachable）
         var reachable = isDomainReachable(url)
+        session.lastDomainError = null
         if (!reachable) {
             // 真实请求复探（平移自 checkDomainReachable，超时受 options 硬控）
-            val (ok, host) = checkDomainReachable(source, session.options.timeout)
+            val (ok, host) = checkDomainReachable(source, session.options.timeout, session)
             reachable = ok
             if (!host.isNullOrBlank() && source.lastHost.isNullOrBlank()) {
                 source.lastHost = host
             }
         }
-        session.putDomainCached(url, reachable)
+        session.cacheDomainPositiveOnly(url, reachable)   // 【AD-04】负向不缓存
         dims[QualityDim.DOMAIN] = if (reachable) {
             DimResult(DimState.PASS, evidence = "域名可达")
         } else {
-            DimResult(DimState.FAIL, failedByException = true, evidence = "网址打不开")
+            // 【AD-03】把**结构化原因**写进 evidence（报告/CSV 的「消息」列据此可归因，不再是 NONE）
+            DimResult(DimState.FAIL, failedByException = true,
+                evidence = "网址打不开(${session.lastDomainError ?: "SOCKET_FAIL"})")
         }
         return if (reachable) DimState.PASS else DimState.FAIL
     }
@@ -704,8 +724,9 @@ object SourceQualityChecker {
             }
             return if (reachable) DimState.PASS else DimState.FAIL
         }
+        session.lastDomainError = null
         val reachable = isDomainReachable(url) || checkDomainReachableSimple(url, session.options.timeout)
-        session.putDomainCached(url, reachable)
+        session.cacheDomainPositiveOnly(url, reachable)   // 【AD-04】负向不缓存（防整 host 连坐）
         dims[QualityDim.DOMAIN] = if (reachable) {
             DimResult(DimState.PASS, evidence = "域名可达")
         } else {
@@ -745,7 +766,8 @@ object SourceQualityChecker {
      * 实施说明（AOAdapt 2.1）：S4 原"HEAD 优先+2MB 截断"需改公共网络路径回归风险大，
      * 以 options.timeout 硬控替代（超时即取消，内存受协程取消约束）
      */
-    suspend fun checkDomainReachable(source: BookSource, timeoutMs: Long): Pair<Boolean, String?> {
+    suspend fun checkDomainReachable(source: BookSource, timeoutMs: Long,
+                                    session: SourceQualitySession? = null): Pair<Boolean, String?> {
         return kotlin.runCatching {
             withTimeout(timeoutMs) {
                 val analyzeUrl = AnalyzeUrl(
@@ -758,7 +780,10 @@ object SourceQualityChecker {
                 val realDomain = kotlin.runCatching { URI(analyzeUrl.url).host }.getOrNull()
                 Pair(true, realDomain)
             }
-        }.getOrDefault(Pair(false, null))
+        }.getOrElse { e ->                     // 【AD-03】不再 `getOrDefault` 吞错：把原因记进会话，供报告归因
+            session?.lastDomainError = e::class.simpleName ?: "ERR"
+            Pair(false, null)
+        }
     }
 
     /**

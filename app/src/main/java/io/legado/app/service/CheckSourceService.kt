@@ -50,6 +50,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
@@ -87,6 +88,9 @@ class CheckSourceService : BaseService() {
 
     /** 生效超时：任务级覆盖优先，缺省取 [CheckSource.timeout]。 */
     private val effTimeout: Long get() = runConfig.timeoutMs ?: CheckSource.timeout
+
+    /** 【AD-10】网络类失败重试前的等待（给瞬时抖动 / 站点限流一个恢复窗口；不影响确定性失败）。 */
+    private val networkRetryDelayMs = 800L
 
     /** 生效「详情」开关：任务级覆盖优先，缺省取单例现值。 */
     private val effCheckInfo: Boolean get() = runConfig.checkInfo ?: CheckSource.checkInfo
@@ -186,19 +190,37 @@ class CheckSourceService : BaseService() {
             source.bookSourceName,
             source.bookSourceType
         )
-        kotlin.runCatching {
-            withTimeout(effTimeout) {
-                doCheckSource(source)
+        // 【AD-10，2026-10-18】网络类失败**重试一次**（治「校验所选」的系统性误杀）：
+        // 真机/模拟器实测「校验所选」在 SEARCH/DISCOVERY 段约 **1/3 的失败在本机无法复现**（见 bug_report B-52），
+        // 根因是**瞬时网络抖动 / 站点限流**被**单次失败即定论**（旧实现 `runCatching{withTimeout{…}}` 无重试）。
+        // 口径：**仅对 `FailureKind.NETWORK` 重试**（超时 / 脚本 / 规则类为确定性失败，重试只会拉长巡检时长）；
+        // 重试前 `removeInvalidGroups()` 清掉首轮写入的失效分组（否则残留标签与最终结论自相矛盾，
+        // 与「存疑放行」的清组同理）；存疑源（登录/jsLib/源变量/webView/内网）不重试，直接走跳过口径。
+        var lastError: Throwable? = null
+        var succeed = false
+        for (attempt in 0..1) {
+            val r = kotlin.runCatching {
+                withTimeout(effTimeout) {
+                    doCheckSource(source)
+                }
             }
-        }.onSuccess {
-            Debug.updateFinalMessage(source.bookSourceUrl, "校验成功")
-            // Q-N5：结果评分沿用本仓既有权重口径（不新造分数体系）
-            CheckSourceTaskStore.markPassed(
-                origin = source.bookSourceUrl,
-                durationMillis = System.currentTimeMillis() - start,
-                score = source.weight
+            if (r.isSuccess) {
+                succeed = true
+                break
+            }
+            val e = r.exceptionOrNull() ?: break
+            lastError = e
+            val retriable = shouldRetryNetworkFailure(
+                e,
+                suspectSkipLabel(SourceQualityChecker.staticSuspectsOf(source)),
+                System.currentTimeMillis() - start,
             )
-        }.onFailure {
+            if (!retriable || attempt == 1) break
+            source.removeInvalidGroups()
+            delay(networkRetryDelayMs)
+        }
+        if (!succeed) {
+            val it = lastError ?: return
             currentCoroutineContext().ensureActive()
             // 存疑源（需登录 / jsLib 依赖 / 源变量依赖 / webView 型 / 内网地址）失败时判**跳过·存疑**，
             // 不写失败分组与源注释 —— 与质检底座「存疑类不作为确定性失败证据（不误杀）」同口径；
@@ -236,6 +258,14 @@ class CheckSourceService : BaseService() {
                     failureKind = QualityReportApplier.failureKindOf(it),
                 )
             }
+        } else {
+            Debug.updateFinalMessage(source.bookSourceUrl, "校验成功")
+            // Q-N5：结果评分沿用本仓既有权重口径（不新造分数体系）
+            CheckSourceTaskStore.markPassed(
+                origin = source.bookSourceUrl,
+                durationMillis = System.currentTimeMillis() - start,
+                score = source.weight
+            )
         }
         source.respondTime = Debug.getRespondTime(source.bookSourceUrl)
     }
@@ -522,6 +552,36 @@ class CheckSourceService : BaseService() {
  */
 internal fun checkFailureGroupName(e: Throwable): String? =
     QualityReportApplier.failureKindGroup(QualityReportApplier.failureKindOf(e))
+
+/**
+ * 【AD-10，2026-10-18】网络类失败**是否值得重试**（**纯函数**，JVM 可测）。
+ *
+ * 仅「网络类异常（[FailureKind.NETWORK]）」且**非存疑源**（`suspectLabel == null`）才重试：
+ *  · 超时 / 脚本 / 规则类 = **确定性失败**，重试只会拉长巡检时长 ⇒ 不重试；
+ *  · 存疑源（登录/jsLib/源变量/webView/内网）失败**不可归因于源本身** ⇒ 走跳过口径，不重试。
+ *
+ * 依据：实测「校验所选」在 SEARCH/DISCOVERY 段约 1/3 失败**在本机无法复现**（bug_report B-52）
+ * ⇒ 单次瞬时网络抖动被定论为「网站失效」会把其实可用的源判死（用户红线：绝不误杀可用源）。
+ */
+internal fun shouldRetryNetworkFailure(
+    e: Throwable,
+    suspectLabel: String?,
+    elapsedMs: Long,
+): Boolean =
+    QualityReportApplier.failureKindOf(e) == FailureKind.NETWORK &&
+        suspectLabel == null &&
+        // **只重试「快速失败」**：实测巡检失败耗时**中位数恰为 30s**（= HTTP 连接/读取超时打满）——
+        // 这类是「该 host 在本网络栈下确实连不上（DoH 解析到不可达 IP / Cronet 请求异常）」，重试只会
+        // **再等一个超时**（巡检时长翻倍）且大概率仍失败；真正值得重试的是**瞬时抖动**（秒级失败）。
+        elapsedMs < NETWORK_RETRY_FAST_FAIL_MS
+
+/**
+ * 「快速失败」阈值（毫秒）：失败耗时低于此值才认定**瞬时抖动**并允许重试。
+ *
+ * 依据：真机报告 2815 条失败中 **2521 条（89.6%）耗时落在 30–60s 区间、中位数 30004ms**
+ * ⇒ 绝大多数是**打满超时**的确定性连不通，而非瞬时抖动。
+ */
+internal const val NETWORK_RETRY_FAST_FAIL_MS = 10_000L
 
 /**
  * 「存疑源」跳过口径（**与质检底座 [SuspectReason] 同源**，纯函数、JVM 可测）。

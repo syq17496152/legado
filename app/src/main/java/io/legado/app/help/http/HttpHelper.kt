@@ -18,10 +18,13 @@ import okhttp3.CookieJar
 import okhttp3.Credentials
 import okhttp3.Dns
 import okhttp3.HttpUrl
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import splitties.init.appCtx
 import java.io.File
+import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -177,6 +180,9 @@ val okHttpClient: OkHttpClient by lazy {
     // T4.1: 使用 DohDns 替代 RetryableDns，绕过本地 DNS 污染（SNI 阻断/本地 DNS 过滤）
     // 已知上限：DoH 服务器不可用时会回退到系统 DNS，不影响正常解析 | 升级路径：可根据用户反馈调整 DoH 服务器优先级
     builder.dns(DohDns)
+    // 【2026-10-18 · 网络层统一修复（B-54）】坏 IP 自愈拦截器：**置于最外层**（先于 Cronet/OkHttp 网络层）
+    // ⇒ Cronet 与纯 OkHttp 两条路径的连接层异常都能兜住；详见对象注释。
+    builder.addInterceptor(BadIpSelfHealInterceptor)
     if (AppConfig.isCronet) {
         if (Cronet.loader?.install() == true) {
             Cronet.interceptor?.let {
@@ -239,8 +245,10 @@ val okHttpClientManga by lazy {
  */
 val plainImportClient: OkHttpClient by lazy {
     okHttpClient.newBuilder().run {
+        // ⚠️ 坏 IP 自愈拦截器同样剔除：导入链不得污染 host 信誉（见 HostAccessStrategy 铁律）
         val filtered = interceptors().filterNot {
-            it.javaClass.name == "io.legado.app.lib.cronet.CronetInterceptor"
+            it.javaClass.name == "io.legado.app.lib.cronet.CronetInterceptor" ||
+                it === BadIpSelfHealInterceptor
         }
         interceptors().clear()
         interceptors().addAll(filtered)
@@ -408,5 +416,58 @@ suspend fun warmUpConnection(url: String) = withContext(Dispatchers.IO) {
         }
     }.onFailure {
         AppLog.putWarn("HttpHelper 预连接失败: ${it.message?.take(100)}")
+    }
+}
+
+/**
+ * 【2026-10-18 · 网络层统一修复 · B-54】**连接层失败是否值得「坏 IP 自愈 + 重试」**（纯函数，JVM 可测）。
+ *
+ * 只认**连接阶段**的失败（拿不到任何响应）：`ConnectException`（拒绝/超时）/ `NoRouteToHostException` /
+ * `SocketException`（reset/broken pipe）/ HTTP/2 `StreamResetException`；`SocketTimeoutException` **仅当其
+ * 文案是连接超时**（`connect timed out`）才计入 —— 读超时（服务端慢）重试无益，只翻倍耗时。
+ */
+internal fun isConnPhaseFailure(e: Throwable): Boolean {
+    val name = e::class.java.name
+    return when {
+        e is java.net.ConnectException -> true
+        e is java.net.NoRouteToHostException -> true
+        e is java.net.SocketTimeoutException ->
+            (e.message ?: "").contains("connect", ignoreCase = true)
+        e is java.net.SocketException -> true
+        name == "okhttp3.internal.http2.StreamResetException" -> true
+        else -> false
+    }
+}
+
+/**
+ * 【2026-10-18 · 网络层统一修复 · B-54】**坏 IP 自愈拦截器**（置 `okHttpClient` 最外层）。
+ *
+ * **背景（实测铁证）**：`DohDns` 会把部分域名解析到**不可达 IP**（「被墙 / 黑洞」段，既非回环也非
+ * 黑名单成员）；连接时 TCP SYN_SENT 挂死，**打满 callTimeout**（真机失败耗时**中位数恰 30004ms**），
+ * 而同一 host 用 `curl` / 系统 DNS **秒级可达**（实测 40 抽样中 **27 个「模拟器 curl 通 ∧ 本机通」**）。
+ * 该故障**共性影响所有走 `okHttpClient` 的链路**（书源、订阅源、图片、TTS…），不止「书源校验」。
+ *
+ * **本仓已有但从未接线的能力**：`HostAccessStrategy.reportBadIpSuspect(host)` 会把该 host 最近一次 DoH
+ * 解析出的候选 IP 全部投入**坏 IP 黑名单（TTL 2min）**，并把该 host 置**退避 30s**
+ * ⇒ 之后 `DohDns.lookup` 开头即走 `isSystemDnsPreferred`（判据 0.5）**直取系统 DNS**。
+ * 缺的只是「连接层失败时**有人来调用它**」（原注释写明「由 Cronet/OkHttp 上报」却无人上报）。
+ *
+ * **本拦截器做的事**：连接层异常 ⇒ ① `reportBadIpSuspect(host)`；② **本请求重试一次**
+ * （重试时 `DohDns` 已改走系统 DNS ⇒ 立刻可达）。仅重试一次、仅连接阶段失败，
+ * 且 `plainImportClient`/`videoStreamClient` 已剔除本拦截器（不污染导入链 host 信誉）。
+ */
+internal object BadIpSelfHealInterceptor : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        return try {
+            chain.proceed(request)
+        } catch (e: IOException) {
+            if (!isConnPhaseFailure(e)) throw e
+            val host = request.url.host
+            // 失败上报：坏 IP 黑名单 + 该 host 30s 内部退避（下次 lookup 直走系统 DNS）
+            runCatching { HostAccessStrategy.reportBadIpSuspect(host) }
+            AppLog.putDebug("HttpHelper: 连接层失败已上报坏 IP，改走系统 DNS 重试一次 host=${host.take(60)}")
+            chain.proceed(request)
+        }
     }
 }
