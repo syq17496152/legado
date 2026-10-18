@@ -720,13 +720,24 @@ object SourceQualityChecker {
         return kotlin.runCatching {
             withTimeout(2000) {
                 val url = URI(domain.substringBefore("#"))
-                val port = url.port.takeIf { it > 0 } ?: 80
+                val port = resolveDomainPort(url)
                 Socket().use { socket ->
                     socket.connect(InetSocketAddress(url.host, port), 1600)
                     true
                 }
             }
         }.getOrDefault(false)
+    }
+
+    /**
+     * 域名探测端口（AD-01，2026-10-18 修）：
+     * 旧实现 `url.port.takeIf { it > 0 } ?: 80` 对 **https 源**（`URI` 默认端口为 -1）也去连 **80**
+     * ⇒ HTTPS 站常只开 443 ⇒ Socket 快探**必然失败**（真机 8282 条域失败中约 68% 属此类误判）。
+     * 现按 **scheme** 取端口：显式端口优先，否则 https→443 / http→80。
+     */
+    internal fun resolveDomainPort(url: URI): Int {
+        url.port.takeIf { it > 0 }?.let { return it }
+        return if (url.scheme.equals("https", ignoreCase = true)) 443 else 80
     }
 
     /**
