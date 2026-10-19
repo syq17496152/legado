@@ -167,17 +167,20 @@ REGIONS = ["cathedral", "town", "grave", "cave"]
 PERFS = ["explore", "battle", "talk"]
 
 
-def matrix_case(template: dict, vp: int, vw: int) -> bool:
+def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> bool:
     """逐（区域 × 演出态）渲染构建产物，断言 CSS 属性切片**真的生效**。
 
     为什么需要：构建期的"死规则清零"只能证明"类有供给"，**证明不了属性选择器命中**
     （选择器写错 = 静默无效，症状与"没做"完全一样）。本矩阵是**产物级**自验，替代原型的目视评审。
+
+    `shots_dir` 非空时额外落**真实产物的截图**（供人工目视复核；非原型截图）。
     """
     from playwright.sync_api import sync_playwright
 
     out = REPO / ".temp" / "offline-matrix.html"
     failures = []
     stage_images = {}
+    shot_list = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
@@ -188,6 +191,11 @@ def matrix_case(template: dict, vp: int, vw: int) -> bool:
                 page.wait_for_timeout(60)
                 d = page.evaluate(MATRIX_JS)
                 label = "%s/%s" % (region, perf)
+                if shots_dir is not None:
+                    shots_dir.mkdir(parents=True, exist_ok=True)
+                    target = shots_dir / ("matrix_%s_%s.png" % (region, perf))
+                    page.screenshot(path=str(target))
+                    shot_list.append(target.name)
                 # ① 属性已就位
                 if d["region"] != region or d["perf"] != perf:
                     failures.append("%s 属性未就位（%s/%s）" % (label, d["region"], d["perf"]))
@@ -253,6 +261,8 @@ def matrix_case(template: dict, vp: int, vw: int) -> bool:
         return False
     print("[PASS] R4 结构矩阵：%d 区域 × %d 演出态 = %d 组；竖带 4 格 / 四角 4 枚 / 多帧 steps 动效 6 类全部生效"
           % (len(REGIONS), len(PERFS), len(REGIONS) * len(PERFS)))
+    if shot_list:
+        print("   产物截图 %d 张 → %s" % (len(shot_list), shots_dir))
     return True
 
 
@@ -264,6 +274,8 @@ def main() -> int:
     ap.add_argument("--paragraphs", type=int, default=400, help="正文段数（须足以溢出多页）")
     ap.add_argument("--multi", action="store_true", help="多尺寸扫描（窄屏/高屏）")
     ap.add_argument("--matrix", action="store_true", help="R4 结构矩阵自验（区域 × 演出态 12 组；产物级）")
+    ap.add_argument("--shots", action="store_true", help="矩阵模式下额外落真实产物截图（供目视复核）")
+    ap.add_argument("--shots-dir", default="", help="截图输出目录（默认为 docs/specs/.../evidence/artifact）")
     args = ap.parse_args()
 
     if not THEME.is_file():
@@ -279,7 +291,11 @@ def main() -> int:
 
     results = [run_case(vw, vp, safe, template, args.paragraphs, out) for vw, vp, safe in cases]
     if args.matrix:
-        results.append(matrix_case(template, args.vp, args.vw))
+        shots_dir = None
+        if args.shots:
+            shots_dir = Path(args.shots_dir) if args.shots_dir else (
+                REPO / "docs/specs/reader-theme-family-rework/evidence/artifact")
+        results.append(matrix_case(template, args.vp, args.vw, shots_dir))
     print("\n合计 %d/%d 通过" % (sum(results), len(results)))
     return 0 if all(results) else 1
 
