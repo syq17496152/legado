@@ -6,7 +6,7 @@
   "provenance": {
     "root": "E:\\sinisistar2_extracted\\Design",
     "script": "tools/reader-templates/prepare-dungeon-hud-assets.py",
-    "rawCount": 142
+    "rawCount": 171
   },
   "assets": [
     {
@@ -364,6 +364,120 @@
       "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
     },
     {
+      "alias": "sheet_slug_s_idle",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 7,
+      "frameSize": "180x180",
+      "sha256": "84ef8203c0a762f4af68b34b2ed948b3dfb76c8328826f085580160627d7b7a7",
+      "bytes": 6413,
+      "sources": [
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_000.png",
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_001.png",
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_002.png",
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_003.png",
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_004.png",
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_005.png",
+        "Character/Enemy/Slug_S/Animation/slug_s_idle_006.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Slug_S/Animation/slug_s_idle_000.png；Character/Enemy/Slug_S/Animation/slug_s_idle_001.png；Character/Enemy/Slug_S/Animation/slug_s_idle_002.png；Character/Enemy/Slug_S/Animation/slug_s_idle_003.png；Character/Enemy/Slug_S/Animation/slug_s_idle_004.png；Character/Enemy/Slug_S/Animation/slug_s_idle_005.png；Character/Enemy/Slug_S/Animation/slug_s_idle_006.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_frog_l_idle",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 5,
+      "frameSize": "161x161",
+      "sha256": "ba5349b70e98b8e5b546dcd07ad7d9f851979385e4a22871e983b51fdf8fad6d",
+      "bytes": 18053,
+      "sources": [
+        "Character/Enemy/Frog_L/Egg_Born/frog_l_idle_000.png",
+        "Character/Enemy/Frog_L/Egg_Born/frog_l_idle_001.png",
+        "Character/Enemy/Frog_L/Egg_Born/frog_l_idle_002.png",
+        "Character/Enemy/Frog_L/Egg_Born/frog_l_idle_003.png",
+        "Character/Enemy/Frog_L/Egg_Born/frog_l_idle_004.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Frog_L/Egg_Born/frog_l_idle_000.png；Character/Enemy/Frog_L/Egg_Born/frog_l_idle_001.png；Character/Enemy/Frog_L/Egg_Born/frog_l_idle_002.png；Character/Enemy/Frog_L/Egg_Born/frog_l_idle_003.png；Character/Enemy/Frog_L/Egg_Born/frog_l_idle_004.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_bullet_pair",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 2,
+      "frameSize": "18x15",
+      "sha256": "c39c4c78de34085ddc94d53481b7a52fe1a3512b11e4049c41d139433c9f7635",
+      "bytes": 393,
+      "sources": [
+        "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png",
+        "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png；Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_npc_villager",
+      "type": "sheet-inline",
+      "kind": "art",
+      "frames": 2,
+      "frameSize": "180x180",
+      "sha256": "e841b1c006d90c0c570c36711c7d2ba35a4247f59a560e88e945112d57ffa9c5",
+      "bytes": 2967,
+      "sources": [
+        "Character/NPC/VillagerAged/body_001.png",
+        "Character/NPC/VillagerAged/chest_003.png",
+        "Character/NPC/VillagerAged/head_001.png",
+        "Character/NPC/VillagerAged/head_002.png",
+        "Character/NPC/VillagerAged/arm_left_000.png",
+        "Character/NPC/VillagerAged/arm_right_003.png",
+        "Character/NPC/VillagerAged/foot_left_000.png",
+        "Character/NPC/VillagerAged/foot_right_000.png",
+        "Character/NPC/VillagerAged/leg_left_002.png",
+        "Character/NPC/VillagerAged/leg_right_008.png",
+        "Character/NPC/VillagerAged/shoulder_right_000.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Character/NPC/VillagerAged/body_001.png；Character/NPC/VillagerAged/chest_003.png；Character/NPC/VillagerAged/head_001.png；Character/NPC/VillagerAged/head_002.png；Character/NPC/VillagerAged/arm_left_000.png；Character/NPC/VillagerAged/arm_right_003.png；Character/NPC/VillagerAged/foot_left_000.png；Character/NPC/VillagerAged/foot_right_000.png；Character/NPC/VillagerAged/leg_left_002.png；Character/NPC/VillagerAged/leg_right_008.png；Character/NPC/VillagerAged/shoulder_right_000.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sheet_band_atlas",
+      "type": "atlas-inline",
+      "kind": "decor",
+      "labels": [
+        "rock16",
+        "stalactite_l3",
+        "pillar_dining1",
+        "wall_stone_block2_alter2"
+      ],
+      "frameSize": "256x64",
+      "sha256": "32e3cf0bfd39a944a49064efc76fc2bdbd52a0745007ca873294bb9d22dca1cb",
+      "bytes": 9246,
+      "sources": [
+        "Bg/Object/IsolationWard/rock16.png",
+        "Bg/Object/IsolationWard/stalactite_l3.png",
+        "Bg/Object/Cathedral/pillar_dining1.png",
+        "Bg/Object/Cathedral/Nouhin/wall_stone_block2_alter2.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/IsolationWard/rock16.png；Bg/Object/IsolationWard/stalactite_l3.png；Bg/Object/Cathedral/pillar_dining1.png；Bg/Object/Cathedral/Nouhin/wall_stone_block2_alter2.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
       "alias": "book_deco2",
       "type": "png-inline",
       "kind": "texture",
@@ -484,36 +598,6 @@
       "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
     },
     {
-      "alias": "spider_bullet_hold1",
-      "type": "png-inline",
-      "kind": "texture",
-      "sha256": "d7c1a69b27d03b05b4863583a63fe712fa07a39cc8f5c1aada3065d61f5cd2e6",
-      "bytes": 270,
-      "sources": [
-        "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png"
-      ],
-      "author": "原作方（用户提供解密资源）",
-      "source": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold1.png",
-      "sourceUrl": "",
-      "license": "未授权（非官方主题，仅本地装饰用途）",
-      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
-    },
-    {
-      "alias": "spider_bullet_hold2",
-      "type": "png-inline",
-      "kind": "texture",
-      "sha256": "70e9c4ffb9a753ab112b39bbc42e6be85a2b0a550c61d0c76925208c8eebd2aa",
-      "bytes": 276,
-      "sources": [
-        "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png"
-      ],
-      "author": "原作方（用户提供解密资源）",
-      "source": "Character/Enemy/Spider_Huntsman/Front/spider_bullet_hold2.png",
-      "sourceUrl": "",
-      "license": "未授权（非官方主题，仅本地装饰用途）",
-      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
-    },
-    {
       "alias": "bg_cathedral_library_boss",
       "type": "png-inline",
       "kind": "texture",
@@ -539,6 +623,36 @@
       ],
       "author": "原作方（用户提供解密资源）",
       "source": "Bg/Sirohone/StoneWall_1031/isigaki.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "house_01_2t",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "c5ac04388bf8dacb7b857ed30175dd5fd3b9d3084926b52ca88b10a402aca7c2",
+      "bytes": 308223,
+      "sources": [
+        "Bg/Object/Furniture/House/House_01_2t.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Object/Furniture/House/House_01_2t.png",
+      "sourceUrl": "",
+      "license": "未授权（非官方主题，仅本地装饰用途）",
+      "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"
+    },
+    {
+      "alias": "sample_floor1",
+      "type": "png-inline",
+      "kind": "texture",
+      "sha256": "7e9c09587aaf19cd0d3cac02a6c58281a3a5ff5ee875203f9683594141fd800c",
+      "bytes": 296187,
+      "sources": [
+        "Bg/Terrain/Road_Graveyard/sample_floor1.png"
+      ],
+      "author": "原作方（用户提供解密资源）",
+      "source": "Bg/Terrain/Road_Graveyard/sample_floor1.png",
       "sourceUrl": "",
       "license": "未授权（非官方主题，仅本地装饰用途）",
       "purpose": "幽夜回廊主题的角色/怪物/陈设/界面元素"

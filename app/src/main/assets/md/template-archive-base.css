@@ -58,8 +58,15 @@ body {
   height: 100%;
 }
 
-/* 页根安全区：archive 用它在刘海/圆角屏上留出安全边距（我方此前完全缺这一条） */
+/* 页根安全区：archive 用它在刘海/圆角屏上留出安全边距（我方此前完全缺这一条）。
+   ⚠️ `box-sizing: border-box` 是**必须同时保留**的：本元素同时带 `height:100%`（上面 `#reader-template-root`）
+   与 `padding: var(--reader-safe-*)`；缺了 border-box 时 `height:100%` 是**内容盒**高 ⇒ 页根总高 =
+   视口高 + safeTop + safeBottom ⇒ 页脚那一行被**推出视口**（真机铁证 2026-10-19：`rb=878 > vp=854`，差 +24 =
+   safe-top；真机手势导航 safeBottom>0 时页脚**整条不可见**，与用户报「页脚完全看不到」一致）。
+   `border-box` 把 safe 内边距从"额外增高"变成"内缩内容" ⇒ 页根总高恒 = 视口高。
+   对已自带 `[data-reader-page]{padding:0}` 的 archive 主题零影响（archive 本就把 safe 挪到页根自己身上消费）。 */
 [data-reader-page] {
+  box-sizing: border-box;
   padding: var(--reader-safe-top) var(--reader-safe-right) var(--reader-safe-bottom)
     var(--reader-safe-left);
 }

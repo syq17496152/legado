@@ -1,6 +1,9 @@
-<article class="dh-page dh-opening">
+<article class="dh-page dh-opening" data-dh-region="cathedral" data-dh-perf="explore">
   <div class="dh-grain" aria-hidden="true"></div>
   <div class="dh-motes" aria-hidden="true"><i></i><i></i><i></i></div>
+  <!-- R4 左右两侧**竖区域**点缀（对齐 archive 的左右竖带做法；4 小件合并成 1 张图集 ⇒ data: 只 +1） -->
+  <div class="dh-band dh-band-l" aria-hidden="true"><i class="dh-b0"></i><i class="dh-b1"></i></div>
+  <div class="dh-band dh-band-r" aria-hidden="true"><i class="dh-b2"></i><i class="dh-b3"></i></div>
   <header class="dh-stage" aria-hidden="true">
     <div class="dh-sky"></div>
     <div class="dh-props"><i class="dh-prop-a"></i><i class="dh-prop-b"></i><i class="dh-prop-c"></i><i class="dh-prop-d"></i></div>
@@ -10,14 +13,25 @@
       <i class="dh-p dh-p-chest"></i><i class="dh-p dh-p-arm_left"></i><i class="dh-p dh-p-arm_right"></i>
       <i class="dh-p dh-p-head"></i><i class="dh-p dh-p-hair"></i><i class="dh-p dh-p-shoulder_right"></i>
     </div>
+    <!-- R4 敌方阵容 ≥4 种：按**区域**显隐（专属阵容），按**演出态**决定是否上场 -->
     <div class="dh-foe dh-foe-boss"><i class="dh-f"></i></div>
-    <div class="dh-slash"></div>
+    <div class="dh-foe dh-foe-spider"><i class="dh-f"></i></div>
+    <div class="dh-foe dh-foe-slug"><i class="dh-f"></i></div>
+    <div class="dh-foe dh-foe-frog"><i class="dh-f"></i></div>
+    <!-- R4 NPC（对话演出在场者；2 帧整身动图 from 分层部件合成） -->
+    <div class="dh-npc"><i class="dh-n-f"></i></div>
+    <!-- R4 技能/弹道特效 3 类（斩击 / 多帧弹道 / 冲击波） -->
+    <div class="dh-fx dh-fx-slash"></div>
+    <div class="dh-fx dh-fx-bolt"><i></i></div>
+    <div class="dh-fx dh-fx-burst"></div>
     <div class="dh-plate"><b>CH.01</b><span data-reader-field="chapterTitle">石砌的祷声</span></div>
+    <div class="dh-talk"><b>NPC</b><span>「你终于来了。」</span></div>
     <div class="dh-requiem"><b>REQUIEM</b><em>她未归</em></div>
   </header>
   <main class="dh-paper">
     <div class="dh-frame" aria-hidden="true"></div>
-    <i class="dh-corner dh-c-tl" aria-hidden="true"></i><i class="dh-corner dh-c-br" aria-hidden="true"></i>
+    <i class="dh-corner dh-c-tl" aria-hidden="true"></i><i class="dh-corner dh-c-tr" aria-hidden="true"></i>
+    <i class="dh-corner dh-c-bl" aria-hidden="true"></i><i class="dh-corner dh-c-br" aria-hidden="true"></i>
     <span class="dh-tab" aria-hidden="true">冒险手记</span>
     <section class="dh-body" data-reader-flow="body" data-reader-flow-pagination="columns"></section>
   </main>

@@ -43,10 +43,36 @@
     return value;
   }
 
+  /** R4 导演：把**分页序号**映射为「区域」与「演出态」，写在页壳的 `data-dh-*` 上由 CSS 切片。
+   *
+   *  为什么必须在 JS 里做：模板运行时只提供 `firstPageHtml` / `otherPageHtml` 两个 HTML 通道
+   *  （没有"第 3 个壳"）⇒ "多区域 / 多演出态"只能靠**同一份 HTML + 属性驱动**（见 spec R4 第 12 条）。
+   *
+   *  映射纪律（保证观感"推进"而不是"闪烁"）：
+   *   · **区域**按**章内进度**分四段（4 区轮换，`cathedral → town → grave → cave`）
+   *     ⇒ 一次翻页不会跳区；`pageChange`/`beforePage` 上都调用（换壳会整块替换页壳，属性会丢）。
+   *   · **演出态**按页号轮换（探索 / 打怪 / 对话）；**末页恒为对话**（收束），
+   *     与 `.dh-fallen`（牺牲场景）共同承担"结尾演出"。
+   *  幂等：属性不变则不写（避免无谓的属性变更触发样式重算）。 */
+  var REGIONS = ['cathedral', 'town', 'grave', 'cave'];
+  var PERFS = ['explore', 'battle', 'talk'];
+  function direct(event) {
+    var root = shell(event);
+    if (!root || !root.setAttribute) return;
+    var total = rt.pageCount > 0 ? rt.pageCount : 1;
+    var index = rt.pageIndex >= 0 ? rt.pageIndex : 0;
+    var perRegion = Math.max(1, Math.ceil(total / REGIONS.length));
+    var region = REGIONS[Math.min(REGIONS.length - 1, Math.floor(index / perRegion))];
+    var perf = index >= total - 1 ? 'talk' : PERFS[index % PERFS.length];
+    if (root.getAttribute('data-dh-region') !== region) root.setAttribute('data-dh-region', region);
+    if (root.getAttribute('data-dh-perf') !== perf) root.setAttribute('data-dh-perf', perf);
+  }
+
   /** 同步蓝条与牺牲场景。幂等：可被任意钩子重复调用。 */
   function sync(event) {
     var root = shell(event);
     if (!root) return;
+    direct(event);
     var total = rt.pageCount > 0 ? rt.pageCount : 1;
     var read = Math.min(1, (rt.pageIndex + 1) / total);
     root.style.setProperty('--dh-stamina', String(Math.max(0, (1 - read) * 100)));

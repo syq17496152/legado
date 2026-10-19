@@ -158,6 +158,10 @@
   /** 最近一次结算实际生效的占位（诊断自证用；见 [reportPageFrame]）。 */
   var shellChromeNow = 0;
 
+  /** 最近一次占位拆解（上占位 = 页眉/装饰带；下占位 = 页脚/装饰带）——R2 负占位链的取证依据。 */
+  var shellChromeTop = NaN;
+  var shellChromeBottom = NaN;
+
   /** 最近一次占位量取的 rect 事实（诊断自证用；"占位不对"时能一眼看出是上/下哪一段错）。 */
   var shellRectDebug = '';
   /**
@@ -196,12 +200,30 @@
       rr = null;
       sr = null;
     }
+    shellChromeTop = NaN;
+    shellChromeBottom = NaN;
     if (rr && sr) {
+      // ⚠️ 上占位必须取**槽的视口顶** `sr.top`（不是 `sr.top - rr.top`）：根壳自身离视口顶还有一段
+      // 偏移（实测 10px，来自沙箱宿主文档）——只算"根壳内"的相对量会漏掉它，页框总高多 10px ⇒
+      // 页脚沿被挤出视口（真机实测：内容底 864 > 视口 854）。目标口径 = **内容底边贴视口底**。
       var top = sr.top;
       var bottom = rr.bottom - sr.bottom;
+      // ⚠️ **负下占位守门**（2026-10-19 铁证，R2）：正文槽若**未受显式高度约束**（作者 CSS 让正文槽
+      // 随内容自由增高，如本仓内置主题的历史写法），`槽 rect.bottom` 会**远超根壳底** ⇒ 下占位为
+      // **负值**（实测 −8341）⇒ `total = 上占位 + 下占位` 变小到负 ⇒ `可见高 = vp − total` 变成
+      // **整章内容高**（实测 h=9020 ≈ 261 行 × 34.56）⇒ 分页退化为"整章一屏"、`page`/`body` 恒 0
+      // ⇒ 双向翻页失效（用户报"只能翻下一页、无法翻上一页"）。
+      // 负下占位**不是"页脚占位"的合法量**（它只是"槽溢出"的副产品）⇒ 截零，回落到"仅页眉占位"口径，
+      // 余量交给 [correctFrameHeight] 的贴底校正兜（它按根壳底 vs 视口底的真实布局事实收敛）。
+      if (!isFinite(bottom) || bottom < 0) {
+        bottom = 0;
+      }
       total = top + bottom;
+      shellChromeTop = top;
+      shellChromeBottom = bottom;
       shellRectDebug = 'rt' + Math.round(rr.top) + ',rb' + Math.round(rr.bottom) +
         ',st' + Math.round(sr.top) + ',sb' + Math.round(sr.bottom) +
+        ',top' + Math.round(top) + ',bot' + Math.round(bottom) +
         ',sy' + Math.round(window.scrollY || 0);
     }
     var prev = chromeByShell[key];
@@ -543,6 +565,15 @@
         // 按壳占位与壳名（本次修复的自证）：`chrome` 与实际生效占位不一致才能看出
         // "续页仍按首页占位扣减"（症状＝页脚上移、页脚后留白），也才能与 `shell` 对照定位
         ',chromeNow=' + Math.round(shellChromeNow) + ',shell=' + shellName() +
+        // 占位拆解（R2 取证）：`ctop`/`cbot` 分别给出上/下占位 —— 只有拆开才能看出
+        // "下占位是否为负"（负值即"槽自增高溢出根壳"的直接证据，是分页退化为整章高的成因）。
+        ',ctop=' + (isFinite(shellChromeTop) ? Math.round(shellChromeTop) : -1) +
+        ',cbot=' + (isFinite(shellChromeBottom) ? Math.round(shellChromeBottom) : -1) +
+        // 宽度维度（R6 前置）：`vw` 沙箱视口宽 + 页根左右边界 `pl`/`pr` —— 缺了它们，
+        // 用户报的"左右比原版窄一点"**无法证伪**（旧自证串只有高度类字段）。
+        ',vw=' + Math.round((document.documentElement && document.documentElement.clientWidth) || 0) +
+        ',pl=' + (rootRect ? Math.round(rootRect.left) : -1) +
+        ',pr=' + (rootRect ? Math.round(rootRect.right) : -1) +
         // 占位量取的 rect 事实（`crf`：根壳/槽的视口 rect 与滚动位）：「占位不对」时一眼看出是哪一段错
         ',crf=' + shellRectDebug +
         ',empty=' + Math.round(slotEmptyHeight) +

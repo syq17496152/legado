@@ -16,8 +16,13 @@
 
   /* 全幅底图单源：同一张图在页眉/纸页/页脚三处取不同景位 ⇒ 只内联一份字节 */
   --dh-scene: url("{{asset:bg_cathedral_library_boss}}");
-  /* 可平铺石墙纹理（512×512）：纸页的岩石底纹 */
+  /* 可平铺石墙纹理（512×512）：纸页的岩石底纹 **+ 区域 4（岩窟）底图** */
   --dh-stone: url("{{asset:isigaki}}");
+  /* R4 区域底图（实拍，后两张已**等比降采样**）：城镇屋舍 / 墓道地面 */
+  --dh-town: url("{{asset:house_01_2t}}");
+  --dh-grave: url("{{asset:sample_floor1}}");
+  /* R4 左右竖带点缀（4 小件合并为 1 张横向图集） */
+  --dh-band: url("{{asset:sheet_band_atlas}}");
 
   /* 三态之一「日间」—— 冷灰石室（暗黑系石质，非暖羊皮；与软件浅色主题协调） */
   --reader-text-color: #171614;
@@ -81,6 +86,13 @@ html[data-rp-decoration="light"] { --dh-deco: .45 }
 html[data-rp-decoration="medium"] { --dh-deco: .72 }
 html[data-rp-decoration="strong"] { --dh-deco: 1 }
 
+/* —— 页根安全区 reset（R1，archive 同款约定）——
+   引擎基线把 `--reader-safe-*` 作为**内边距**施加在页根 `[data-reader-page]` 上；本主题的页眉是
+   **全幅出血**设计（场景带本就该越过系统栏）⇒ 不需要这层内边距，显式清零。
+   与引擎侧 `[data-reader-page]{box-sizing:border-box}` 共同保证 **页根总高恒 = 视口高**
+   ⇒ 页脚不再被推出视口（真机铁证：`rb=878 > vp=854`，差 +24 = safe-top）。 */
+[data-reader-page] { padding: 0 }
+
 body {
   margin: 0;
   color: var(--reader-text-color);
@@ -89,21 +101,26 @@ body {
 }
 
 /* —— 三行约束壳：场景带 / 正文 1fr / HUD ——
-   装饰与插画全部 absolute ⇒ 增删装饰不改变正文测量与页数。 */
+   装饰与插画全部 absolute ⇒ 增删装饰不改变正文测量与页数。
+   ⚠️ 行高口径（R1，2026-10-19）：**页眉行 + 页脚行 ≤ 0.2 × 视口高**（保正文区 ≥80%，跨尺寸）。
+   离线实测（`tools/reader-templates/verify-geometry-offline.py --multi`）标定：
+     · 360×640 是**最紧**的一档（预算 128px）⇒ 页眉 min 48 / 页脚 min 44 才达标；
+     · 高屏（≥854）由 `vh` 与上限共同约束（页眉 ≤80、页脚 ≤56）。
+   密度靠**层数**补（多层叠加/多动效），**不靠高度**。 */
 .dh-page {
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-rows: clamp(96px, 13.5vh, 138px) minmax(0, 1fr) 62px;
+  grid-template-rows: clamp(48px, 7.4vh, 80px) minmax(0, 1fr) clamp(44px, 6.5vh, 56px);
   box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-width: 0;
   overflow: hidden;
-  padding: 0 14px 10px;
+  padding: 0 14px 6px;
   background: var(--reader-page-background);
 }
-.dh-marching { grid-template-rows: clamp(72px, 10.5vh, 108px) minmax(0, 1fr) 62px }
+.dh-marching { grid-template-rows: clamp(40px, 6vh, 64px) minmax(0, 1fr) clamp(44px, 6.5vh, 56px) }
 
 /* 整页叠加层：暗角 + 石纹斜纹（z-index:-1，不参与测量） */
 .dh-page::before {
@@ -198,11 +215,10 @@ body {
 .dh-foe-boss .dh-f { background-image: url("{{asset:sheet_boss_walk}}"); background-size: 644px 160px; transform: scale(1.15) }
 .dh-foe-spider { left: 8%; bottom: -75px; width: 140px; height: 140px }
 .dh-foe-spider .dh-f { background-image: url("{{asset:sheet_spider_body}}"); background-size: 420px 140px; transform: scale(1.15) }
-/* 弹道（绝对定位，周期飞过，不占正文） */
-.dh-bullet { position: absolute; left: 30%; top: 42%; width: 15px; height: 16px; opacity: calc(var(--dh-deco)) }
-.dh-bullet i { display: block; width: 100%; height: 100%; background: url("{{asset:spider_bullet_hold1}}") center/contain no-repeat }
-/* 斩击闪光（CSS 自绘，不用素材） */
-.dh-slash {
+/* 弹道（绝对定位，周期飞过，不占正文）—— R4 改用两帧精灵表，见 `.dh-fx-bolt`（旧 `.dh-bullet` 已删） */
+/* 斩击闪光（CSS 自绘，不用素材）—— 类名 `dh-fx-slash` 与 HTML 一致（R4 统一到 `dh-fx` 族，
+   避免"CSS 声明了类但 HTML 从不出现在"的死规则，这正是旧任务抓到的 `dh-c-bl`/`dh-c-tr` 同类缺陷） */
+.dh-fx-slash {
   position: absolute;
   left: 34%;
   bottom: 12px;
@@ -251,7 +267,7 @@ body {
 .dh-page.dh-fallen .dh-requiem { opacity: 1 }
 .dh-page.dh-fallen .dh-hero { filter: grayscale(1) brightness(.45); transform: scale(1.3) rotate(12deg) translate(-8px, 16px) }
 .dh-page.dh-fallen .dh-foe { filter: grayscale(.7) brightness(.55) }
-.dh-page.dh-fallen .dh-slash { opacity: 0 }
+.dh-page.dh-fallen .dh-fx-slash { opacity: 0 }
 
 /* —— 正文纸页：**游戏原图第二取景位铺底** + 石色幕（保正文可读） —— */
 .dh-paper {
@@ -259,8 +275,8 @@ body {
   z-index: 2;
   min-width: 0;
   min-height: 0;
-  margin-top: 8px;
-  padding: 14px 15px 12px;
+  margin-top: 0;
+  padding: 8px 15px 8px;
   box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--dh-paper-edge);
@@ -300,9 +316,17 @@ body {
   letter-spacing: .16em;
   pointer-events: none;
 }
+/* ⚠️ **正文槽必须有显式高度约束**（R2 主修，2026-10-19；archive 同款 `.as-flow{height:100%;min-height:0}`）：
+   缺它时正文槽会随内容**自由增高** ⇒ 槽 `rect.bottom` 远超根壳底 ⇒ 引擎占位口径的「下占位」为**负值**
+   （实测 −8341）⇒ 页框被算成**整章内容高**（实测 h=9020）⇒ 分页退化为"整章一屏"、`page`/`body` 恒 0
+   ⇒ **双向翻页失效**（用户报"只能翻下一页、无法翻上一页"）。给了 `height:100%` 后槽高 = 纸页内容高
+   ⇒ 下占位恒为正（= 页脚带占位）⇒ 页框回到"视口 − 占位"量级。
+   冻结由引擎写入 inline `height`/`overflow`/`clip-path` ⇒ 该声明只在**未冻结的自然布局**下生效（量占位用）。 */
 .dh-body {
   position: relative;
   z-index: 1;
+  height: 100%;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 0;
   text-align: justify;
@@ -380,7 +404,7 @@ body {
   font-size: 11px;
   opacity: calc(.95 * var(--dh-deco));
 }
-.dh-dialog i { flex: none; width: 13px; height: 15px; background: url("{{asset:spider_bullet_hold2}}") center/contain no-repeat }
+.dh-dialog i { flex: none; width: 13px; height: 15px; background-image: url("{{asset:sheet_bullet_pair}}"); background-size: {{sheet-size:sheet_bullet_pair}}; background-repeat: no-repeat; background-position: 0 0 }
 .dh-dialog span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
 /* 对话框会压住正文末行 ⇒ 续页正文预留底部安全边距 */
 .dh-marching .dh-body { padding-bottom: 34px }
@@ -482,3 +506,126 @@ body {
 .dh-motes i:nth-child(3) { left: 68%; bottom: 22% }
 .dh-motes i:nth-child(4) { left: 82%; bottom: 9% }
 .dh-motes i:nth-child(5) { left: 32%; bottom: 30% }
+
+/* ============ R4 区域 · 演出态 · 竖带 · NPC · 技能特效（2026-10-19 扩容）============
+   为什么用**属性驱动**：模板运行时只给 `firstPageHtml` / `otherPageHtml` 两个 HTML 通道
+   （没有"第 3 个壳"）⇒ 区域与演出态只能由作者 JS 写在**同一份 HTML** 的 `data-dh-*` 上，
+   CSS 按属性切片。判别：`data-dh-region` ∈ {cathedral, town, grave, cave}；
+        `data-dh-perf` ∈ {explore 探索, battle 打怪, talk 对话}；末页另有 `.dh-fallen`。 */
+
+/* —— 区域底图与调色（4 区域；素材侧只有约 4 类场景 ⇒ 不做 8 张独立底图，见 design AD-8 第 10 条） —— */
+.dh-page[data-dh-region="cathedral"] .dh-stage { background-image: var(--dh-scene); background-position: 30% 42% }
+.dh-page[data-dh-region="town"] .dh-stage { background-image: var(--dh-town); background-position: 42% 34% }
+.dh-page[data-dh-region="town"] { --dh-paper: #a9a49a; --dh-paper-edge: #6f6b64; --reader-page-background: #b0aba1 }
+.dh-page[data-dh-region="grave"] .dh-stage { background-image: var(--dh-grave); background-position: 50% 58% }
+.dh-page[data-dh-region="grave"] { --dh-paper: #a5a29b; --dh-paper-edge: #64635e; --reader-page-background: #aaa79f }
+.dh-page[data-dh-region="cave"] .dh-stage {
+  background-image: var(--dh-stone);
+  background-size: 96px 96px;
+  background-repeat: repeat;
+  background-position: 0 0
+}
+.dh-page[data-dh-region="cave"] { --dh-paper: #9d9c99; --dh-paper-edge: #5c5c5a; --reader-page-background: #a3a29f }
+
+/* —— 区域专属**敌方阵容**（≥4 种；只有本区域那一种上场）+ 演出态开关 —— */
+.dh-foe { opacity: 0 }
+.dh-page[data-dh-region="cathedral"] .dh-foe-boss { opacity: 1 }
+.dh-page[data-dh-region="town"] .dh-foe-spider { opacity: 1 }
+.dh-page[data-dh-region="grave"] .dh-foe-slug { opacity: 1 }
+.dh-page[data-dh-region="cave"] .dh-foe-frog { opacity: 1 }
+/* 对话演出：清场（无敌人）并把 NPC 请上场；探索态敌人半隐；只有打怪态出技能特效 */
+.dh-page[data-dh-perf="talk"] .dh-foe { opacity: 0 }
+.dh-page[data-dh-perf="explore"] .dh-foe { opacity: .38 }
+.dh-page[data-dh-perf="talk"] .dh-npc { opacity: 1 }
+.dh-page[data-dh-perf="battle"] .dh-npc { opacity: 0 }
+.dh-page[data-dh-perf="talk"] .dh-fx { opacity: 0 }
+.dh-page[data-dh-perf="explore"] .dh-fx { opacity: 0 }
+.dh-page[data-dh-perf="talk"] .dh-talk { opacity: calc(.95 * var(--dh-deco)) }
+.dh-page.dh-fallen .dh-talk { opacity: 0 }
+
+/* —— R4 敌方 ③④：小型黏液怪 / 蛙形怪（元素盒 = 帧尺寸 + `transform` 缩放 ⇒ 精灵表不失真） —— */
+.dh-foe-slug { left: 5%; bottom: -14px; width: {{sheet-fw:sheet_slug_s_idle}}px; height: {{sheet-fh:sheet_slug_s_idle}}px; transform-origin: 50% 100%; transform: scale(.72) }
+.dh-foe-slug .dh-f { background-image: url("{{asset:sheet_slug_s_idle}}"); background-size: {{sheet-size:sheet_slug_s_idle}}; transform-origin: 50% 100% }
+.dh-foe-frog { right: 5%; bottom: -18px; width: {{sheet-fw:sheet_frog_l_idle}}px; height: {{sheet-fh:sheet_frog_l_idle}}px; transform-origin: 50% 100%; transform: scale(.78) }
+.dh-foe-frog .dh-f { background-image: url("{{asset:sheet_frog_l_idle}}"); background-size: {{sheet-size:sheet_frog_l_idle}}; transform-origin: 50% 100% }
+
+/* —— R4 NPC（对话演出在场者）：2 帧整身动图（分层部件合成，见 build 的 npc_sheet_data_uri） —— */
+.dh-npc {
+  position: absolute;
+  left: 62%;
+  bottom: -64px;
+  width: {{sheet-fw:sheet_npc_villager}}px;
+  height: {{sheet-fh:sheet_npc_villager}}px;
+  transform-origin: 50% 100%;
+  transform: scale(1.3);
+  opacity: 0;
+}
+.dh-npc .dh-n-f {
+  position: absolute;
+  inset: 0;
+  background-image: url("{{asset:sheet_npc_villager}}");
+  background-size: {{sheet-size:sheet_npc_villager}};
+  background-repeat: no-repeat;
+  background-position: 0 0
+}
+
+/* —— R4 左右两侧**竖区域**点缀（对齐 archive 左右竖带；图集四格各取一格） —— */
+.dh-band { position: absolute; top: 0; bottom: 0; width: 22px; z-index: 3; pointer-events: none }
+.dh-band-l { left: 0 }
+.dh-band-r { right: 0 }
+.dh-band i {
+  position: absolute;
+  width: 20px;
+  height: 30px;
+  background-image: var(--dh-band);
+  background-repeat: no-repeat;
+  background-size: 400% 100%;
+  opacity: calc(.85 * var(--dh-deco))
+}
+.dh-b0 { left: 1px; top: 16%; background-position: 0% 50% }
+.dh-b1 { left: 1px; top: 52%; background-position: 33.33% 50% }
+.dh-b2 { right: 1px; top: 28%; background-position: 66.67% 50% }
+.dh-b3 { right: 1px; top: 64%; background-position: 100% 50% }
+
+/* —— R4 技能/弹道特效 3 类（斩击=CSS / 多帧弹道=精灵表 / 冲击波=CSS） —— */
+.dh-fx { position: absolute; pointer-events: none; opacity: 0 }
+.dh-fx-bolt { left: 30%; top: 42%; width: 15px; height: 16px }
+/* 多帧弹道：两帧精灵表 + `steps(2)`（元素盒 = 帧尺寸 ⇒ 步进像素不错位） */
+.dh-fx-bolt i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: url("{{asset:sheet_bullet_pair}}");
+  background-size: {{sheet-size:sheet_bullet_pair}};
+  background-repeat: no-repeat;
+  background-position: 0 0
+}
+.dh-fx-burst {
+  left: 40%;
+  bottom: 8px;
+  width: 96px;
+  height: 56px;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(236, 223, 198, calc(.75 * var(--dh-deco))) 0, rgba(122, 28, 23, calc(.42 * var(--dh-deco))) 42%, transparent 72%)
+}
+.dh-page[data-dh-perf="battle"] .dh-fx-slash { opacity: 1 }
+.dh-page[data-dh-perf="battle"] .dh-fx-bolt { opacity: calc(var(--dh-deco)) }
+.dh-page[data-dh-perf="battle"] .dh-fx-burst { opacity: calc(.9 * var(--dh-deco)) }
+
+/* —— R4 对话气泡（NPC 演出时的台词框；绝对定位 ⇒ 不参与正文测量） —— */
+.dh-talk {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: linear-gradient(180deg, rgba(12, 12, 14, calc(.92 * var(--dh-deco))), rgba(6, 6, 8, calc(.96 * var(--dh-deco))));
+  border: 1px solid rgba(201, 162, 74, calc(.42 * var(--dh-deco)));
+  color: #e6ded0;
+  font-size: 10px;
+  opacity: 0
+}
+.dh-talk b { flex: none; font-size: 8px; letter-spacing: .18em; color: var(--dh-gold) }
+.dh-talk span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }

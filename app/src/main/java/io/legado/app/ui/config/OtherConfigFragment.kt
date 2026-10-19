@@ -15,6 +15,7 @@ import io.legado.app.help.AppFreezeMonitor
 import io.legado.app.help.DebugFloatBallManager
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.EpubLoadingTemplateManager
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.model.CheckRssSource
@@ -234,6 +235,22 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 entriesRes = R.array.epub_read_engine_entries,
                 valuesRes = R.array.epub_read_engine_values,
                 defaultValue = AppConfig.EPUB_READ_ENGINE_CORE
+            ),
+            // R3（reader-theme-family-rework）：**「首屏加载模板」第二入口**。
+            // 为什么要在「阅读设置」再给一个入口：旧任务的入口只在「主题设置 → 界面元素」分区，
+            // 与用户"开书首屏"的心智不一致（用户实测**找不到对应设置入口**）；而旧 L2 判据用
+            // `am start` 直拉 Activity **绕过入口** ⇒ 入口可达性从未被验证。
+            // 与 `ThemeConfigFragment` 的既有入口**并存**，指向同一 Activity、同一数据源
+            // （摘要取 `EpubLoadingTemplateManager.selected()`）⇒ 两处状态必然同源。
+            SettingActionSpec(
+                key = KEY_EPUB_LOADING_TEMPLATE_MANAGE,
+                title = getString(R.string.epub_loading_template_manage),
+                summary = getString(
+                    R.string.epub_loading_template_manage_summary,
+                    EpubLoadingTemplateManager.selected(requireContext()).name
+                ),
+                searchKeys = listOf("首屏加载", "加载模板", "开书首屏", "首屏模板", "开书动画"),
+                onClick = { startActivity<EpubLoadingTemplateManageActivity>() }
             ),
             SettingActionSpec(
                 key = KEY_LOCAL_PASSWORD,
@@ -752,6 +769,9 @@ class OtherConfigFragment : ComposeSettingFragment() {
 
         /** 一期 §6.6：Web 服务设置入口（跳转项 key，不绑定任何 Preferences 键）。 */
         private const val KEY_WEB_SERVICE_SETTINGS = "webServiceSettings"
+
+        /** R3：首屏加载模板入口（跳转项 key；与主题设置里的同名入口指向同一 Activity）。 */
+        private const val KEY_EPUB_LOADING_TEMPLATE_MANAGE = "epub_loading_template_manage"
         private val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" +
                 BuildConfig.Cronet_Main_Version +

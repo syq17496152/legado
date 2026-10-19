@@ -8,6 +8,13 @@
 @keyframes dh-boss { from { background-position: 0 0 } to { background-position: -644px 0 } }
 @keyframes dh-spider { from { background-position: 0 0 } to { background-position: -420px 0 } }
 
+/* R4 新增：敌方 ③④ 与 NPC 的逐帧序列（帧宽高由构建期占位符注入 ⇒ 换素材不会静默错位） */
+@keyframes dh-slug { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_slug_s_idle}} 0 } }
+@keyframes dh-frog { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_frog_l_idle}} 0 } }
+@keyframes dh-npc { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_npc_villager}} 0 } }
+/* 弹道两帧（`steps()` 真动图的"技能特效"实现通道） */
+@keyframes dh-bolt { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_bullet_pair}} 0 } }
+
 /* 回合推进：敌方在页眉内向主角方向压近（原地往返，不触发整页重排） */
 @keyframes dh-advance { 0% { transform: translateX(0) } 100% { transform: translateX(-22px) } }
 
@@ -42,8 +49,13 @@
 .dh-foe-boss { animation: dh-advance 3s ease-in-out infinite alternate }
 .dh-foe-spider .dh-f { animation: dh-spider .94s steps(3) infinite }
 .dh-foe-spider { animation: dh-advance 3.8s ease-in-out infinite alternate }
-.dh-slash { animation: dh-slash 2.6s ease-out infinite }
-.dh-bullet { animation: dh-flight 3.4s linear infinite }
+.dh-fx-slash { animation: dh-slash 2.6s ease-out infinite }
+.dh-fx-bolt { animation: dh-flight 3.4s linear infinite }
+/* R4：敌方 ③④ / NPC / 弹道特效的逐帧序列挂载（步数与素材帧数严格一致） */
+.dh-foe-slug .dh-f { animation: dh-slug 1.1s steps(7) infinite }
+.dh-foe-frog .dh-f { animation: dh-frog .9s steps(5) infinite }
+.dh-npc .dh-n-f { animation: dh-npc 1.4s steps(2) infinite }
+.dh-fx-bolt i { animation: dh-bolt .5s steps(2) infinite }
 .dh-motes i { animation: dh-rise 5.2s ease-in-out infinite }
 .dh-page.dh-fallen .dh-requiem { animation: dh-requiem-in .6s ease-out both }
 
@@ -53,7 +65,7 @@
 .dh-motes i:nth-child(4) { animation-delay: -3.1s }
 .dh-motes i:nth-child(5) { animation-delay: -4.3s }
 .dh-foe-spider { animation-delay: -.6s }
-.dh-bullet { animation-delay: -1.4s }
+.dh-fx-bolt { animation-delay: -1.4s }
 
 /* 进页动效（archive 契约 R6：data-reader-entry pending → playing）：用过渡实现，不额外占帧序列预算 */
 .dh-hero, .dh-paper, .dh-hud, .dh-stage { transition: opacity .5s ease-out }
