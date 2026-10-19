@@ -614,10 +614,13 @@ body {
 .dh-page[data-dh-perf="battle"] .dh-fx-bolt { opacity: calc(var(--dh-deco)) }
 .dh-page[data-dh-perf="battle"] .dh-fx-burst { opacity: calc(.9 * var(--dh-deco)) }
 
-/* —— R4 对话气泡（NPC 演出时的台词框；绝对定位 ⇒ 不参与正文测量） —— */
+/* —— R4 对话气泡（NPC 演出时的台词框；绝对定位 ⇒ 不参与正文测量） ——
+   ⚠️ 位置避让（产物截图自验发现）：气泡原为 `left: 8px; right: 8px` 全幅贴底，
+   与左下角的**关卡标牌** `.dh-plate`（`left:14px; bottom:7px`）**文字重叠**（截图上两行字叠在一起）。
+   故改为**只在右半幅**（`left: 40%`），把左下角留给标牌。 */
 .dh-talk {
   position: absolute;
-  left: 8px;
+  left: 40%;
   right: 8px;
   bottom: 4px;
   display: flex;
