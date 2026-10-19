@@ -156,6 +156,8 @@ MATRIX_JS = """
     cornerCount: document.querySelectorAll('.dh-corner').length,
     cornerClasses: Array.from(document.querySelectorAll('.dh-corner')).map(e => e.className),
     folio: !!document.querySelector('.dh-folio'),
+    paperBg: cs('.dh-paper', 'background-color'),
+    textColor: cs('.dh-body', 'color'),
     bodyCount: document.querySelectorAll('[data-reader-flow="body"]').length,
     // 牺牲态：页脚归零（CSS 变量 --rp-percent 由宿主下发；此处按未注入计，仅记录结构）
     fallen: document.querySelectorAll('.dh-fallen').length
@@ -254,12 +256,35 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     if len(set(distinct.values())) != len(REGIONS):
         failures.append("四区域底图签名不完全不同：%s" % {k: v[1:3] for k, v in distinct.items()})
 
+    # **三态齐备且两两不同**（spec R1/R5「三态截图两两不同」的产物级等价判据）：
+    # 逐态取"纸页底色 + 正文色"，三者必须**两两不同**（只看截图字节会被动画干扰 ⇒ 读计算样式更稳）。
+    THEMES = ["day", "night", "eink"]
+    state_pairs = {}
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
+        for theme in THEMES:
+            out.write_text(sandbox_html(template, vw, vp, 0, 40, "cathedral", "battle"), encoding="utf-8")
+            page.goto(out.as_uri(), wait_until="load")
+            page.evaluate("(t) => document.documentElement.setAttribute('data-reader-theme', t)", theme)
+            page.wait_for_timeout(60)
+            d = page.evaluate(MATRIX_JS)
+            state_pairs[theme] = (d["paperBg"], d["textColor"])
+            if shots_dir is not None:
+                shots_dir.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(shots_dir / ("state_%s.png" % theme)))
+        browser.close()
+    seen = list(state_pairs.values())
+    if len(set(seen)) != len(THEMES):
+        failures.append("三态未两两不同：%s" % state_pairs)
+
     if failures:
         print("[FAIL] R4 结构矩阵（区域×演出态 = %d 组）" % (len(REGIONS) * len(PERFS)))
         for item in failures[:12]:
             print("   - " + item)
         return False
     print("[PASS] R4 结构矩阵：%d 区域 × %d 演出态 = %d 组；竖带 4 格 / 四角 4 枚 / 多帧 steps 动效 6 类全部生效"
+          "；**三态（日/夜/水墨屏）两两不同**"
           % (len(REGIONS), len(PERFS), len(REGIONS) * len(PERFS)))
     if shot_list:
         print("   产物截图 %d 张 → %s" % (len(shot_list), shots_dir))

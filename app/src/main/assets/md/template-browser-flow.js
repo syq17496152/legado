@@ -587,6 +587,13 @@
         // "换壳后正文错位/页码跳飞"只能靠肉眼比对，无法定位是哪一项量错了
         ',root=' + Math.round((root && root.scrollHeight) || 0) +
         ',body=' + Math.round(bodyOffset) +
+        // 翻页状态（2026-10-19 真机取证补）：`pg`=页数、`off`=正文偏移、`last`=页步长。
+        // ⚠️ 为什么必须补到 `page-frame` 里：宿主侧的 `render state: settle,...` 行**未出现在真机 logcat**
+        //    （实测 12s 仅 3 行：init-received / author-script / page-frame）⇒ L2 若只认 settle 行，
+        //    会判"未取到样本"而**假 FAIL**（本轮实证）。把翻页量并入 `page-frame` ⇒ 判据**有确定性数据源**。
+        ',pg=' + Math.round(pageCount) +
+        ',off=' + Math.round(bodyOffset) +
+        ',last=' + Math.round(lastPageHeight) +
         // 整行网格自证（2026-10-13）：`lh`=computed 行高、`grid`=运行时写入的网格变量、
         // `pt`=正文槽顶部内边距 —— 三者缺一，"末行被裁半"就只能靠猜（分不清是网格没生效还是对齐没跑）
         ',lh=' + Math.round(lineHeightOf(slot) * 100) / 100 +

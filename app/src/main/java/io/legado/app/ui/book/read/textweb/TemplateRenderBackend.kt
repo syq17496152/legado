@@ -664,6 +664,16 @@ class TemplateRenderBackend(
                 )
             }
 
+            // 页框自证（**低频高价值**）：`page-frame` 是 AI/几何判据的**唯一数据源**
+            // （`rb` 根壳底 / `vp` 视口 / `ctop`·`cbot` 占位 / `client` 箱高 / `pg`·`off`·`last` 翻页量）。
+            // ⚠️ **必须绕开 300ms 时间窗限频**（2026-10-19 真机实证）：它原先与稳态状态共用 `else` 分支，
+            //   在稳态日志洪峰下被限频**饿死** —— 表现为 `stable:` 行持续出现而 `page-frame` 整轮缺失
+            //   ⇒ L2 判据"未取到样本"**假 FAIL**（产品其实完全正常）。它只在 settle 时发一条，
+            //   天然低频，给它的日志量可以忽略。
+            state.startsWith(StatePageFramePrefix) -> {
+                AppLog.putDebugWithTag(AppLog.TAG_READER_TEMPLATE, "render state: $state")
+            }
+
             // 稳态/滚动期持续或交替上报（实测稳态 138 行/10s、冷路径 634 行/6s 且仅两个
             // 状态名交替）⇒ 时间窗限频；"同状态名去重"对该交替形态无效（已实证否证）
             else -> {
@@ -791,6 +801,9 @@ class TemplateRenderBackend(
         private const val StateReady = "ready"
         private const val StateInjectDonePrefix = "inject-done"
         private const val StateInjectUnavailable = "inject-unavailable"
+
+        /** 页框自证前缀（**非限频**；见 [onRenderState] 内注释：它是几何/翻页判据的唯一数据源）。 */
+        private const val StatePageFramePrefix = "page-frame"
         private const val HostPollIntervalMillis = 60L
         private const val MaxHostPollAttempts = 100          // 100 × 60ms ≈ 6s（宿主文档只有几十 KB）
         private const val ReadyTimeoutMillis = 8_000L
