@@ -234,15 +234,18 @@ abstract class AbsCallBack(
 
 
     // Cronet 500：onFailed 的 UrlResponseInfo 参数由可空改为非空（HttpEngine API 收紧）
-    override fun onFailed(request: UrlRequest, info: UrlResponseInfo, error: CronetException) {
+    // 【2026-10-19 修复】该「收紧」在**请求失败**路径上会被平台**打回 null**（真机 logcat 铁证：
+    // `NullPointerException: Parameter specified as non-null is null: method …AbsCallBack.onFailed, parameter info`）——
+    // Cronet 自己的错误回调抛 NPE ⇒ 失败路径被破坏（观测到 187 次/一轮巡检）⇒ 参数改回**可空**并就地兜底。
+    override fun onFailed(request: UrlRequest, info: UrlResponseInfo?, error: CronetException) {
         callbackResults.add(CallbackResult(CallbackStep.ON_FAILED, null, error))
         cancelJob?.cancel()
         // P2-C 修复：保留原始错误信息，按 AGENTS.md "改造必加日志"规范用 AppLog.put 永久记录
         // 根因：error.asIOException() 会把 CronetException("System error") 转为 IOException，丢失 PROTOCOL_ERROR 根因
         // 脱敏：只保留路径片段，不输出完整域名/URL（P0 输出安全规范）
-        val protocol = info.negotiatedProtocol
-        val httpCode = info.httpStatusCode
-        val urlPath = info.url.substringAfter("://").substringAfter("/").take(50)
+        val (protocol, httpCode, urlPath) = failedInfoTriple(
+            info?.negotiatedProtocol, info?.httpStatusCode, info?.url
+        )
         DebugLog.e(javaClass.name, "onFailed: protocol=$protocol, httpCode=$httpCode, error=${error.message}")
         AppLog.put("Cronet 请求失败: protocol=$protocol, httpCode=$httpCode, path=$urlPath, error=${error.message}")
         safeError(error.asIOException())
@@ -250,7 +253,7 @@ abstract class AbsCallBack(
         responseCallback?.onFailure(mCall, error)
     }
 
-    override fun onCanceled(request: UrlRequest, info: UrlResponseInfo) {
+    override fun onCanceled(request: UrlRequest, info: UrlResponseInfo?) {
         val target = redirectRequest
         if (followRedirect && target != null) {
             followRedirect = false
@@ -589,3 +592,25 @@ abstract class AbsCallBack(
 
     }
 }
+
+/**
+ * 【2026-10-19 网络层修复 · 纯函数】失败回调三元信息（**空安全**，JVM 可测）。
+ *
+ * 背景（真机 logcat 铁证）：Cronet 在**失败/取消**路径会把 `UrlResponseInfo` 参数**打回 null**，
+ * 而本仓曾按「HttpEngine API 收紧」把 `onFailed(request, info: UrlResponseInfo, …)` 声明成**非空**
+ * ⇒ Kotlin 生成的非空检查在回调里抛 `NullPointerException: Parameter specified as non-null is null`
+ * （一轮巡检观测 **onFailed 187 次 + onCanceled 170 次**）⇒ **`safeError()` 永远执行不到**
+ * ⇒ 挂起的请求协程**不 resume** ⇒ 只能等 OkHttp `callTimeout`（30s）超时 ⇒
+ * 表现为「失败耗时中位数恰 30004ms」且**网络层自愈（AD-11 坏 IP 重试）无法触发**（拿不到连接层异常）。
+ *
+ * 故取值必须**空安全**并集中在本函数（避免各处重复 `?:` 漂移）；**URL 只保留路径片段**（输出安全）。
+ */
+internal fun failedInfoTriple(
+    protocol: String?,
+    httpCode: Int?,
+    url: String?,
+): Triple<String, Int, String> = Triple(
+    protocol ?: "",
+    httpCode ?: 0,
+    url?.substringAfter("://")?.substringAfter("/")?.take(50) ?: "",
+)

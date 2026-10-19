@@ -466,7 +466,15 @@ internal object BadIpSelfHealInterceptor : Interceptor {
             val host = request.url.host
             // 失败上报：坏 IP 黑名单 + 该 host 30s 内部退避（下次 lookup 直走系统 DNS）
             runCatching { HostAccessStrategy.reportBadIpSuspect(host) }
-            AppLog.putDebug("HttpHelper: 连接层失败已上报坏 IP，改走系统 DNS 重试一次 host=${host.take(60)}")
+            // 观测性：**采样上报**（而非 `putDebug`）——`putDebug` 受日志级别门控、在真机 logcat 里看不到，
+            // 而本拦截器是否生效是排查「DoH 误导超时」的关键证据（首版用 putDebug ⇒ 无法取证）。
+            AppLog.putSampled(
+                "badip_selfheal",
+                "HttpHelper: 连接层失败已上报坏 IP，改走系统 DNS 重试一次 host=${host.take(60)}",
+                n = 20,
+                level = AppLog.Level.WARN,
+                tag = AppLog.TAG_HTTP
+            )
             chain.proceed(request)
         }
     }

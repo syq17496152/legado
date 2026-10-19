@@ -130,7 +130,9 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
                     coroutine.resume(response)
                 }
 
-                override fun onCanceled(request: UrlRequest, info: UrlResponseInfo) {
+                // 【2026-10-19】与 `AbsCallBack.onCanceled` 同口径：平台在取消路径会传 **null** info，
+                // 声明非空会被 Kotlin 生成的非空检查抛 NPE（真机 logcat 铁证 170 次/轮）⇒ 参数必须可空。
+                override fun onCanceled(request: UrlRequest, info: UrlResponseInfo?) {
                     super.onCanceled(request, info)
                     coroutine.cancel()
                 }
