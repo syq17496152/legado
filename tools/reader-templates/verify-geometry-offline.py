@@ -287,7 +287,9 @@ def main() -> int:
 
     cases = [(args.vw, args.vp, args.safe_top)]
     if args.multi:
-        cases = [(360, 640, 0), (360, 640, 24), (480, 854, 0), (480, 854, 24), (480, 900, 0), (412, 915, 24)]
+        cases = [(360, 640, 0), (360, 640, 24), (480, 854, 0), (480, 854, 24), (480, 900, 0), (412, 915, 24),
+                 # 横屏/矮屏（本项目 MEmu 实机口径：物理 1600×1000 / density 300 ⇒ CSS 853×533）
+                 (853, 533, 0), (853, 533, 24), (800, 480, 0)]
 
     results = [run_case(vw, vp, safe, template, args.paragraphs, out) for vw, vp, safe in cases]
     if args.matrix:

@@ -125,6 +125,16 @@ body {
 }
 .dh-marching { grid-template-rows: clamp(40px, 6vh, 64px) minmax(0, 1fr) clamp(44px, 6.5vh, 56px) }
 
+/* ⚠️ 横屏/矮屏断点（2026-10-19 真机口径实测发现）：本项目 MEmu 实例在 **横屏** 下
+   物理 1600×1000 / density 300 ⇒ CSS 视口 **853×533**，而 `0.2×视口` 的"页眉+页脚"预算只有 **106.6px**
+   ⇒ 上面竖屏那套（页眉 min 48 + 页脚 min 44）总占位 116px ⇒ 正文区仅 78.2%，**跌破 ≥80% 硬指标**。
+   故矮屏另收一档（页眉 min 36 / 页脚 min 32）⇒ 实测 533 档：页眉 51.6 / 页脚 47 / 正文区 **81.5%**。
+   密度仍靠层数补，不靠高度。 */
+@media (max-height: 600px) {
+  .dh-page { grid-template-rows: clamp(36px, 8vh, 52px) minmax(0, 1fr) clamp(32px, 6vh, 44px) }
+  .dh-marching { grid-template-rows: clamp(30px, 6.5vh, 44px) minmax(0, 1fr) clamp(32px, 6vh, 44px) }
+}
+
 /* 整页叠加层：暗角 + 石纹斜纹（z-index:-1，不参与测量） */
 .dh-page::before {
   content: "";
