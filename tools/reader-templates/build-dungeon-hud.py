@@ -446,6 +446,16 @@ def main() -> int:
     css = NOTICE + expand(raw_css)
     script = raw_script
 
+    # **内联次数 == 登记项数**（与 Kotlin 侧「素材登记与内联字节双向闭合」同口径，提前到构建期）：
+    # 同一素材被**多处**直接 `url("{{asset:…}}")` 内联时，data URI 会出现 2 次而只登记 1 项
+    # （本轮实测：弹道精灵表在"技能特效"与"续页对话框"两处使用 ⇒ 32 次内联 vs 31 项登记）。
+    # 正解是**走 CSS 变量单源**（`--dh-x: url(...)` + `var(--dh-x)`），不是改门禁。
+    inline_occurrences = len(re.findall(r"data:[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+;base64,", first + other + css + script))
+    if inline_occurrences != len(registered):
+        print("[内联次数 != 登记项数] 内联 %d 次 / 登记 %d 项 ⇒ 同一素材被多处内联（应改走 CSS 变量单源）"
+              % (inline_occurrences, len(registered)), file=sys.stderr)
+        return 1
+
     leftover = re.search(r"\{\{(?:asset:|footer|sheet-)", first + other + css + script)
     if leftover:
         print("[占位未替换] %s" % leftover.group(0), file=sys.stderr)

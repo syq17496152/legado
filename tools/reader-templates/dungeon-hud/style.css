@@ -23,6 +23,9 @@
   --dh-grave: url("{{asset:sample_floor1}}");
   /* R4 左右竖带点缀（4 小件合并为 1 张横向图集） */
   --dh-band: url("{{asset:sheet_band_atlas}}");
+  /* R4 弹道两帧精灵表——**单源变量**：同一张图在「技能特效」与「续页对话框」两处使用，
+     必须走 CSS 变量，否则同一 data URI 会被内联两次 ⇒ 触发"内联次数 == 登记项数"失守。 */
+  --dh-bolt: url("{{asset:sheet_bullet_pair}}");
 
   /* 三态之一「日间」—— 冷灰石室（暗黑系石质，非暖羊皮；与软件浅色主题协调） */
   --reader-text-color: #171614;
@@ -404,7 +407,7 @@ body {
   font-size: 11px;
   opacity: calc(.95 * var(--dh-deco));
 }
-.dh-dialog i { flex: none; width: 13px; height: 15px; background-image: url("{{asset:sheet_bullet_pair}}"); background-size: {{sheet-size:sheet_bullet_pair}}; background-repeat: no-repeat; background-position: 0 0 }
+.dh-dialog i { flex: none; width: 13px; height: 15px; background-image: var(--dh-bolt); background-size: {{sheet-size:sheet_bullet_pair}}; background-repeat: no-repeat; background-position: 0 0 }
 .dh-dialog span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
 /* 对话框会压住正文末行 ⇒ 续页正文预留底部安全边距 */
 .dh-marching .dh-body { padding-bottom: 34px }
@@ -595,7 +598,7 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  background-image: url("{{asset:sheet_bullet_pair}}");
+  background-image: var(--dh-bolt);
   background-size: {{sheet-size:sheet_bullet_pair}};
   background-repeat: no-repeat;
   background-position: 0 0
