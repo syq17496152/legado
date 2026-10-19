@@ -39,7 +39,8 @@ SAMPLE = (
 )
 
 
-def sandbox_html(template: dict, vw: int, vp: int, safe_top: int, paragraphs: int) -> str:
+def sandbox_html(template: dict, vw: int, vp: int, safe_top: int, paragraphs: int,
+                 region: str = "cathedral", perf: str = "explore", fallen: bool = False) -> str:
     css_parts = []
     for name in ("md-reader.css", "template-archive-base.css", "template-layout.css", "template-decoration.css"):
         path = MD / name
@@ -51,6 +52,11 @@ def sandbox_html(template: dict, vw: int, vp: int, safe_top: int, paragraphs: in
         'data-reader-flow="body" data-reader-flow-pagination="columns"></section>',
         'data-reader-flow="body" data-reader-flow-pagination="columns">%s</section>' % body,
     )
+    # 与作者 JS（`direct()` / `sync()`）同口径：区域/演出态/牺牲态写在**页壳**的 `data-dh-*` 与 class 上
+    html = html.replace('data-dh-region="cathedral"', 'data-dh-region="%s"' % region)
+    html = html.replace('data-dh-perf="explore"', 'data-dh-perf="%s"' % perf)
+    if fallen:
+        html = html.replace('class="dh-page dh-opening"', 'class="dh-page dh-opening dh-fallen"')
     return (
         "<!DOCTYPE html><html lang=\"zh-CN\" data-reader-theme=\"day\" data-rp-decoration=\"medium\" "
         "data-reader-motion=\"running\" style=\"--reader-safe-top:%dpx;--reader-safe-right:0px;"
@@ -115,6 +121,141 @@ def run_case(vw: int, vp: int, safe_top: int, template: dict, paragraphs: int, o
     return ok
 
 
+# ---------------- R4 结构自验（区域 × 演出态 矩阵；不需要设备，验证的是**构建产物**而非原型） ----------------
+
+MATRIX_JS = """
+() => {
+  const page = document.querySelector('.dh-page');
+  const cs = (sel, prop) => {
+    const el = document.querySelector(sel);
+    return el ? getComputedStyle(el).getPropertyValue(prop).trim() : null;
+  };
+  const all = (sel, prop) => Array.from(document.querySelectorAll(sel))
+    .map(el => getComputedStyle(el).getPropertyValue(prop).trim());
+  return {
+    region: page.getAttribute('data-dh-region'),
+    perf: page.getAttribute('data-dh-perf'),
+    stageImage: cs('.dh-stage', 'background-image').slice(0, 120),
+    stageSize: cs('.dh-stage', 'background-size'),
+    stageRepeat: cs('.dh-stage', 'background-repeat'),
+    stagePos: cs('.dh-stage', 'background-position'),
+    foeBoss: cs('.dh-foe-boss', 'opacity'), foeSpider: cs('.dh-foe-spider', 'opacity'),
+    foeSlug: cs('.dh-foe-slug', 'opacity'), foeFrog: cs('.dh-foe-frog', 'opacity'),
+    npc: cs('.dh-npc', 'opacity'), talk: cs('.dh-talk', 'opacity'),
+    fxSlash: cs('.dh-fx-slash', 'opacity'), fxBurst: cs('.dh-fx-burst', 'opacity'),
+    // ⚠️ 动效元素的**瞬时 opacity 不可作判据**：`@keyframes` 的 opacity 优先级高于普通声明
+    // （斩击闪光在 0%~72% 区间本就是 opacity:0）⇒ 判"特效出场"应读 `animation-name`。
+    fxSlashAnim: cs('.dh-fx-slash', 'animation-name'),
+    slugAnim: cs('.dh-foe-slug .dh-f', 'animation-name'),
+    slugSteps: cs('.dh-foe-slug .dh-f', 'animation-timing-function'),
+    npcAnim: cs('.dh-npc .dh-n-f', 'animation-name'),
+    boltAnim: cs('.dh-fx-bolt i', 'animation-name'),
+    bandCount: document.querySelectorAll('.dh-band i').length,
+    bandPos: all('.dh-band i', 'background-position'),
+    bandOpacity: all('.dh-band i', 'opacity'),
+    cornerCount: document.querySelectorAll('.dh-corner').length,
+    cornerClasses: Array.from(document.querySelectorAll('.dh-corner')).map(e => e.className),
+    folio: !!document.querySelector('.dh-folio'),
+    bodyCount: document.querySelectorAll('[data-reader-flow="body"]').length,
+    // 牺牲态：页脚归零（CSS 变量 --rp-percent 由宿主下发；此处按未注入计，仅记录结构）
+    fallen: document.querySelectorAll('.dh-fallen').length
+  };
+}
+"""
+
+REGIONS = ["cathedral", "town", "grave", "cave"]
+PERFS = ["explore", "battle", "talk"]
+
+
+def matrix_case(template: dict, vp: int, vw: int) -> bool:
+    """逐（区域 × 演出态）渲染构建产物，断言 CSS 属性切片**真的生效**。
+
+    为什么需要：构建期的"死规则清零"只能证明"类有供给"，**证明不了属性选择器命中**
+    （选择器写错 = 静默无效，症状与"没做"完全一样）。本矩阵是**产物级**自验，替代原型的目视评审。
+    """
+    from playwright.sync_api import sync_playwright
+
+    out = REPO / ".temp" / "offline-matrix.html"
+    failures = []
+    stage_images = {}
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
+        for region in REGIONS:
+            for perf in PERFS:
+                out.write_text(sandbox_html(template, vw, vp, 0, 40, region, perf), encoding="utf-8")
+                page.goto(out.as_uri(), wait_until="load")
+                page.wait_for_timeout(60)
+                d = page.evaluate(MATRIX_JS)
+                label = "%s/%s" % (region, perf)
+                # ① 属性已就位
+                if d["region"] != region or d["perf"] != perf:
+                    failures.append("%s 属性未就位（%s/%s）" % (label, d["region"], d["perf"]))
+                # ② 演出态：talk ⇒ NPC 上场且敌人清场；battle ⇒ 本区敌人上场且特效出
+                if perf == "talk":
+                    if float(d["npc"] or 0) < 0.9:
+                        failures.append("%s NPC 未上场（opacity=%s）" % (label, d["npc"]))
+                    if any(float(d[k] or 0) > 0.05 for k in ("foeBoss", "foeSpider", "foeSlug", "foeFrog")):
+                        failures.append("%s 对话演出未清场（敌人仍可见）" % label)
+                    if float(d["talk"] or 0) <= 0:
+                        failures.append("%s 对话气泡未显示" % label)
+                elif perf == "battle":
+                    region_foe = {"cathedral": "foeBoss", "town": "foeSpider",
+                                  "grave": "foeSlug", "cave": "foeFrog"}[region]
+                    if float(d[region_foe] or 0) < 0.95:
+                        failures.append("%s 本区敌人未上场（%s=%s）" % (label, region_foe, d[region_foe]))
+                    # 特效出场判据：斩击看**动效在跑**（瞬时 opacity 由 @keyframes 支配）、冲击波看静态层可见
+                    if d["fxSlashAnim"] != "dh-slash" or float(d["fxBurst"] or 0) < 0.5:
+                        failures.append("%s 技能特效未出场（anim=%s burst=%s）"
+                                        % (label, d["fxSlashAnim"], d["fxBurst"]))
+                    if float(d["npc"] or 0) > 0.05:
+                        failures.append("%s 打怪演出残留 NPC" % label)
+                else:
+                    if float(d["npc"] or 0) > 0.05:
+                        failures.append("%s 探索演出残留 NPC" % label)
+                # ③ 区域底图差异（cave 用石墙纹理平铺 ⇒ 尺寸/重复不同）
+                sig = (d["stageImage"], d["stageSize"], d["stageRepeat"], d["stagePos"])
+                stage_images.setdefault(region, set()).add(sig)
+                # ④ 竖带：4 格且位置两两不同
+                if d["bandCount"] != 4:
+                    failures.append("%s 竖带格数 %d ≠ 4" % (label, d["bandCount"]))
+                if len(set(d["bandPos"])) != 4:
+                    failures.append("%s 竖带四格位置未两两不同" % label)
+                # ⑤ 四角：4 个且类名齐全
+                if d["cornerCount"] != 4:
+                    failures.append("%s 角饰 %d 个 ≠ 4" % (label, d["cornerCount"]))
+                for corner in ("dh-c-tl", "dh-c-tr", "dh-c-bl", "dh-c-br"):
+                    if not any(corner in c for c in d["cornerClasses"]):
+                        failures.append("%s 缺角饰类 %s" % (label, corner))
+                # ⑥ 精灵动画：多帧 `steps()` 真动图（敌方 4 种 + NPC + 弹道）
+                if d["slugAnim"] != "dh-slug" or "steps" not in (d["slugSteps"] or ""):
+                    failures.append("%s 黏液体多帧动画未生效（%s / %s）" % (label, d["slugAnim"], d["slugSteps"]))
+                if d["npcAnim"] != "dh-npc":
+                    failures.append("%s NPC 动画未生效（%s）" % (label, d["npcAnim"]))
+                if d["boltAnim"] != "dh-bolt":
+                    failures.append("%s 弹道多帧动画未生效（%s）" % (label, d["boltAnim"]))
+                # ⑦ 正文槽与页脚读数在场
+                if d["bodyCount"] != 1:
+                    failures.append("%s 正文槽数 %d ≠ 1" % (label, d["bodyCount"]))
+                if not d["folio"]:
+                    failures.append("%s 页脚读数缺失" % label)
+        browser.close()
+
+    # 跨区域必须**底图不同**（相邻页素材集合不同的最低要求）
+    distinct = {r: list(v)[0] for r, v in stage_images.items()}
+    if len(set(distinct.values())) != len(REGIONS):
+        failures.append("四区域底图签名不完全不同：%s" % {k: v[1:3] for k, v in distinct.items()})
+
+    if failures:
+        print("[FAIL] R4 结构矩阵（区域×演出态 = %d 组）" % (len(REGIONS) * len(PERFS)))
+        for item in failures[:12]:
+            print("   - " + item)
+        return False
+    print("[PASS] R4 结构矩阵：%d 区域 × %d 演出态 = %d 组；竖带 4 格 / 四角 4 枚 / 多帧 steps 动效 6 类全部生效"
+          % (len(REGIONS), len(PERFS), len(REGIONS) * len(PERFS)))
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--vp", type=int, default=854)
@@ -122,6 +263,7 @@ def main() -> int:
     ap.add_argument("--safe-top", type=int, default=24, help="页根 safe-top（本机 MEmu 实测 24 CSS px）")
     ap.add_argument("--paragraphs", type=int, default=400, help="正文段数（须足以溢出多页）")
     ap.add_argument("--multi", action="store_true", help="多尺寸扫描（窄屏/高屏）")
+    ap.add_argument("--matrix", action="store_true", help="R4 结构矩阵自验（区域 × 演出态 12 组；产物级）")
     args = ap.parse_args()
 
     if not THEME.is_file():
@@ -136,6 +278,8 @@ def main() -> int:
         cases = [(360, 640, 0), (360, 640, 24), (480, 854, 0), (480, 854, 24), (480, 900, 0), (412, 915, 24)]
 
     results = [run_case(vw, vp, safe, template, args.paragraphs, out) for vw, vp, safe in cases]
+    if args.matrix:
+        results.append(matrix_case(template, args.vp, args.vw))
     print("\n合计 %d/%d 通过" % (sum(results), len(results)))
     return 0 if all(results) else 1
 
