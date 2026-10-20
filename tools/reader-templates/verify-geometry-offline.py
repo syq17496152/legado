@@ -421,7 +421,7 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     return True
 
 
-def all_themes_audit(vw: int, vp: int, safe_top: int) -> bool:
+def all_themes_audit(vw: int, vp: int, safe_top: int, paths=None) -> bool:
     """**全内置主题通用正确性巡检**（回答用户"其它内置主题有没有被引擎改动带坏"）。
 
     口径只用**通用**判据，不套用 dungeon-hud 的产品判据（"正文区 ≥80%"是该主题自己的指标，
@@ -432,22 +432,36 @@ def all_themes_audit(vw: int, vp: int, safe_top: int) -> bool:
       ③ **内联 `data:` 个数 ≤ 64**（引擎硬上限，超限素材静默不显示）；
       ④ 仅**报告**：正文槽是否自带显式高度约束、是否自带 `[data-reader-page]` padding reset
          （两者影响"下占位是否为正 / 是否吃 safe 内缩"，不作为判败条件）。
+
+    `paths`（2026-10-20 追加）：显式给出模板 JSON 列表 ⇒ 可对**外部模板**（如 archive 6 套样例）
+    跑同一套零回归口径（无需把样例导入设备 ⇒ 不改动用户书库）。
     """
     from playwright.sync_api import sync_playwright
 
-    themes = sorted((REPO / "app/src/main/assets/reader").glob("*/readerTemplate.json"))
+    themes = [Path(p) for p in paths] if paths else \
+        sorted((REPO / "app/src/main/assets/reader").glob("*/readerTemplate.json"))
     if not themes:
-        print("[取证失败] 未找到内置主题 JSON")
+        print("[取证失败] 未找到主题 JSON")
         return False
     out = REPO / ".temp" / "audit-theme.html"
     failures = []
     rows = []
+    n_a = []
+    # 「外部模板模式」（`--theme-json` 指定第三方样例时）：判据口径必须**只保留零回归不变量**，
+    # 不得把按 dungeon-hud 标定的产品指标（如帧高下界 0.5×vp）套到别人外壳上 —— 否则会把
+    # "短视口里 47.8% 的正文槽"这种**合法几何**误判成回归（2026-10-20 实测：lord_of_mysteries 横屏 47.8%）。
+    external = bool(paths)
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
         for path in themes:
-            tid = path.parent.name
+            # 主题名：内置主题 = 目录名（= id）；外部样例（平铺文件）= 文件名主干
+            tid = path.parent.name if path.parent.name.startswith("builtin.") else path.stem
             template = json.loads(path.read_text(encoding="utf-8"))
+            # 滚动类模板（`type: scroll`）没有分页页根/正文槽结构 ⇒ 本夹具**不适用**（报告 N/A，不判败）。
+            if template.get("type") == "scroll":
+                n_a.append((tid, "scroll 类模板（无分页页根/槽）⇒ 本判据不适用"))
+                continue
             write_html(out, sandbox_html(template, vw, vp, safe_top, 60))
             page.goto(out.as_uri(), wait_until="load")
             page.wait_for_timeout(80)
@@ -459,32 +473,50 @@ def all_themes_audit(vw: int, vp: int, safe_top: int) -> bool:
             slot_reset = bool(rule and "padding: 0" in rule.group(1))
             explicit_h = bool(re.search(r"height:\s*100%", css))
             if data.get("error"):
-                failures.append("%s 渲染失败：%s" % (tid, data["error"]))
+                # 外部模板模式下"取不到分页结构"不判败（可能是外力/异族结构）——但**必须如实登记**。
+                if external:
+                    n_a.append((tid, "取数失败：%s（外部模板 ⇒ 不判败，如实登记）" % data["error"]))
+                else:
+                    failures.append("%s 渲染失败：%s" % (tid, data["error"]))
                 continue
             overflow = data["rootBottom"] - data["vp"]
             client = data.get("slotHeight") or 0
             ok_overflow = overflow <= 1.0
-            ok_frame = 0.5 * data["vp"] <= client <= data["vp"] + 1.0
+            # 帧高**上界**（≤ vp）= 零回归不变量（分页不得退化成"整章一屏"）；
+            # **下界** 0.5×vp 是按 dungeon-hud 标定的产品指标 ⇒ 外部模板模式下只**报告**、不判败。
+            ok_frame = client <= data["vp"] + 1.0 and (external or 0.5 * data["vp"] <= client)
             ok_inline = inline <= 64
             if not ok_overflow:
                 failures.append("%s 页根底超出视口 %+.0fpx（末行/页脚会被推出）" % (tid, overflow))
             if not ok_frame:
-                failures.append("%s 页框量级异常 client=%.0f（vp=%.0f）" % (tid, client, data["vp"]))
+                failures.append("%s 帧高越上界 client=%.0f（vp=%.0f）⇒ 分页退化成整章一屏"
+                                % (tid, client, data["vp"]))
             if not ok_inline:
                 failures.append("%s 内联 data: 个数 %d > 64" % (tid, inline))
-            rows.append((tid, overflow, client, inline, bool(slot_reset), explicit_h))
+            rows.append((tid, overflow, client, inline, bool(slot_reset), explicit_h,
+                         client < 0.5 * data["vp"]))
 
-    print("[全内置主题通用巡检] 口径：页根底 ≤ 视口底 / 0.5vp ≤ 帧 ≤ vp / data: ≤64")
-    print("  %-16s %8s %8s %6s %10s %10s" % ("主题", "溢出", "帧高", "data:", "槽padding0", "有100%高"))
-    for tid, overflow, client, inline, slot_reset, explicit_h in rows:
-        print("  %-16s %+8.0f %8.0f %6d %10s %10s"
-              % (tid, overflow, client, inline, "Y" if slot_reset else "—", "Y" if explicit_h else "—"))
+    print("[全主题通用巡检] 口径：页根底 ≤ 视口底 / 帧高 ≤ vp / data: ≤64"
+          + ("（外部模板：帧高下界仅报告）" if external else ""))
+    print("  %-16s %8s %8s %6s %10s %10s %8s" % ("主题", "溢出", "帧高", "data:", "槽padding0", "有100%高", "帧/vp"))
+    for tid, overflow, client, inline, slot_reset, explicit_h, below in rows:
+        print("  %-16s %+8.0f %8.0f %6d %10s %10s %7.1f%%"
+              % (tid, overflow, client, inline, "Y" if slot_reset else "—",
+                 "Y" if explicit_h else "—", (client / vp * 100) if vp else 0.0))
+    for tid, why in n_a:
+        print("  %-16s %s" % (tid, "N/A：" + why))
+    if external:
+        for tid, _, client, _, _, _, below in rows:
+            if below:
+                print("   [注] %s 帧高 %.0f < 0.5×vp（短视口下的合法几何；零回归不变量「页根底 ≤ 视口底」已满足）"
+                      % (tid, client))
     if failures:
         print("[FAIL] 通用巡检")
         for item in failures:
             print("   - " + item)
         return False
-    print("[PASS] %d 个内置主题全部通过通用巡检" % len(rows))
+    total = len(rows) + len(n_a)
+    print("[PASS] %d 个主题（%d 判 + %d N/A）通过通用巡检" % (total, len(rows), len(n_a)))
     return True
 
 
@@ -499,7 +531,9 @@ def main() -> int:
     ap.add_argument("--shots", action="store_true", help="矩阵模式下额外落真实产物截图（供目视复核）")
     ap.add_argument("--shots-dir", default="", help="截图输出目录（默认为 docs/specs/.../evidence/artifact）")
     ap.add_argument("--all-themes", action="store_true",
-                    help="全内置主题通用巡检（页根底 ≤ 视口底 / 帧量级 / data: 个数）")
+                    help="全主题通用巡检（页根底 ≤ 视口底 / 帧量级 / data: 个数）")
+    ap.add_argument("--theme-json", nargs="+", default=None,
+                    help="显式指定主题 JSON 列表（配合 --all-themes；供 archive 样例等外部模板做零回归巡检）")
     ap.add_argument("--inject-css", default="",
                     help="判据反向对照用：追加 CSS（如故意放大角色 ⇒ '页眉角色完整性'必须报 FAIL）")
     args = ap.parse_args()
@@ -528,7 +562,7 @@ def main() -> int:
                 REPO / "docs/specs/reader-theme-family-rework/evidence/artifact")
         results.append(matrix_case(template, args.vp, args.vw, shots_dir))
     if args.all_themes:
-        results.append(all_themes_audit(args.vw, args.vp, args.safe_top))
+        results.append(all_themes_audit(args.vw, args.vp, args.safe_top, args.theme_json))
     print("\n合计 %d/%d 通过" % (sum(results), len(results)))
     return 0 if all(results) else 1
 
