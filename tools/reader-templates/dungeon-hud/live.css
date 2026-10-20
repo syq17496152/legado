@@ -1,22 +1,22 @@
 /* 幽夜回廊 · 动效（逐帧精灵动画 / 战斗节奏 / 浮尘 / 牺牲场景 / 进页动效）
    纪律（对齐 archive）：只做有限动效、无计时器、无 WebGL；`html[data-reader-motion="paused"]` 即全部停摆。 */
 
-/* 主角：12 层部件共用一个 steps(10) 时间基 ⇒ 严格同步 */
-@keyframes dh-walk { from { background-position: 0 0 } to { background-position: -1800px 0 } }
+/* 主角：12 层部件共用一个 steps(10) 时间基 ⇒ 严格同步（步距 = 整表 em 宽，随页眉带高缩放） */
+@keyframes dh-walk { from { background-position: 0 0 } to { background-position: {{span-em:fig_hero}} 0 } }
 
 /* 敌方逐帧序列（整帧精灵表横向拼接，像素零改动） */
-@keyframes dh-boss { from { background-position: 0 0 } to { background-position: -644px 0 } }
-@keyframes dh-spider { from { background-position: 0 0 } to { background-position: -420px 0 } }
+@keyframes dh-boss { from { background-position: 0 0 } to { background-position: {{span-em:sheet_boss_walk}} 0 } }
+@keyframes dh-spider { from { background-position: 0 0 } to { background-position: {{span-em:sheet_spider_body}} 0 } }
 
 /* R4 新增：敌方 ③④ 与 NPC 的逐帧序列（帧宽高由构建期占位符注入 ⇒ 换素材不会静默错位） */
-@keyframes dh-slug { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_slug_s_idle}} 0 } }
-@keyframes dh-frog { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_frog_l_idle}} 0 } }
-@keyframes dh-npc { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_npc_villager}} 0 } }
+@keyframes dh-slug { from { background-position: 0 0 } to { background-position: {{span-em:sheet_slug_s_idle}} 0 } }
+@keyframes dh-frog { from { background-position: 0 0 } to { background-position: {{span-em:sheet_frog_l_idle}} 0 } }
+@keyframes dh-npc { from { background-position: 0 0 } to { background-position: {{span-em:sheet_npc_villager}} 0 } }
 /* 弹道两帧（`steps()` 真动图的"技能特效"实现通道） */
-@keyframes dh-bolt { from { background-position: 0 0 } to { background-position: {{sheet-span:sheet_bullet_pair}} 0 } }
+@keyframes dh-bolt { from { background-position: 0 0 } to { background-position: {{span-em:sheet_bullet_pair}} 0 } }
 
 /* 回合推进：敌方在页眉内向主角方向压近（原地往返，不触发整页重排） */
-@keyframes dh-advance { 0% { transform: translateX(0) } 100% { transform: translateX(-22px) } }
+@keyframes dh-advance { 0% { transform: translateX(0) } 100% { transform: translateX(-19em) } }
 
 /* 斩击闪光（CSS 自绘；不用素材） */
 @keyframes dh-slash {
@@ -33,11 +33,11 @@
   72%, 100% { transform: translate(214px, -34px); opacity: 0 }
 }
 
-/* 浮尘上升 */
+/* 浮尘上升（位移用 em ⇒ 随页眉带高缩放） */
 @keyframes dh-rise {
   0% { transform: translate(0, 0); opacity: 0 }
   42% { opacity: .9 }
-  100% { transform: translate(6px, -48px); opacity: 0 }
+  100% { transform: translate(5em, -42em); opacity: 0 }
 }
 
 /* 牺牲场景渐显 */

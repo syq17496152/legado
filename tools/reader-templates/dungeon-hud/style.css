@@ -114,7 +114,14 @@ body {
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-rows: clamp(48px, 7.4vh, 80px) minmax(0, 1fr) clamp(44px, 6.5vh, 56px);
+  /* ⚠️ 行高**单一来源**（2026-10-19 用户实测缺陷修）：页眉/页脚带宽必须是 CSS 变量，
+     因为**页眉内所有装饰都按 `--dh-band-h` 缩放**（见 `.dh-stage{font-size}`）——
+     两处各写一份（变量与 grid 行）曾经漂移过，正是"带变矮而角色没缩"的根源。 */
+  --dh-band-h: clamp(48px, 7.4vh, 80px);
+  --dh-band-h-march: clamp(40px, 6vh, 64px);
+  --dh-foot-h: clamp(44px, 6.5vh, 56px);
+  --dh-band-cur: var(--dh-band-h);
+  grid-template-rows: var(--dh-band-h) minmax(0, 1fr) var(--dh-foot-h);
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -123,7 +130,10 @@ body {
   padding: 0 14px 6px;
   background: var(--reader-page-background);
 }
-.dh-marching { grid-template-rows: clamp(40px, 6vh, 64px) minmax(0, 1fr) clamp(44px, 6.5vh, 56px) }
+.dh-marching {
+  grid-template-rows: var(--dh-band-h-march) minmax(0, 1fr) var(--dh-foot-h);
+  --dh-band-cur: var(--dh-band-h-march);
+}
 
 /* ⚠️ 横屏/矮屏断点（2026-10-19 真机口径实测发现）：本项目 MEmu 实例在 **横屏** 下
    物理 1600×1000 / density 300 ⇒ CSS 视口 **853×533**，而 `0.2×视口` 的"页眉+页脚"预算只有 **106.6px**
@@ -131,8 +141,11 @@ body {
    故矮屏另收一档（页眉 min 36 / 页脚 min 32）⇒ 实测 533 档：页眉 51.6 / 页脚 47 / 正文区 **81.5%**。
    密度仍靠层数补，不靠高度。 */
 @media (max-height: 600px) {
-  .dh-page { grid-template-rows: clamp(36px, 8vh, 52px) minmax(0, 1fr) clamp(32px, 6vh, 44px) }
-  .dh-marching { grid-template-rows: clamp(30px, 6.5vh, 44px) minmax(0, 1fr) clamp(32px, 6vh, 44px) }
+  .dh-page {
+    --dh-band-h: clamp(36px, 8vh, 52px);
+    --dh-band-h-march: clamp(30px, 6.5vh, 44px);
+    --dh-foot-h: clamp(32px, 6vh, 44px);
+  }
 }
 
 /* 整页叠加层：暗角 + 石纹斜纹（z-index:-1，不参与测量） */
@@ -156,11 +169,18 @@ body {
   background: radial-gradient(rgba(0, 0, 0, .55) .4px, transparent .8px) 0 0/6px 6px;
 }
 
-/* —— 页眉 · 活场景：**游戏原图全幅铺底** + 暗幕 + 底部渐隐接纸页 —— */
+/* —— 页眉 · 活场景：**游戏原图全幅铺底** + 暗幕 + 底部渐隐接纸页 ——
+   ⚠️ **缩放体系（2026-10-19 用户实测缺陷修）**：`.dh-stage` 的 `font-size` 取**带宽的 1%**
+   ⇒ **1em = 1% 页眉带高**，页眉内所有尺寸/位移一律改用 em ⇒ 带宽一变，整层装饰**等比缩放**。
+   角色（主角 / 敌方 / NPC）的画布高度由构建期按「**墨迹 ≤ 88% 带高**」**从素材墨迹反推**
+   （`build-dungeon-hud.py` 的 `sprite_geom`）⇒ 竖屏 / 横屏 / 任意尺寸下**角色都完整可见**。
+   旧实现是写死 px + `transform: scale(1.3)`：带宽 63px（竖屏 480×853）时角色墨迹高达 108px
+   ⇒ **被裁掉 40px**（用户截图实测「主角/怪物显示不全」——那条注释写"稳定不裁头"，与实测相反，已纠正）。 */
 .dh-stage {
   position: relative;
   margin: -6px -14px 0;
   overflow: hidden;
+  font-size: calc(var(--dh-band-cur) / 100);
   background-color: #08090b;
   background-image: var(--dh-scene);
   background-size: cover;
@@ -179,24 +199,24 @@ body {
     linear-gradient(180deg, rgba(4, 4, 6, .34) 0%, var(--dh-veil) 58%, var(--dh-fade) 100%);
 }
 .dh-sky { display: none }
-/* 场景道具（原作建筑/陈设小图，绝对定位散布，不吃正文高度） */
+/* 场景道具（原作建筑/陈设小图，绝对定位散布，不吃正文高度）——尺寸全部 em（随带高缩放） */
 .dh-props { position: absolute; inset: 0; pointer-events: none; opacity: calc(.92 * var(--dh-deco)) }
 .dh-props i { position: absolute; background-position: center bottom; background-size: contain; background-repeat: no-repeat }
-.dh-prop-a { left: 4%; bottom: 0; width: 64px; height: 30px; background-image: url("{{asset:book_deco3}}") }
-.dh-prop-b { left: 27%; bottom: 2px; width: 12px; height: 28px; background-image: url("{{asset:book_face_spine1}}") }
+.dh-prop-a { left: 4%; bottom: 0; width: 56em; height: 26em; background-image: url("{{asset:book_deco3}}") }
+.dh-prop-b { left: 27%; bottom: 2em; width: 10em; height: 24em; background-image: url("{{asset:book_face_spine1}}") }
 /* c / d 为 CSS 自绘的石柱与光台（不使用素材） */
-.dh-prop-c { right: 4%; bottom: 0; width: 36px; height: 54px; background-image: linear-gradient(180deg, #4a4741, #171614); clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%); opacity: .7 }
-.dh-prop-d { right: 25%; bottom: 0; width: 64px; height: 26px; background-image: linear-gradient(180deg, #55514a, #201f1c); opacity: .65 }
+.dh-prop-c { right: 4%; bottom: 0; width: 31em; height: 47em; background-image: linear-gradient(180deg, #4a4741, #171614); clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%); opacity: .7 }
+.dh-prop-d { right: 25%; bottom: 0; width: 56em; height: 23em; background-image: linear-gradient(180deg, #55514a, #201f1c); opacity: .65 }
 
-/* 主角：12 层部件（180×180 对齐画布，人物实际只占画布中部 ~25×80）同帧号叠加。
-   以画布底为原点缩放 ⇒ 人物脚底恒落在场景带底边上 4px（与带宽无关，稳定不裁头）。 */
-.dh-rig { position: absolute; width: 180px; height: 180px; transform-origin: 50% 100% }
-.dh-hero { left: 12%; bottom: -64px; transform: scale(1.3) }
+/* 主角：12 层部件同帧号叠加。画布尺寸/精灵表/动画步距**全部 em**，且画布高由墨迹反推
+   ⇒ 墨迹高度恒 = 88% 带高，脚底贴带底（`{{fig-bottom}}` 把墨迹下沿对齐到带底）。 */
+.dh-rig { position: absolute; width: {{frame-w:fig_hero}}em; height: {{frame-h:fig_hero}}em; transform-origin: 50% 100% }
+.dh-hero { left: 12%; bottom: {{fig-bottom:fig_hero}} }
 .dh-rig .dh-p {
   position: absolute;
   inset: 0;
   background-repeat: no-repeat;
-  background-size: 1800px 180px;
+  background-size: {{sheet-em:fig_hero}};
   background-position: 0 0;
 }
 /* 层序（背 → 前）：躯体 → 腿脚 → 裙 → 胸 → 臂 → 头 → 发 → 披肩 */
@@ -214,8 +234,8 @@ body {
 .dh-p-hair { background-image: url("{{asset:sheet_hero_hair}}") }
 .dh-p-shoulder_right { background-image: url("{{asset:sheet_hero_shoulder_right}}") }
 
-/* 敌方：整帧序列（页眉 = 对峙，向主角方向推进）。画布取素材原生尺寸，
-   精灵表按原生宽高做背景（绝不能 contain —— 会破坏 steps() 的步进像素）。 */
+/* 敌方：整帧序列（页眉 = 对峙，向主角方向推进）。画布 = 一帧的 em 尺寸，精灵表 em 宽
+   （**不能 contain**：会破坏 `steps()` 的步进像素；改用"元素 = 帧尺寸"的纪律 + em 缩放）。 */
 .dh-foe { position: absolute; transform-origin: 50% 100% }
 .dh-foe .dh-f {
   position: absolute;
@@ -224,43 +244,43 @@ body {
   background-position: 0 0;
   transform-origin: 50% 100%;
 }
-.dh-foe-boss { right: 10%; bottom: -88px; width: 92px; height: 160px }
-.dh-foe-boss .dh-f { background-image: url("{{asset:sheet_boss_walk}}"); background-size: 644px 160px; transform: scale(1.15) }
-.dh-foe-spider { left: 8%; bottom: -75px; width: 140px; height: 140px }
-.dh-foe-spider .dh-f { background-image: url("{{asset:sheet_spider_body}}"); background-size: 420px 140px; transform: scale(1.15) }
+.dh-foe-boss { right: 10%; bottom: {{fig-bottom:sheet_boss_walk}}; width: {{frame-w:sheet_boss_walk}}em; height: {{frame-h:sheet_boss_walk}}em }
+.dh-foe-boss .dh-f { background-image: url("{{asset:sheet_boss_walk}}"); background-size: {{sheet-em:sheet_boss_walk}} }
+.dh-foe-spider { left: 8%; bottom: {{fig-bottom:sheet_spider_body}}; width: {{frame-w:sheet_spider_body}}em; height: {{frame-h:sheet_spider_body}}em }
+.dh-foe-spider .dh-f { background-image: url("{{asset:sheet_spider_body}}"); background-size: {{sheet-em:sheet_spider_body}} }
 /* 弹道（绝对定位，周期飞过，不占正文）—— R4 改用两帧精灵表，见 `.dh-fx-bolt`（旧 `.dh-bullet` 已删） */
 /* 斩击闪光（CSS 自绘，不用素材）—— 类名 `dh-fx-slash` 与 HTML 一致（R4 统一到 `dh-fx` 族，
    避免"CSS 声明了类但 HTML 从不出现在"的死规则，这正是旧任务抓到的 `dh-c-bl`/`dh-c-tr` 同类缺陷） */
 .dh-fx-slash {
   position: absolute;
   left: 34%;
-  bottom: 12px;
-  width: 74px;
-  height: 46px;
+  bottom: 10em;
+  width: 64em;
+  height: 40em;
   pointer-events: none;
   opacity: 0;
-  border-top: 2px solid rgba(240, 236, 226, .92);
+  border-top: 2em solid rgba(240, 236, 226, .92);
   border-radius: 50%;
   transform: rotate(-24deg);
 }
-/* 关卡/书名标牌 */
+/* 关卡/书名标牌（文字尺寸用 clamp：随带高缩放但**保底可读**，避免矮屏小到看不清） */
 .dh-plate {
   position: absolute;
-  left: 14px;
-  bottom: 7px;
+  left: 12em;
+  bottom: 6em;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 3px 8px;
+  gap: 6em;
+  padding: 3em 7em;
   background: rgba(6, 6, 8, .66);
   border: 1px solid rgba(201, 162, 74, calc(.55 * var(--dh-deco)));
   color: #e9e3d5;
   font-family: var(--reader-font-family);
-  font-size: 10px;
+  font-size: clamp(8px, calc(var(--dh-band-cur) * 0.10), 11px);
   letter-spacing: .06em;
 }
-.dh-plate b { font-size: 9px; letter-spacing: .18em; color: var(--dh-gold) }
-.dh-plate span { max-width: 200px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+.dh-plate b { font-size: .86em; letter-spacing: .18em; color: var(--dh-gold) }
+.dh-plate span { max-width: 46%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
 /* 牺牲场景（血条归零时显形；**不用原作剧情 CG** —— 以姿态/灯光/排字表达） */
 .dh-requiem {
   position: absolute;
@@ -269,16 +289,16 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 3em;
   opacity: 0;
   background: radial-gradient(70% 100% at 50% 100%, var(--dh-requiem-glow) 0, rgba(4, 3, 3, .80) 76%);
   color: #ecdfc6;
   pointer-events: none;
 }
-.dh-requiem b { font-size: 9px; letter-spacing: .34em; color: var(--dh-hp) }
-.dh-requiem em { font-style: normal; font-size: 17px; letter-spacing: .30em }
+.dh-requiem b { font-size: clamp(7px, calc(var(--dh-band-cur) * 0.09), 10px); letter-spacing: .34em; color: var(--dh-hp) }
+.dh-requiem em { font-style: normal; font-size: clamp(10px, calc(var(--dh-band-cur) * 0.15), 15px); letter-spacing: .30em }
 .dh-page.dh-fallen .dh-requiem { opacity: 1 }
-.dh-page.dh-fallen .dh-hero { filter: grayscale(1) brightness(.45); transform: scale(1.3) rotate(12deg) translate(-8px, 16px) }
+.dh-page.dh-fallen .dh-hero { filter: grayscale(1) brightness(.45); transform: rotate(12deg) translate(-6em, 12em) }
 .dh-page.dh-fallen .dh-foe { filter: grayscale(.7) brightness(.55) }
 .dh-page.dh-fallen .dh-fx-slash { opacity: 0 }
 
@@ -556,68 +576,67 @@ body {
 .dh-page[data-dh-perf="talk"] .dh-talk { opacity: calc(.95 * var(--dh-deco)) }
 .dh-page.dh-fallen .dh-talk { opacity: 0 }
 
-/* —— R4 敌方 ③④：小型黏液怪 / 蛙形怪（元素盒 = 帧尺寸 + `transform` 缩放 ⇒ 精灵表不失真） —— */
-.dh-foe-slug { left: 5%; bottom: -14px; width: {{sheet-fw:sheet_slug_s_idle}}px; height: {{sheet-fh:sheet_slug_s_idle}}px; transform-origin: 50% 100%; transform: scale(.72) }
-.dh-foe-slug .dh-f { background-image: url("{{asset:sheet_slug_s_idle}}"); background-size: {{sheet-size:sheet_slug_s_idle}}; transform-origin: 50% 100% }
-.dh-foe-frog { right: 5%; bottom: -18px; width: {{sheet-fw:sheet_frog_l_idle}}px; height: {{sheet-fh:sheet_frog_l_idle}}px; transform-origin: 50% 100%; transform: scale(.78) }
-.dh-foe-frog .dh-f { background-image: url("{{asset:sheet_frog_l_idle}}"); background-size: {{sheet-size:sheet_frog_l_idle}}; transform-origin: 50% 100% }
+/* —— R4 敌方 ③④：小型黏液怪 / 蛙形怪（画布与精灵表**全部 em** ⇒ 与页眉带等比缩放并完整可见） —— */
+.dh-foe-slug { left: 5%; bottom: {{fig-bottom:sheet_slug_s_idle}}; width: {{frame-w:sheet_slug_s_idle}}em; height: {{frame-h:sheet_slug_s_idle}}em }
+.dh-foe-slug .dh-f { background-image: url("{{asset:sheet_slug_s_idle}}"); background-size: {{sheet-em:sheet_slug_s_idle}} }
+.dh-foe-frog { right: 5%; bottom: {{fig-bottom:sheet_frog_l_idle}}; width: {{frame-w:sheet_frog_l_idle}}em; height: {{frame-h:sheet_frog_l_idle}}em }
+.dh-foe-frog .dh-f { background-image: url("{{asset:sheet_frog_l_idle}}"); background-size: {{sheet-em:sheet_frog_l_idle}} }
 
-/* —— R4 NPC（对话演出在场者）：2 帧整身动图（分层部件合成，见 build 的 npc_sheet_data_uri） —— */
+/* —— R4 NPC（对话演出在场者）：2 帧整身动图（分层部件合成）——同样 em 缩放 —— */
 .dh-npc {
   position: absolute;
   left: 62%;
-  bottom: -64px;
-  width: {{sheet-fw:sheet_npc_villager}}px;
-  height: {{sheet-fh:sheet_npc_villager}}px;
+  bottom: {{fig-bottom:sheet_npc_villager}};
+  width: {{frame-w:sheet_npc_villager}}em;
+  height: {{frame-h:sheet_npc_villager}}em;
   transform-origin: 50% 100%;
-  transform: scale(1.3);
   opacity: 0;
 }
 .dh-npc .dh-n-f {
   position: absolute;
   inset: 0;
   background-image: url("{{asset:sheet_npc_villager}}");
-  background-size: {{sheet-size:sheet_npc_villager}};
+  background-size: {{sheet-em:sheet_npc_villager}};
   background-repeat: no-repeat;
   background-position: 0 0
 }
 
-/* —— R4 左右两侧**竖区域**点缀（对齐 archive 左右竖带；图集四格各取一格） —— */
-.dh-band { position: absolute; top: 0; bottom: 0; width: 22px; z-index: 3; pointer-events: none }
+/* —— R4 左右两侧**竖区域**点缀（对齐 archive 左右竖带；图集四格各取一格）—— */
+.dh-band { position: absolute; top: 0; bottom: 0; width: 22em; z-index: 3; pointer-events: none }
 .dh-band-l { left: 0 }
 .dh-band-r { right: 0 }
 .dh-band i {
   position: absolute;
-  width: 20px;
-  height: 30px;
+  width: 20em;
+  height: 30em;
   background-image: var(--dh-band);
   background-repeat: no-repeat;
   background-size: 400% 100%;
   opacity: calc(.85 * var(--dh-deco))
 }
-.dh-b0 { left: 1px; top: 16%; background-position: 0% 50% }
-.dh-b1 { left: 1px; top: 52%; background-position: 33.33% 50% }
-.dh-b2 { right: 1px; top: 28%; background-position: 66.67% 50% }
-.dh-b3 { right: 1px; top: 64%; background-position: 100% 50% }
+.dh-b0 { left: 1em; top: 16%; background-position: 0% 50% }
+.dh-b1 { left: 1em; top: 52%; background-position: 33.33% 50% }
+.dh-b2 { right: 1em; top: 28%; background-position: 66.67% 50% }
+.dh-b3 { right: 1em; top: 64%; background-position: 100% 50% }
 
 /* —— R4 技能/弹道特效 3 类（斩击=CSS / 多帧弹道=精灵表 / 冲击波=CSS） —— */
 .dh-fx { position: absolute; pointer-events: none; opacity: 0 }
-.dh-fx-bolt { left: 30%; top: 42%; width: 15px; height: 16px }
+.dh-fx-bolt { left: 30%; top: 42%; width: 14em; height: 15em }
 /* 多帧弹道：两帧精灵表 + `steps(2)`（元素盒 = 帧尺寸 ⇒ 步进像素不错位） */
 .dh-fx-bolt i {
   display: block;
   width: 100%;
   height: 100%;
   background-image: var(--dh-bolt);
-  background-size: {{sheet-size:sheet_bullet_pair}};
+  background-size: {{sheet-em:sheet_bullet_pair}};
   background-repeat: no-repeat;
   background-position: 0 0
 }
 .dh-fx-burst {
   left: 40%;
-  bottom: 8px;
-  width: 96px;
-  height: 56px;
+  bottom: 7em;
+  width: 84em;
+  height: 49em;
   background: radial-gradient(50% 50% at 50% 50%, rgba(236, 223, 198, calc(.75 * var(--dh-deco))) 0, rgba(122, 28, 23, calc(.42 * var(--dh-deco))) 42%, transparent 72%)
 }
 .dh-page[data-dh-perf="battle"] .dh-fx-slash { opacity: 1 }
@@ -631,17 +650,17 @@ body {
 .dh-talk {
   position: absolute;
   left: 40%;
-  right: 8px;
-  bottom: 4px;
+  right: 8em;
+  bottom: 4em;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
+  gap: 6em;
+  padding: 3em 9em;
   background: linear-gradient(180deg, rgba(12, 12, 14, calc(.92 * var(--dh-deco))), rgba(6, 6, 8, calc(.96 * var(--dh-deco))));
   border: 1px solid rgba(201, 162, 74, calc(.42 * var(--dh-deco)));
   color: #e6ded0;
-  font-size: 10px;
+  font-size: clamp(8px, calc(var(--dh-band-cur) * 0.10), 11px);
   opacity: 0
 }
-.dh-talk b { flex: none; font-size: 8px; letter-spacing: .18em; color: var(--dh-gold) }
+.dh-talk b { flex: none; font-size: .78em; letter-spacing: .18em; color: var(--dh-gold) }
 .dh-talk span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }

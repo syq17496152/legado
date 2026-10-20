@@ -22,39 +22,77 @@
 
 import argparse
 import json
+import re
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 MD = REPO / "app/src/main/assets/md"
 THEME = REPO / "app/src/main/assets/reader/builtin.dungeon-hud/readerTemplate.json"
+ASSETS = REPO / "tools/reader-templates/dungeon-hud/assets"
 
 # 正文区硬指标（design §5 / spec R1）
 CONTENT_RATIO_MIN = 0.80
 HEADER_LIMIT_RATIO = 0.20  # 页眉 + 页脚 ≤ 0.2 × 视口高
+
+# 判据可用性自检用的"注入 CSS"（默认空）：`--inject-css` 传入 ⇒ 追加到主题 CSS 之后。
+# 用途（2026-10-20 反向对照）：故意放大页眉角色画布 ⇒ "页眉角色完整性"判据**必须**报 FAIL，
+# 以此证明该判据不是空真（此前用户实测缺陷正是"判据全绿但肉眼可见被裁"）。
+EXTRA_CSS = ""
 
 SAMPLE = (
     "夜色自拱顶的裂隙渗下，落成一束苍白的光。她把披风拢紧，指尖沿石壁划过——那道纹路仍在，一如多年前。"
 )
 
 
+def write_html(path: Path, text: str, attempts: int = 6) -> None:
+    """把夹具 HTML 落盘（**带重试**）。
+
+    为什么需要：Chromium 进程退出后，Windows 对刚写过的文件句柄**偶尔延迟释放** ⇒ 同一路径
+    紧接着再写会偶发 `PermissionError: [Errno 13]`（真机实测：连续跑两次矩阵必然第二次失败）。
+    重试（间隔 0.4s）即稳定通过，且不改变判据口径。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for index in range(attempts):
+        try:
+            path.write_text(text, encoding="utf-8")
+            return
+        except PermissionError:
+            if index == attempts - 1:
+                raise
+            time.sleep(0.4)
+
+
 def sandbox_html(template: dict, vw: int, vp: int, safe_top: int, paragraphs: int,
-                 region: str = "cathedral", perf: str = "explore", fallen: bool = False) -> str:
+                 region: str = None, perf: str = None, fallen: bool = False) -> str:
+    """构造沙箱文档。
+
+    `region` / `perf` 只对**声明了 `data-dh-*` 的主题**（本任务的 dungeon-hud）生效；其它内置主题
+    直接跳过属性替换（同一份夹具即可复用于**全内置主题巡检**，见 [all_themes_audit]）。
+    """
     css_parts = []
     for name in ("md-reader.css", "template-archive-base.css", "template-layout.css", "template-decoration.css"):
         path = MD / name
         if path.is_file():
             css_parts.append("/* %s */\n%s" % (name, path.read_text(encoding="utf-8")))
     css_parts.append("/* theme */\n%s" % template["css"])
+    if EXTRA_CSS:
+        css_parts.append("/* self-test injected */\n%s" % EXTRA_CSS)
     body = "".join('<p class="reader-paragraph">%s</p>' % SAMPLE for _ in range(paragraphs))
-    html = template["firstPageHtml"].replace(
-        'data-reader-flow="body" data-reader-flow-pagination="columns"></section>',
-        'data-reader-flow="body" data-reader-flow-pagination="columns">%s</section>' % body,
-    )
-    # 与作者 JS（`direct()` / `sync()`）同口径：区域/演出态/牺牲态写在**页壳**的 `data-dh-*` 与 class 上
-    html = html.replace('data-dh-region="cathedral"', 'data-dh-region="%s"' % region)
-    html = html.replace('data-dh-perf="explore"', 'data-dh-perf="%s"' % perf)
+    html = template.get("firstPageHtml") or template.get("otherPageHtml") or ""
+    # 通用"正文槽注入"：不依赖各主题的具体标签/属性顺序（旧实现硬匹配 dungeon-hud 的字符串）。
+    # 用**非贪婪**匹配槽内已有内容并整体替换 ⇒ 无论槽是空的还是预置了文案，都能注入足够长的正文。
+    html, injected = re.subn(
+        r'(<(?:section|div|article|main)\b[^>]*data-reader-flow="body"[^>]*>)(.*?)(</(?:section|div|article|main)>)',
+        lambda m: m.group(1) + body + m.group(3), html, count=1, flags=re.S)
+    if not injected:
+        body = ""    # 无法注入时不影响页面结构，只会在巡检里表现为"帧高偏小"（由调用方披露）
+    if region:
+        html = html.replace('data-dh-region="cathedral"', 'data-dh-region="%s"' % region)
+    if perf:
+        html = html.replace('data-dh-perf="explore"', 'data-dh-perf="%s"' % perf)
     if fallen:
         html = html.replace('class="dh-page dh-opening"', 'class="dh-page dh-opening dh-fallen"')
     return (
@@ -97,7 +135,7 @@ def measure(page, url: str) -> dict:
 def run_case(vw: int, vp: int, safe_top: int, template: dict, paragraphs: int, out: Path) -> bool:
     from playwright.sync_api import sync_playwright
 
-    out.write_text(sandbox_html(template, vw, vp, safe_top, paragraphs), encoding="utf-8")
+    write_html(out, sandbox_html(template, vw, vp, safe_top, paragraphs))
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
@@ -158,6 +196,22 @@ MATRIX_JS = """
     folio: !!document.querySelector('.dh-folio'),
     paperBg: cs('.dh-paper', 'background-color'),
     textColor: cs('.dh-body', 'color'),
+    // 页眉带与各角色的实际几何（"角色是否被裁切"判据的数据源）
+    band: (() => { const e = document.querySelector('.dh-stage'); if (!e) return null;
+      const r = e.getBoundingClientRect();
+      return {top: r.top, bottom: r.bottom, height: r.height}; })(),
+    sprites: (() => {
+      const out = {};
+      for (const s of ['.dh-rig.dh-hero', '.dh-foe-boss', '.dh-foe-spider', '.dh-foe-slug',
+                       '.dh-foe-frog', '.dh-npc']) {
+        const el = document.querySelector(s);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        out[s] = {x: r.left, y: r.top, w: r.width, h: r.height,
+                  opacity: parseFloat(getComputedStyle(el).opacity || '0')};
+      }
+      return out;
+    })(),
     bodyCount: document.querySelectorAll('[data-reader-flow="body"]').length,
     // 牺牲态：页脚归零（CSS 变量 --rp-percent 由宿主下发；此处按未注入计，仅记录结构）
     fallen: document.querySelectorAll('.dh-fallen').length
@@ -167,6 +221,43 @@ MATRIX_JS = """
 
 REGIONS = ["cathedral", "town", "grave", "cave"]
 PERFS = ["explore", "battle", "talk"]
+
+# —— 页眉"角色是否被裁切"判据（2026-10-19 用户实测缺陷补齐）——
+# 为什么必须机检：此前**全部**判据都是数值类（占位 / 正文区 / 翻页 / 页框）**没有任何一条**约束
+# "页眉里的角色要完整可见" ⇒ 竖屏下图被裁掉半截仍然全绿（用户一眼看出的缺陷）。判据口径：
+# 取该角色精灵**墨迹包围盒**（对 PNG alpha 通道求并集，抗透明留白干扰），投影到页面坐标后
+# **必须完整落在页眉带（`.dh-stage`）内**（容差 2px 抗锯齿/取整）。
+SPRITE_INK_TOLERANCE = 2.0
+SPRITE_PREFIXES = {
+    ".dh-rig.dh-hero": "hero_",          # 主角 12 部件共享同一张画布 ⇒ 取全部部件帧的并集
+    ".dh-foe-boss": "boss_walk_",
+    ".dh-foe-spider": "spider_body_",
+    ".dh-foe-slug": "slug_s_idle_",
+    ".dh-foe-frog": "frog_l_idle_",
+    ".dh-npc": "npc_villager_",
+}
+
+
+def ink_fractions(prefix: str):
+    """返回该角色**墨迹包围盒**在单帧画布内的相对比例 `(x0, y0, x1, y1)`。"""
+    from PIL import Image
+    files = sorted(ASSETS.glob(prefix + "*.png"))
+    box = None
+    size = None
+    for path in files:
+        img = Image.open(path).convert("RGBA")
+        size = img.size
+        alpha_bbox = img.getchannel("A").getbbox()
+        if not alpha_bbox:
+            continue
+        box = alpha_bbox if box is None else (
+            min(box[0], alpha_bbox[0]), min(box[1], alpha_bbox[1]),
+            max(box[2], alpha_bbox[2]), max(box[3], alpha_bbox[3]),
+        )
+    if box is None or not size:
+        return None
+    w, h = size
+    return (box[0] / w, box[1] / h, box[2] / w, box[3] / h)
 
 
 def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> bool:
@@ -183,12 +274,16 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     failures = []
     stage_images = {}
     shot_list = []
+    # 页眉角色完整性判据的**数值证据**（每角色最差一组；禁"静默 PASS"——用户实测缺陷正是因判据无数值留痕）
+    sprite_evidence = {}
+    # 各角色**墨迹包围盒**（相对画布比例）：离线算一次，供"是否被页眉带裁切"判据使用
+    ink_map = {sel: ink_fractions(prefix) for sel, prefix in SPRITE_PREFIXES.items()}
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
         for region in REGIONS:
             for perf in PERFS:
-                out.write_text(sandbox_html(template, vw, vp, 0, 40, region, perf), encoding="utf-8")
+                write_html(out, sandbox_html(template, vw, vp, 0, 40, region, perf))
                 page.goto(out.as_uri(), wait_until="load")
                 page.wait_for_timeout(60)
                 d = page.evaluate(MATRIX_JS)
@@ -244,6 +339,30 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
                     failures.append("%s NPC 动画未生效（%s）" % (label, d["npcAnim"]))
                 if d["boltAnim"] != "dh-bolt":
                     failures.append("%s 弹道多帧动画未生效（%s）" % (label, d["boltAnim"]))
+                # ⑧ **页眉角色完整性**（用户实测缺陷补）：墨迹必须完整落在页眉带内
+                band = d.get("band")
+                if band:
+                    for sel, ink in ink_map.items():
+                        info = (d.get("sprites") or {}).get(sel)
+                        if not info or ink is None:
+                            continue
+                        if float(info.get("opacity") or 0) <= 0.05:
+                            continue    # 该演出态下不上场的角色不判
+                        ink_top = info["y"] + ink[1] * info["h"]
+                        ink_bot = info["y"] + ink[3] * info["h"]
+                        overflow = max(0.0, band["top"] - ink_top) + max(0.0, ink_bot - band["bottom"])
+                        # 留痕：每个角色的**最差（溢出最大）**一组作为数值证据（无论 PASS/FAIL 都记）
+                        prev = sprite_evidence.get(sel)
+                        if prev is None or overflow > prev["overflow"]:
+                            sprite_evidence[sel] = {
+                                "overflow": overflow, "label": label,
+                                "ink_top": ink_top, "ink_bot": ink_bot,
+                                "band_top": band["top"], "band_bottom": band["bottom"],
+                            }
+                        if overflow > SPRITE_INK_TOLERANCE:
+                            failures.append(
+                                "%s %s 被页眉带裁切 %.0fpx（墨迹 %.0f~%.0f / 带 %.0f~%.0f）"
+                                % (label, sel, overflow, ink_top, ink_bot, band["top"], band["bottom"]))
                 # ⑦ 正文槽与页脚读数在场
                 if d["bodyCount"] != 1:
                     failures.append("%s 正文槽数 %d ≠ 1" % (label, d["bodyCount"]))
@@ -264,7 +383,7 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
         for theme in THEMES:
-            out.write_text(sandbox_html(template, vw, vp, 0, 40, "cathedral", "battle"), encoding="utf-8")
+            write_html(out, sandbox_html(template, vw, vp, 0, 40, "cathedral", "battle"))
             page.goto(out.as_uri(), wait_until="load")
             page.evaluate("(t) => document.documentElement.setAttribute('data-reader-theme', t)", theme)
             page.wait_for_timeout(60)
@@ -278,6 +397,11 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     if len(set(seen)) != len(THEMES):
         failures.append("三态未两两不同：%s" % state_pairs)
 
+    # 判据可用性自检（AD-2）：若**一个角色几何都没取到** ⇒ "角色完整可见"这一条根本没被检验
+    # ⇒ 判 FAIL（防"判据因选择器失配而恒真空、却报 PASS"）。
+    if not sprite_evidence:
+        failures.append("页眉角色完整性判据未取到任何角色几何（选择器失配？）⇒ 判据真空，不得计 PASS")
+
     if failures:
         print("[FAIL] R4 结构矩阵（区域×演出态 = %d 组）" % (len(REGIONS) * len(PERFS)))
         for item in failures[:12]:
@@ -286,8 +410,81 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     print("[PASS] R4 结构矩阵：%d 区域 × %d 演出态 = %d 组；竖带 4 格 / 四角 4 枚 / 多帧 steps 动效 6 类全部生效"
           "；**三态（日/夜/水墨屏）两两不同**"
           % (len(REGIONS), len(PERFS), len(REGIONS) * len(PERFS)))
+    # 页眉角色完整性：**必须给出数值证据**（禁"静默 PASS"）。带高 = band_bottom − band_top。
+    for sel, ev in sorted(sprite_evidence.items(), key=lambda kv: -kv[1]["overflow"]):
+        band_h = ev["band_bottom"] - ev["band_top"]
+        print("   · 页眉角色 %-20s 墨迹 %.1f~%.1f / 带 %.1f~%.1f（带高 %.1f）⇒ 溢出 %.1fpx [最差组 %s]"
+              % (sel, ev["ink_top"], ev["ink_bot"], ev["band_top"], ev["band_bottom"],
+                 band_h, ev["overflow"], ev["label"]))
     if shot_list:
         print("   产物截图 %d 张 → %s" % (len(shot_list), shots_dir))
+    return True
+
+
+def all_themes_audit(vw: int, vp: int, safe_top: int) -> bool:
+    """**全内置主题通用正确性巡检**（回答用户"其它内置主题有没有被引擎改动带坏"）。
+
+    口径只用**通用**判据，不套用 dungeon-hud 的产品判据（"正文区 ≥80%"是该主题自己的指标，
+    其它主题的页眉/页脚预算各不同）：
+      ① **页根底 ≤ 视口底**（`rb − vp ≤ +1`）：末行/页脚不被推出视口 —— 引擎 `box-sizing` 的正确性
+         对**所有主题**都成立（这是本轮引擎改动的零回归底线）；
+      ② **页框量级** `0.5×vp ≤ client ≤ vp`：分页未退化成"整章一屏"（引擎负下占位守门的兜底效果）；
+      ③ **内联 `data:` 个数 ≤ 64**（引擎硬上限，超限素材静默不显示）；
+      ④ 仅**报告**：正文槽是否自带显式高度约束、是否自带 `[data-reader-page]` padding reset
+         （两者影响"下占位是否为正 / 是否吃 safe 内缩"，不作为判败条件）。
+    """
+    from playwright.sync_api import sync_playwright
+
+    themes = sorted((REPO / "app/src/main/assets/reader").glob("*/readerTemplate.json"))
+    if not themes:
+        print("[取证失败] 未找到内置主题 JSON")
+        return False
+    out = REPO / ".temp" / "audit-theme.html"
+    failures = []
+    rows = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": vw, "height": vp}, device_scale_factor=1)
+        for path in themes:
+            tid = path.parent.name
+            template = json.loads(path.read_text(encoding="utf-8"))
+            write_html(out, sandbox_html(template, vw, vp, safe_top, 60))
+            page.goto(out.as_uri(), wait_until="load")
+            page.wait_for_timeout(80)
+            data = page.evaluate(MEASURE_JS)
+            source = json.dumps(template, ensure_ascii=False)
+            inline = len(re.findall(r"data:[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+;base64,", source))
+            css = template.get("css", "")
+            rule = re.search(r"\[data-reader-page]\s*\{([^}]*)}", css)
+            slot_reset = bool(rule and "padding: 0" in rule.group(1))
+            explicit_h = bool(re.search(r"height:\s*100%", css))
+            if data.get("error"):
+                failures.append("%s 渲染失败：%s" % (tid, data["error"]))
+                continue
+            overflow = data["rootBottom"] - data["vp"]
+            client = data.get("slotHeight") or 0
+            ok_overflow = overflow <= 1.0
+            ok_frame = 0.5 * data["vp"] <= client <= data["vp"] + 1.0
+            ok_inline = inline <= 64
+            if not ok_overflow:
+                failures.append("%s 页根底超出视口 %+.0fpx（末行/页脚会被推出）" % (tid, overflow))
+            if not ok_frame:
+                failures.append("%s 页框量级异常 client=%.0f（vp=%.0f）" % (tid, client, data["vp"]))
+            if not ok_inline:
+                failures.append("%s 内联 data: 个数 %d > 64" % (tid, inline))
+            rows.append((tid, overflow, client, inline, bool(slot_reset), explicit_h))
+
+    print("[全内置主题通用巡检] 口径：页根底 ≤ 视口底 / 0.5vp ≤ 帧 ≤ vp / data: ≤64")
+    print("  %-16s %8s %8s %6s %10s %10s" % ("主题", "溢出", "帧高", "data:", "槽padding0", "有100%高"))
+    for tid, overflow, client, inline, slot_reset, explicit_h in rows:
+        print("  %-16s %+8.0f %8.0f %6d %10s %10s"
+              % (tid, overflow, client, inline, "Y" if slot_reset else "—", "Y" if explicit_h else "—"))
+    if failures:
+        print("[FAIL] 通用巡检")
+        for item in failures:
+            print("   - " + item)
+        return False
+    print("[PASS] %d 个内置主题全部通过通用巡检" % len(rows))
     return True
 
 
@@ -301,7 +498,14 @@ def main() -> int:
     ap.add_argument("--matrix", action="store_true", help="R4 结构矩阵自验（区域 × 演出态 12 组；产物级）")
     ap.add_argument("--shots", action="store_true", help="矩阵模式下额外落真实产物截图（供目视复核）")
     ap.add_argument("--shots-dir", default="", help="截图输出目录（默认为 docs/specs/.../evidence/artifact）")
+    ap.add_argument("--all-themes", action="store_true",
+                    help="全内置主题通用巡检（页根底 ≤ 视口底 / 帧量级 / data: 个数）")
+    ap.add_argument("--inject-css", default="",
+                    help="判据反向对照用：追加 CSS（如故意放大角色 ⇒ '页眉角色完整性'必须报 FAIL）")
     args = ap.parse_args()
+
+    global EXTRA_CSS
+    EXTRA_CSS = args.inject_css
 
     if not THEME.is_file():
         print("[缺产物] %s（先跑 build-dungeon-hud.py）" % THEME, file=sys.stderr)
@@ -323,6 +527,8 @@ def main() -> int:
             shots_dir = Path(args.shots_dir) if args.shots_dir else (
                 REPO / "docs/specs/reader-theme-family-rework/evidence/artifact")
         results.append(matrix_case(template, args.vp, args.vw, shots_dir))
+    if args.all_themes:
+        results.append(all_themes_audit(args.vw, args.vp, args.safe_top))
     print("\n合计 %d/%d 通过" % (sum(results), len(results)))
     return 0 if all(results) else 1
 

@@ -90,6 +90,8 @@ MAX_ELEMENTS = 200
 #   · 单张内联素材 ≤ 8 MiB（`ReaderAssetPathPolicy.MaxAssetBytes` / `MaxInlineDataBytes`）
 MAX_INLINE_DATA_COUNT = 64
 MAX_ASSET_BYTES = 8 * 1024 * 1024
+# 角色墨迹高度占页眉带高的百分比（em 体系：100em = 100% 带高；取 88 ⇒ 上下各留 6% 余量）
+FIG_FIT_EM = 88.0
 ALLOWED_FIELDS = {"bookName", "chapterTitle", "progress", "page", "pageCount", "time", "battery", "percent"}
 FORBIDDEN_IP = ["asuka", "eva", "evangelion", "doraemon", "minecraft", "pokemon", "naruto", "hatsune"]
 
@@ -147,6 +149,56 @@ def aligned_sheet_data_uri(files: list) -> tuple:
     sheet.save(buffer, format="PNG", optimize=True)
     raw = buffer.getvalue()
     return "data:image/png;base64," + base64.b64encode(raw).decode("ascii"), raw, width, height, len(frames)
+
+
+def ink_fractions(prefix: str) -> tuple:
+    """角色**墨迹包围盒**在单帧画布内的相对比例 `(x0, y0, x1, y1)`（alpha 包围盒求并集）。
+
+    用途（2026-10-19 用户实测缺陷修）：把角色画布缩放到"**墨迹完整落在页眉带内**"——
+    旧实现用写死 px 缩放，页眉带变矮（竖屏 63px）时角色墨迹高达 108px 被裁掉 40px（用户一眼看出的
+    「主角/怪物显示不全」）。现在由构建期按"墨迹 ≤ 88% 带高"**反推**画布尺寸（em 相对单位）。
+    """
+    box = None
+    size = None
+    for path in sorted(ASSETS.glob(prefix + "*.png")):
+        with Image.open(path) as img:
+            img = img.convert("RGBA")
+            size = img.size
+            alpha_bbox = img.getchannel("A").getbbox()
+        if not alpha_bbox:
+            continue
+        box = alpha_bbox if box is None else (
+            min(box[0], alpha_bbox[0]), min(box[1], alpha_bbox[1]),
+            max(box[2], alpha_bbox[2]), max(box[3], alpha_bbox[3]),
+        )
+    if box is None or not size or not size[0] or not size[1]:
+        return (0.0, 0.0, 1.0, 1.0)
+    return (box[0] / size[0], box[1] / size[1], box[2] / size[0], box[3] / size[1])
+
+
+def ink_height_fraction(prefix: str) -> float:
+    y0, y1 = ink_fractions(prefix)[1], ink_fractions(prefix)[3]
+    return max(0.05, y1 - y0)
+
+
+def sprite_geom(key: str, prefix: str, frame_w: int, frame_h: int, count: int, ink: float = None) -> dict:
+    """精灵表几何（px 供"像素式 steps"参照；**em 供"随页眉带高连续缩放"**）。
+
+    em 口径：`1em = 1% 页眉带高`（`style.css` 给 `.dh-stage` 设 `font-size: calc(var(--dh-band-cur)/100)`）
+    ⇒ 令**角色墨迹高度 = FIG_FIT_EM em**（88em = 88% 带高）即可保证"完整落在页眉带内"，
+    于是画布高度 = `FIG_FIT_EM / 墨迹占比`（占比由 alpha 包围盒实测，见 [ink_fractions]）。
+    这正是用户要的"**去缩放**"：缩放系数不再写死，而是**从素材墨迹反推**。
+    `fig_bottom_em`：把**墨迹下沿**对齐到带底所需的负位移（画布底部可能落在墨迹之下）。
+    """
+    x0, y0, x1, y1 = ink_fractions(prefix)
+    ink_h = ink if ink else max(0.05, y1 - y0)
+    frame_h_em = FIG_FIT_EM / max(0.05, ink_h)
+    frame_w_em = frame_h_em * (frame_w / float(frame_h))
+    return {
+        "w": frame_w * count, "h": frame_h, "count": count,
+        "frame_h_em": frame_h_em, "frame_w_em": frame_w_em,
+        "fig_bottom_em": -(1.0 - y1) * frame_h_em,
+    }
 
 
 def png_data_uri(path: Path) -> tuple:
@@ -255,32 +307,42 @@ def budget_report(template: dict) -> list:
         max_asset_bytes = max(max_asset_bytes, len(match.group(1)) * 3 // 4)
 
     problems = []
-    # 行高门禁（R1，硬指标）：`.dh-page` 的**页眉行 + 页脚行 ≤ 0.2 × 视口高**（保正文区 ≥80%）。
-    # 按参考视口 854 CSS px（本轮 MEmu 口径）折算 `clamp(min, Nvh, max)` 的实际取值。
+    # 行高门禁（R1，硬指标）：**页眉行 + 页脚行 ≤ 0.2 × 视口高**（保正文区 ≥80%）。
+    # ⚠️ 2026-10-19：行高已改为 **CSS 变量**（`--dh-band-h` / `--dh-foot-h`，因为页眉内装饰按带宽缩放）
+    # ⇒ 门禁必须**解析变量**（含矮屏媒体查询那一档），不能再直读 `grid-template-rows` 里的 clamp 字面量。
     REF_VP = 854
+    REF_VP_SHORT = 533      # 矮屏/横屏档（真机横屏 CSS 视口）
     HEADER_FOOT_LIMIT = 0.2 * REF_VP
-    rows_match = re.search(r"\.dh-page\s*\{[^}]*grid-template-rows:\s*([^;]+);", plain_css)
+
+    def clamp_px(expr: str, vp: float):
+        if not expr:
+            return None
+        expr = expr.strip()
+        m = re.match(r"clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)vh\s*,\s*([\d.]+)px\s*\)", expr)
+        if m:
+            lo, ratio, hi = float(m.group(1)), float(m.group(2)), float(m.group(3))
+            return max(lo, min(hi, ratio * vp / 100.0))
+        m2 = re.match(r"([\d.]+)px$", expr)
+        return float(m2.group(1)) if m2 else None
+
+    def var_expr(name: str, scope: str):
+        m = re.search(r"%s:\s*([^;]+);" % re.escape(name), scope)
+        return m.group(1) if m else None
+
+    base_scope = re.search(r"\.dh-page\s*\{([^}]*)}", plain_css)
+    short_scope = re.search(r"@media\s*\(max-height:\s*600px\)\s*\{\s*\.dh-page\s*\{([^}]*)}", plain_css)
     hdr_foot = None
-    if rows_match:
-        row_text = rows_match.group(1).strip()
-        # 取**首个**与**末个**轨道（页眉行 / 页脚行）；轨道可能含空格（`clamp(a, b, c)` / `minmax(...)`）
-        # ⇒ 不能用 `split()` 分词，必须按"整段轨道"正则捕获。
-        track = r"clamp\([^)]*\)|minmax\([^)]*\)|[\d.]+px"
-        first = re.match(r"\s*(%s)" % track, row_text)
-        last = re.search(r"(%s)\s*$" % track, row_text)
-        if first and last:
-            hdr_foot = 0.0
-            for part in (first.group(1), last.group(1)):
-                clamp = re.match(r"clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)vh\s*,\s*([\d.]+)px\s*\)", part)
-                fixed = re.match(r"([\d.]+)px$", part)
-                if clamp:
-                    lo, ratio, hi = (float(clamp.group(1)), float(clamp.group(2)), float(clamp.group(3)))
-                    hdr_foot += max(lo, min(hi, ratio * REF_VP / 100.0))
-                elif fixed:
-                    hdr_foot += float(fixed.group(1))
-                else:
-                    hdr_foot = None
-                    break
+    short_hdr_foot = None
+    if base_scope:
+        band = clamp_px(var_expr("--dh-band-h", base_scope.group(1)), REF_VP)
+        foot = clamp_px(var_expr("--dh-foot-h", base_scope.group(1)), REF_VP)
+        if band is not None and foot is not None:
+            hdr_foot = band + foot
+    if short_scope:
+        band_s = clamp_px(var_expr("--dh-band-h", short_scope.group(1)), REF_VP_SHORT)
+        foot_s = clamp_px(var_expr("--dh-foot-h", short_scope.group(1)), REF_VP_SHORT)
+        if band_s is not None and foot_s is not None:
+            short_hdr_foot = band_s + foot_s
     checks = [
         ("@keyframes ≤ %d" % MAX_KEYFRAMES, keyframes <= MAX_KEYFRAMES, "实有 %d" % keyframes),
         ("animation 声明 ≤ %d" % MAX_ANIMATION_DECLARATIONS, animations <= MAX_ANIMATION_DECLARATIONS, "实有 %d" % animations),
@@ -301,7 +363,10 @@ def budget_report(template: dict) -> list:
          "最大 %.2f MiB" % (max_asset_bytes / 1048576)),
         ("页眉/页脚行 ≤ 0.2×视口（正文区 ≥80%）",
          hdr_foot is not None and hdr_foot <= HEADER_FOOT_LIMIT,
-         "页眉+页脚=%.1f（上限 %.1f）" % (hdr_foot, HEADER_FOOT_LIMIT) if hdr_foot is not None else "未能解析 grid-template-rows"),
+         "页眉+页脚=%.1f（上限 %.1f）" % (hdr_foot, HEADER_FOOT_LIMIT) if hdr_foot is not None else "未能解析 --dh-band-h/--dh-foot-h"),
+        ("矮屏/横屏档 页眉+页脚 ≤ 0.2×视口（533 参考）",
+         short_hdr_foot is not None and short_hdr_foot <= 0.2 * REF_VP_SHORT,
+         "页眉+页脚=%.1f（上限 %.1f）" % (short_hdr_foot, 0.2 * REF_VP_SHORT) if short_hdr_foot is not None else "未取到矮屏档变量"),
         # **死规则清零**（spec R4 Scenario）：CSS 里声明的 `.dh-*` 类必须全部在 HTML/JS 中有供给。
         # 为什么机检：旧任务抓到 `dh-c-bl`/`dh-c-tr` 两条"声明了却从不出现"的死规则（与用户报的
         # 「元素缺失」同族）——而这类缺陷**不会报错**，只能靠静默的"规则恒空"暴露。
@@ -338,7 +403,7 @@ def main() -> int:
         files = frames_of(manifest, prefix)
         uri, raw, frame_w, frame_h, count = sheet_data_uri(files, len(files))
         assets[key] = uri
-        sheet_geom[key] = (frame_w * count, frame_h, count)
+        sheet_geom[key] = sprite_geom(key, prefix, frame_w, frame_h, count)
         registered.append({
             "alias": key, "type": "sheet-inline", "kind": "art", "frames": count,
             "frameSize": "%dx%d" % (frame_w, frame_h),
@@ -348,12 +413,20 @@ def main() -> int:
         })
         print("  %-26s %2d 帧 %3dx%3d → %6.1f KB" % (key, count, frame_w, frame_h, len(uri) / 1024))
 
+    # 主角「整身」几何（供 CSS 的 `{{frame-w:fig_hero}}` / `{{sheet-em:fig_hero}}` / `{{fig-bottom:fig_hero}}`）：
+    # 墨迹必须取 **12 个部件的并集**（单个部件表只反映它自己那一层 ⇒ 会算出过大的画布）；
+    # 画布尺寸与帧数取任一部件表（12 部件共用同一 180×180 对齐画布）。
+    body_geom = sheet_geom.get("sheet_hero_body")
+    if body_geom:
+        sheet_geom["fig_hero"] = sprite_geom(
+            "fig_hero", "hero_", body_geom["w"] // body_geom["count"], body_geom["h"], body_geom["count"])
+
     # R4：显式清单式精灵表（弹道两帧 ⇒ `steps()` 真动图；帧尺寸不一致 ⇒ 走"先对齐再拼"）
     for key, key_list in EXTRA_SHEETS:
         files = [ASSETS / by_key[k]["file"] for k in key_list]
         uri, raw, frame_w, frame_h, count = aligned_sheet_data_uri(files)
         assets[key] = uri
-        sheet_geom[key] = (frame_w * count, frame_h, count)
+        sheet_geom[key] = sprite_geom(key, key_list[0], frame_w, frame_h, count, ink=1.0)
         registered.append({
             "alias": key, "type": "sheet-inline", "kind": "art", "frames": count,
             "frameSize": "%dx%d" % (frame_w, frame_h),
@@ -366,7 +439,7 @@ def main() -> int:
     npc_key = "sheet_npc_villager"
     uri, raw, w, h, count = npc_sheet_data_uri(manifest)
     assets[npc_key] = uri
-    sheet_geom[npc_key] = (w * count, h, count)
+    sheet_geom[npc_key] = sprite_geom(npc_key, "npc_villager_", w, h, count)
     registered.append({
         "alias": npc_key, "type": "sheet-inline", "kind": "art", "frames": count,
         "frameSize": "%dx%d" % (w, h), "sha256": hashlib.sha256(raw).hexdigest(),
@@ -410,7 +483,7 @@ def main() -> int:
             geom = sheet_geom.get(key)
             if not geom:
                 return match.group(0)
-            total_w, height, count = geom
+            total_w, height, count = geom["w"], geom["h"], geom["count"]
             if kind == "sheet-size":
                 return "%dpx %dpx" % (total_w, height)
             if kind == "sheet-span":
@@ -418,8 +491,21 @@ def main() -> int:
             # 单帧尺寸（元素盒必须等于**帧**尺寸，像素式精灵动画才不错位——见 live.css 的 steps() 纪律）
             if kind == "sheet-fw":
                 return "%d" % (total_w // count)
-            return "%d" % height
-        return re.sub(r"\{\{(sheet-size|sheet-span|sheet-fw|sheet-fh):([a-z0-9_]+)\}\}", sheet_token, text)
+            if kind == "sheet-fh":
+                return "%d" % height
+            # —— em 相对单位（1em = 1% 页眉带高）：**随页眉带高连续缩放**（2026-10-19 修） ——
+            #   元素盒 / 精灵表 / 动画步距全部用 em ⇒ 竖屏、横屏、任意尺寸下角色都**完整可见**。
+            if kind == "frame-h":
+                return "%.1f" % geom["frame_h_em"]
+            if kind == "frame-w":
+                return "%.1f" % geom["frame_w_em"]
+            if kind == "sheet-em":
+                return "%.1fem %.1fem" % (geom["frame_w_em"] * count, geom["frame_h_em"])
+            if kind == "span-em":
+                return "-%.1fem" % (geom["frame_w_em"] * count)
+            return "%.1fem" % geom["fig_bottom_em"]
+        return re.sub(r"\{\{(sheet-size|sheet-span|sheet-fw|sheet-fh|frame-h|frame-w|sheet-em|span-em|fig-bottom):([a-z0-9_]+)\}\}",
+                      sheet_token, text)
 
     footer = (SOURCE / "footer.html").read_text(encoding="utf-8").strip()
     # ⚠️ 先留**未展开**的原文（占位符还在）用于"素材登记闭合"机检，再展开 —— 展开后 `{{asset:…}}`
