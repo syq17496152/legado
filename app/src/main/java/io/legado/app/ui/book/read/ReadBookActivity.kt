@@ -12,6 +12,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -2619,12 +2620,18 @@ class ReadBookActivity : BaseReadBookActivity(),
         readView.isVisible = !epubCoreActive && !textRichActive && !templateActive
     }
 
+    /** 文本面首屏模板的"轮次"状态：开轮章节序号 + 开轮时刻（供「进入/切章开轮 + 最短展示时长」用）。 */
+    private var textLoadingRoundChapter = Int.MIN_VALUE
+    private var textLoadingRoundAt = 0L
+
     /**
      * 文本面首屏加载模板覆盖层的**唯一同步点**（reader-theme-family 3.13）。
      *
-     * 口径：**只有文本面**（非 EPUB 书且未启用 EPUB 内核）才谈得上"文本首屏"；当前**无任何内容页**
-     * （`curTextChapter == null`）即"正在加载/等待内容"⇒ 显示模板层。内容就绪（页已就位）一律 `hide()`，
-     * 保证"加载完成即隐藏"。EPUB 书与 EPUB 内核面一律 `hide()`（其首屏由 `EpubReadView` 自管，**不得改动**）。
+     * 口径（2026-10-20 按用户实测修订）：**只有文本面**（非 EPUB 书、非图片书、且未启用 EPUB 内核）才有文本首屏；
+     * **"进入阅读页 / 切到新章"即开一轮** —— `ReadBook` 是常驻单例，不能再用"`curTextChapter == null`"当判据
+     * （否则「退出阅读再进」时内容已就绪 ⇒ 模板**永不出现**）；并保证**最短展示时长** `TEXT_LOADING_MIN_MS`
+     * （否则一闪而过）。内容就绪且已满足最短时长 ⇒ `hide()`（"加载完成即隐藏"）。
+     * EPUB 书与 EPUB 内核面一律 `hide()`（其首屏由 `EpubReadView` 自管，**不得改动**）。
      *
      * 模板取 `EpubLoadingTemplateManager.selected(...)`（与 EPUB 侧、设置页摘要**同源** ⇒ 三处必然一致），
      * 文案回落 `ReadBook.msg ?: R.string.loading`（在线章节正常加载时 `msg` 多为 null）。
@@ -2640,16 +2647,37 @@ class ReadBookActivity : BaseReadBookActivity(),
         // ⚠️ 排除图片书/漫画（`isImage`）：漫画内容不进 `curTextChapter`（走 `ReadManga`）⇒ 若纳入，
         // 该条件恒为"无内容页"⇒ 覆盖层会**常驻不消失**（真实回归风险）。`book == null` 同样判不显示。
         val textSurface = ReadBook.book?.let { !it.isEpub && !it.isImage } == true && !epubCoreActive
-        if (!textSurface || ReadBook.curTextChapter != null) {
+        if (!textSurface) {
             binding.loadingTemplateOverlay.hide()
             return
         }
-        val template = runCatching { EpubLoadingTemplateManager.selected(this) }.getOrNull()
-        binding.loadingTemplateOverlay.show(
-            template,
-            AppConfig.isNightTheme,
-            ReadBook.msg ?: getString(R.string.loading)
-        )
+        // ⚠️ 开轮判据（2026-10-20 用户实测修）：
+        //   `ReadBook` 是**常驻单例** ⇒ 「退出阅读再进」时 `curTextChapter` **已就绪**（内存/缓存命中），
+        //   旧实现"只在无内容页时显示"会让首屏模板**永远看不到**（用户原话：「只有第一次才有……退出阅读
+        //   再进就没有了」）。故改为**按"进入阅读页 / 切章"开轮**（对齐 Archive：它每次进入都真正重载章节
+        //   ⇒ 遮罩必然出现），并加**最短展示时长**避免一闪而过（用户原话：「时间太短了」）。
+        val index = ReadBook.durChapterIndex
+        if (index != textLoadingRoundChapter) {
+            textLoadingRoundChapter = index
+            textLoadingRoundAt = SystemClock.elapsedRealtime()
+            binding.loadingTemplateOverlay.show(
+                runCatching { EpubLoadingTemplateManager.selected(this) }.getOrNull(),
+                AppConfig.isNightTheme,
+                ReadBook.msg ?: getString(R.string.loading)
+            )
+        }
+        // 内容就绪后按"最短展示时长"收尾：没到时长 ⇒ 延迟收尾；**轮次戳守卫**（新轮已开则不收尾）。
+        if (ReadBook.curTextChapter != null) {
+            val stamp = textLoadingRoundAt
+            val remain = TEXT_LOADING_MIN_MS - (SystemClock.elapsedRealtime() - stamp)
+            if (remain <= 0) {
+                binding.loadingTemplateOverlay.hide()
+            } else {
+                binding.root.postDelayed({
+                    if (textLoadingRoundAt == stamp) binding.loadingTemplateOverlay.hide()
+                }, remain)
+            }
+        }
     }
 
     /** 模板面与文本富渲染面**共用同一个 WebView 承载位**，二者互斥（同屏只允许一个面）。 */
@@ -6436,6 +6464,15 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     companion object {
         const val RESULT_DELETED = 100
+
+        /**
+         * 文本面首屏加载模板的**最短展示时长**（毫秒）。
+         *
+         * 为什么必须有（2026-10-20 用户实测）：文本/在线书的章节常在内存或缓存命中（尤其"退出阅读再进"）
+         * ⇒ 内容就绪几乎是瞬时的 ⇒ 若"内容一到就隐藏"，模板只会**闪一下**（用户原话「时间太短了」）。
+         * 取值 900：足以看清一帧完整构图（插画 + 题记 + 标题 + 副文案 + 状态行），又不至于让开书显得迟钝。
+         */
+        private const val TEXT_LOADING_MIN_MS = 900L
 
         /** B2.5：划线样式面板取色器 Fragment tag */
         private const val HL_STYLE_PICKER_TAG = "hl_style_picker"

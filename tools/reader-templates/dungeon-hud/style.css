@@ -601,23 +601,28 @@ body {
   background-position: 0 0
 }
 
-/* —— R4 左右两侧**竖区域**点缀（对齐 archive 左右竖带；图集四格各取一格）—— */
-.dh-band { position: absolute; top: 0; bottom: 0; width: 22em; z-index: 3; pointer-events: none }
+/* —— R4 左右两侧**竖区域**点缀（对齐 archive 左右竖带；图集四格各取一格）——
+   ⚠️ **这里是"页面级"元素（`.dh-band` 在 `<header class="dh-stage">` 之外）** ⇒ 单位**不得用 em**：
+   本项目 em 的语义是「1em = 1% 页眉带高」（由 `.dh-stage{font-size:calc(var(--dh-band-cur)/100)}` 定义），
+   而本容器不在带内 ⇒ 它的 em 会按**正文行高基准（18px）**解析 ⇒ `20em×30em = 360×540px` 的四块大图
+   直接糊在正文区上（2026-10-20 用户实测「正文区一大片阴影遮挡」的**根因**，属本轮 em 改造引入的回归）。
+   故此处一律用 **px 绝对值**（竖带是"贴页左右边缘的窄条"，与带宽无关）。 */
+.dh-band { position: absolute; top: 0; bottom: 0; width: 22px; z-index: 3; pointer-events: none }
 .dh-band-l { left: 0 }
 .dh-band-r { right: 0 }
 .dh-band i {
   position: absolute;
-  width: 20em;
-  height: 30em;
+  width: 20px;
+  height: 30px;
   background-image: var(--dh-band);
   background-repeat: no-repeat;
   background-size: 400% 100%;
   opacity: calc(.85 * var(--dh-deco))
 }
-.dh-b0 { left: 1em; top: 16%; background-position: 0% 50% }
-.dh-b1 { left: 1em; top: 52%; background-position: 33.33% 50% }
-.dh-b2 { right: 1em; top: 28%; background-position: 66.67% 50% }
-.dh-b3 { right: 1em; top: 64%; background-position: 100% 50% }
+.dh-b0 { left: 1px; top: 16%; background-position: 0% 50% }
+.dh-b1 { left: 1px; top: 52%; background-position: 33.33% 50% }
+.dh-b2 { right: 1px; top: 28%; background-position: 66.67% 50% }
+.dh-b3 { right: 1px; top: 64%; background-position: 100% 50% }
 
 /* —— R4 技能/弹道特效 3 类（斩击=CSS / 多帧弹道=精灵表 / 冲击波=CSS） —— */
 .dh-fx { position: absolute; pointer-events: none; opacity: 0 }

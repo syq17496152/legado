@@ -599,11 +599,54 @@ def main() -> int:
     print("  声明 = %s" % (DEST / "sources.json"))
     print("  预览 = %s" % PREVIEW)
     print("  素材内联合计 = %.1f KB" % (sum(len(value) for value in assets.values()) / 1024))
+    problems += gate_geometry_em_scope()
     if problems:
         print("\n[预算超限] %s ⇒ 阻断" % problems, file=sys.stderr)
         return 1
     print("\n  全部门禁 PASS")
     return 0
+
+
+# 允许"几何类 em"的选择器（页眉带内元素：`1em = 1% 带高`，由 `.dh-stage{font-size}` 定义）
+# 以及**文本级**元素（其 em 相对自身字号，属正确用法）。其余一律禁（见 [gate_geometry_em_scope]）。
+GEOMETRY_EM_ALLOWED = (
+    ".dh-stage", ".dh-props", ".dh-prop-", ".dh-rig", ".dh-hero", ".dh-foe", ".dh-npc",
+    ".dh-p", ".dh-fx", ".dh-talk", ".dh-plate", ".dh-requiem", ".dh-fallen", ".dh-n-", ".dh-motes",
+    ".reader-paragraph", ".reader-chapter-title", ".dh-lead", ".dh-dialogue", ".dh-scene",
+)
+GEOMETRY_PROPS = (
+    "width", "height", "left", "right", "top", "bottom", "padding", "padding-bottom", "padding-left",
+    "padding-right", "padding-top", "margin", "margin-bottom", "gap", "inset", "translate",
+    "border-top", "border-left", "border-right", "border-bottom",
+)
+
+
+def gate_geometry_em_scope() -> list:
+    """静态门禁：**几何类 em 只允许出现在页眉带内（或文本级）选择器上**，页面级一律 px。
+
+    为什么机检（2026-10-20 用户实测缺陷：「正文区一大片阴影遮挡」）：
+    本项目 em 的语义由 `.dh-stage{font-size: calc(var(--dh-band-cur)/100)}` 限定为
+    「**1em = 1% 页眉带高**」——**只有带内元素**成立。页面级元素（如 `.dh-band`，它在
+    `<header class="dh-stage">` **之外**）用 em 会按**正文行高基准（18px）**解析
+    ⇒ `20em×30em` 变成 **360×540px**，四块大图直接糊在正文上（本轮 em 改造引入的回归）。
+    本门禁把这条约束前移到**构建期 fail-fast**；运行期另有离线矩阵的「装饰不压正文」判据兜底。
+    """
+    problems = []
+    for name in ("style.css", "live.css"):
+        text = (SOURCE / name).read_text(encoding="utf-8")
+        text = re.sub(r"/\*[\s\S]*?\*/", " ", text)      # 去注释（注释里出现 em 不判）
+        for rule in re.finditer(r"([^{}]+)\{([^}]*)\}", text):
+            selector, body = rule.group(1).strip(), rule.group(2)
+            if any(token in selector for token in GEOMETRY_EM_ALLOWED):
+                continue
+            for prop in re.finditer(r"([a-z-]+)\s*:\s*([^;]*[0-9]em)", body):
+                if prop.group(1) not in GEOMETRY_PROPS:
+                    continue
+                problems.append(
+                    "%s 几何 em 越界：`%s` 的 `%s: %s`（页面级 em 按正文 18px 解析 ⇒ 尺寸失控）"
+                    % (name, selector.splitlines()[-1].strip(), prop.group(1), prop.group(2).strip())
+                )
+    return problems
 
 
 def render_preview(template: dict, css: str, script: str) -> str:

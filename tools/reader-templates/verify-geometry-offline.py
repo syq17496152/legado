@@ -213,6 +213,14 @@ MATRIX_JS = """
       return out;
     })(),
     bodyCount: document.querySelectorAll('[data-reader-flow="body"]').length,
+    // 页面级装饰（左右竖带 4 格）与正文槽的实际矩形 —— "装饰是否压住正文"判据的数据源
+    // （2026-10-20 用户实测缺陷补：竖带曾是 22px 窄条，em 改造后变 360×540px 大图糊在正文上）。
+    bandRects: Array.from(document.querySelectorAll('.dh-band i')).map(e => {
+      const r = e.getBoundingClientRect();
+      return {x: r.left, y: r.top, w: r.width, h: r.height}; }),
+    slotRect: (() => { const e = document.querySelector('[data-reader-flow="body"]'); if (!e) return null;
+      const r = e.getBoundingClientRect();
+      return {x: r.left, y: r.top, w: r.width, h: r.height}; })(),
     // 牺牲态：页脚归零（CSS 变量 --rp-percent 由宿主下发；此处按未注入计，仅记录结构）
     fallen: document.querySelectorAll('.dh-fallen').length
   };
@@ -276,6 +284,8 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     shot_list = []
     # 页眉角色完整性判据的**数值证据**（每角色最差一组；禁"静默 PASS"——用户实测缺陷正是因判据无数值留痕）
     sprite_evidence = {}
+    # "页面级装饰是否压住正文"判据的**数值证据**（每格最差相交深度，见判据⑨）
+    band_evidence = {}
     # 各角色**墨迹包围盒**（相对画布比例）：离线算一次，供"是否被页眉带裁切"判据使用
     ink_map = {sel: ink_fractions(prefix) for sel, prefix in SPRITE_PREFIXES.items()}
     with sync_playwright() as pw:
@@ -363,6 +373,25 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
                             failures.append(
                                 "%s %s 被页眉带裁切 %.0fpx（墨迹 %.0f~%.0f / 带 %.0f~%.0f）"
                                 % (label, sel, overflow, ink_top, ink_bot, band["top"], band["bottom"]))
+                # ⑨ **页面级装饰不得压住正文**（2026-10-20 用户实测缺陷补：竖带曾是 22px 窄条，
+                #    本项目 em 改造后误用 em ⇒ 单格变 360×540px 大图糊在正文上，用户截图"一大片阴影遮挡"）。
+                #    判据：每个竖带格子的矩形**与正文槽矩形不得相交**（容差 1px 抗取整）；并记录**最差相交深度的数值证据**。
+                slot = d.get("slotRect")
+                brs = d.get("bandRects") or []
+                if slot:
+                    for bidx, b in enumerate(brs):
+                        ox = min(b["x"] + b["w"], slot["x"] + slot["w"]) - max(b["x"], slot["x"])
+                        oy = min(b["y"] + b["h"], slot["y"] + slot["h"]) - max(b["y"], slot["y"])
+                        depth = max(0.0, ox) if oy > 0 else 0.0     # 竖直重叠时，水平压入的深度
+                        prev = band_evidence.get(bidx)
+                        if prev is None or depth > prev["depth"]:
+                            band_evidence[bidx] = {
+                                "depth": depth, "label": label, "w": b["w"], "h": b["h"], "x": b["x"],
+                            }
+                        if depth > 1.0:
+                            failures.append(
+                                "%s 竖带第%d格压住正文 %.0fpx（格 x=%.0f w=%.0f h=%.0f / 槽 x=%.0f w=%.0f）"
+                                % (label, bidx, depth, b["x"], b["w"], b["h"], slot["x"], slot["w"]))
                 # ⑦ 正文槽与页脚读数在场
                 if d["bodyCount"] != 1:
                     failures.append("%s 正文槽数 %d ≠ 1" % (label, d["bodyCount"]))
@@ -401,6 +430,9 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
     # ⇒ 判 FAIL（防"判据因选择器失配而恒真空、却报 PASS"）。
     if not sprite_evidence:
         failures.append("页眉角色完整性判据未取到任何角色几何（选择器失配？）⇒ 判据真空，不得计 PASS")
+    # 同理："装饰不压正文"若一个竖带格都没量到 ⇒ 判据真空（选择器失配/元素缺失）⇒ 判 FAIL。
+    if not band_evidence:
+        failures.append("装饰压正文判据未取到任何竖带格几何 ⇒ 判据真空，不得计 PASS")
 
     if failures:
         print("[FAIL] R4 结构矩阵（区域×演出态 = %d 组）" % (len(REGIONS) * len(PERFS)))
@@ -418,6 +450,13 @@ def matrix_case(template: dict, vp: int, vw: int, shots_dir: Path = None) -> boo
                  band_h, ev["overflow"], ev["label"]))
     if shot_list:
         print("   产物截图 %d 张 → %s" % (len(shot_list), shots_dir))
+    # "装饰不压正文"必须给出数值证据（禁静默 PASS；本例曾因无此判据而让 360×540px 的竖带糊在正文上）。
+    if band_evidence:
+        worst = max(band_evidence.values(), key=lambda v: v["depth"])
+        sizes = "、".join("%.0f×%.0f" % (v["w"], v["h"]) for v in band_evidence.values())
+        print("   · 页面级装饰（竖带 %d 格）尺寸=%s；最差压入正文 %.1fpx [%s] ⇒ %s"
+              % (len(band_evidence), sizes, worst["depth"], worst["label"],
+                 "无遮挡" if worst["depth"] <= 1.0 else "**有遮挡**"))
     return True
 
 
