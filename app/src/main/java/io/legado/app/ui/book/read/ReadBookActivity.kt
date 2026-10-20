@@ -695,6 +695,8 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         viewModel.initReadBookConfig(intent)
+        // 3.13：**本次"进入阅读页"**武装首屏模板轮次（每进入一次展示一次；翻页/切章不重开）
+        armTextLoadingRound()
         binding.root.post {
             AppLog.put("read-init: schedule, source=postCreate")
             viewModel.initData(intent)
@@ -716,6 +718,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (consumeGlobalReadAloudPanelOpen()) {
             return
         }
+        // 3.13：`singleTask` 下"再次打开这本书"走本回调（复用实例）⇒ 同属"进入阅读页"，须重新武装轮次
+        armTextLoadingRound()
         viewModel.initData(intent) {
             if (openReadAloudPanel) {
                 openPendingReadAloudPanel()
@@ -2620,9 +2624,32 @@ class ReadBookActivity : BaseReadBookActivity(),
         readView.isVisible = !epubCoreActive && !textRichActive && !templateActive
     }
 
-    /** 文本面首屏模板的"轮次"状态：开轮章节序号 + 开轮时刻（供「进入/切章开轮 + 最短展示时长」用）。 */
-    private var textLoadingRoundChapter = Int.MIN_VALUE
+    /**
+     * 文本面首屏模板的"轮次"状态：**本轮是否已展示过** + 开轮时刻（最短展示时长用）。
+     *
+     * ⚠️ 判据收窄（2026-10-20 用户第三轮裁定）：首屏模板的语义是"**进入阅读页的第一屏**"，
+     * 故**只在"打开这本书 / 重新进入阅读页"时开一轮**（由 [armTextLoadingRound] 在
+     * `onPostCreate` / `onNewIntent` 里武装）——**翻页与切章都不得再开新轮**。
+     * 此前按 `ReadBook.durChapterIndex` 变化开轮 ⇒ 用户原话：「只有打开一本书看书的时候，
+     * 第一次才展示，为什么现在翻页到这个内置主题一个轮次后再次出现？」（翻页/切章重复弹遮罩）。
+     */
+    private var textLoadingRoundOpened = false
     private var textLoadingRoundAt = 0L
+
+    /**
+     * 为**新的"进入阅读页"**重新武装首屏模板轮次（`onPostCreate` 与 `onNewIntent` 各调一次）。
+     *
+     * 为什么必须显式"武装"而不是按章节序号推断：`ReadBookActivity` 是 `launchMode="singleTask"`，
+     * 从书架/外链再次打开同一本书会走 `onNewIntent`（**复用实例**）⇒ 只有在这两个真正的"入口点"
+     * 复位，才能既保证"每次进入都展示一次"（用户第二轮要求），又不会在**阅读途中翻页/切章**时重复弹出。
+     *
+     * `textLoadingRoundAt` 归零：上一轮若还有 pending 的"延迟收尾"定时器，其戳值随之失配
+     * ⇒ 旧定时器不会把新轮收掉（收尾守卫见 [syncTextLoadingOverlay]）。
+     */
+    private fun armTextLoadingRound() {
+        textLoadingRoundOpened = false
+        textLoadingRoundAt = 0L
+    }
 
     /**
      * 文本面首屏加载模板覆盖层的**唯一同步点**（reader-theme-family 3.13）。
@@ -2651,14 +2678,15 @@ class ReadBookActivity : BaseReadBookActivity(),
             binding.loadingTemplateOverlay.hide()
             return
         }
-        // ⚠️ 开轮判据（2026-10-20 用户实测修）：
+        // ⚠️ 开轮判据（2026-10-20 用户第三轮裁定——**只在"进入阅读页"开一轮**）：
         //   `ReadBook` 是**常驻单例** ⇒ 「退出阅读再进」时 `curTextChapter` **已就绪**（内存/缓存命中），
-        //   旧实现"只在无内容页时显示"会让首屏模板**永远看不到**（用户原话：「只有第一次才有……退出阅读
-        //   再进就没有了」）。故改为**按"进入阅读页 / 切章"开轮**（对齐 Archive：它每次进入都真正重载章节
-        //   ⇒ 遮罩必然出现），并加**最短展示时长**避免一闪而过（用户原话：「时间太短了」）。
-        val index = ReadBook.durChapterIndex
-        if (index != textLoadingRoundChapter) {
-            textLoadingRoundChapter = index
+        //   旧实现"只在无内容页时显示"会让首屏模板**永远看不到**（用户第二轮原话：「只有第一次才有……
+        //   退出阅读再进就没有了」）。故改为**按"进入阅读页"开一轮**（对齐 Archive：它每次进入都真正重载
+        //   章节 ⇒ 遮罩必然出现），并加**最短展示时长**避免一闪而过（用户原话：「时间太短了」）。
+        //   **轮次由 [armTextLoadingRound] 在 `onPostCreate` / `onNewIntent` 武装** ⇒ 阅读途中
+        //   **翻页 / 切章不再重复弹遮罩**（用户第三轮原话：「为什么现在翻页到这个内置主题一个轮次后再次出现？」）。
+        if (!textLoadingRoundOpened) {
+            textLoadingRoundOpened = true
             textLoadingRoundAt = SystemClock.elapsedRealtime()
             binding.loadingTemplateOverlay.show(
                 runCatching { EpubLoadingTemplateManager.selected(this) }.getOrNull(),

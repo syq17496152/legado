@@ -426,28 +426,10 @@ body {
   border-bottom: 1px solid rgba(201, 162, 74, calc(.45 * var(--dh-deco)));
 }
 [data-reader-continuation], .reader-paragraph[data-split-from] { text-indent: 0 }
-/* 续页底部对话框：CSS 自绘暗色切角框（省下 205KB 原作底图内联，底图预算让给全幅场景图） */
-.dh-dialog {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  background: linear-gradient(180deg, rgba(12, 12, 14, .93), rgba(6, 6, 8, .97));
-  border: 1px solid rgba(201, 162, 74, calc(.42 * var(--dh-deco)));
-  clip-path: polygon(0 5px, 5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px));
-  color: #e6ded0;
-  font-size: 11px;
-  opacity: calc(.95 * var(--dh-deco));
-}
-.dh-dialog i { flex: none; width: 13px; height: 15px; background-image: var(--dh-bolt); background-size: {{sheet-size:sheet_bullet_pair}}; background-repeat: no-repeat; background-position: 0 0 }
-.dh-dialog span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
-/* 对话框会压住正文末行 ⇒ 续页正文预留底部安全边距 */
-.dh-marching .dh-body { padding-bottom: 34px }
+/* ⚠️ 续页底部装饰对话框**已移除**（2026-10-20 用户第三轮裁定：「你比上次更安静了，这个能不能去掉，
+   挡住正文最后一行了」）。它是一个 `position:absolute; bottom:6px; z-index:3` 的整幅题词框，
+   **必然压住正文末行**（此前只能靠给正文槽加底边距回避）；正文可读性优先 ⇒ 整块撤掉：
+   HTML（`other.html` 的 `.dh-dialog`）、本条 CSS 三组规则、以及配套的槽底边距一并删除。 */
 
 /* —— 页脚 HUD：**游戏原图第三取景位铺底** + 红/蓝状态条 + 物品栏 + 读数 —— */
 .dh-hud {
