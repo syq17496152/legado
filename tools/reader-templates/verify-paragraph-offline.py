@@ -21,6 +21,7 @@
 用法
     ai_tests\\venv\\Scripts\\python.exe tools/reader-templates/verify-paragraph-offline.py
     ... --template app/src/main/assets/reader/builtin.dungeon-hud/readerTemplate.json
+    ... --archive --shots        # 额外落真实渲染截图（目视复核对白/场景样式）
 """
 
 import argparse
@@ -150,7 +151,7 @@ def run_shape(page, out: Path, template: dict, body_html: str) -> dict:
     return page.evaluate(FACTS_JS)
 
 
-def check_template(template: dict, out: Path, strict: bool) -> bool:
+def check_template(template: dict, out: Path, shots_dir: Path = None) -> bool:
     from playwright.sync_api import sync_playwright
 
     name = template.get("id") or template.get("name") or "<unnamed>"
@@ -163,6 +164,9 @@ def check_template(template: dict, out: Path, strict: bool) -> bool:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 480, "height": 853}, device_scale_factor=1)
         good = run_shape(page, out, template, host_shape_paragraphs(SAMPLE_LINES))
+        if shots_dir is not None:
+            shots_dir.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(shots_dir / ("paragraph_%s.png" % name)))
         bad = run_shape(page, out, template, host_shape_legacy_single_p(SAMPLE_LINES))
         browser.close()
 
@@ -226,6 +230,8 @@ def main() -> int:
     parser.add_argument("--template", action="append", help="模板 JSON 路径（可多次）")
     parser.add_argument("--archive", action="store_true", help="含 archive 六套历史主题")
     parser.add_argument("--no-archive", action="store_true", help="只看仓内内置主题")
+    parser.add_argument("--shots", action="store_true", help="形体A 额外落真实渲染截图（供目视复核对白/场景样式）")
+    parser.add_argument("--shots-dir", default="", help="截图目录（默认 docs/specs/reader-theme-family-rework/evidence/artifact）")
     args = parser.parse_args()
     if not args.no_archive and not args.template:
         args.archive = True
@@ -235,9 +241,13 @@ def main() -> int:
         print("[FAIL] 无可用模板")
         return 1
     out = REPO / ".temp" / "offline-paragraph.html"
+    shots_dir = None
+    if args.shots:
+        shots_dir = Path(args.shots_dir) if args.shots_dir else (
+            REPO / "docs/specs/reader-theme-family-rework/evidence/artifact")
     all_ok = True
     for template in templates:
-        all_ok = check_template(template, out, True) and all_ok
+        all_ok = check_template(template, out, shots_dir) and all_ok
     print("\n== 结论：%s（模板 %d）==" % ("PASS" if all_ok else "FAIL", len(templates)))
     return 0 if all_ok else 1
 
