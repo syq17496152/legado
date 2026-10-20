@@ -47,8 +47,9 @@ object TextRichContentProbe {
      * 是唯一显式产出它的格式）；而本地 txt 的章节内容是无标签纯文本、在线正文是 HTML 片段，
      * **都不带 `<usehtml>`** ⇒ 原实现（只认 `<usehtml>`）使其一律返回 null、回落 canvas ⇒
      * **用户在 txt / 在线缓存书上开启「阅读页模板」后看不到任何变化**（"设置完没效果"）。
-     * 归一化只做最保守的事：**能判定为 HTML 片段就原样使用**，否则按空行切段、文本转义后包 `<p>`；
-     * **不清洗、不改写文本内容**，避免引入与 canvas 不一致的渲染差异。
+     * 归一化只做最保守的事：**能判定为 HTML 片段就原样使用**，否则**一行一段**、文本转义后包
+     * `<p class="reader-paragraph">`（archive 段落契约）；**不清洗、不改写文本内容**，
+     * 避免引入与 canvas 不一致的渲染差异。
      *
      * 默认 `false` ⇒ 保持既有语义（仅 md 走富渲染面）；非 md 的放开由调用方按「阅读页模板总开关」
      * 决定（默认关 ⇒ 零回归）。
@@ -89,14 +90,25 @@ object TextRichContentProbe {
         runCatching { Jsoup.parseBodyFragment(html).body().allElements.size }.getOrDefault(0)
 
     /**
-     * 纯文本 → 段落 HTML：按**空行**切段，段内换行折叠为空格（交由 HTML 自然折行，避免 `<br>` 打乱行高）；
-     * 文本内容按 HTML 转义（与 md 路线的"安全模式：默认转义 raw HTML"口径一致）。
+     * 纯文本 → 段落 HTML：**一行一段**，文本按 HTML 转义（与 md 路线"安全模式：默认转义 raw HTML"同口径）。
+     *
+     * ⚠️ 为什么按"行"而不是按"空行"切段（2026-10-20 真机取证修正）：来源正文普遍是
+     * **每行一段、行间无空行、无任何标签**（真机抽检 47 个章节缓存**全部**为该形态：空行 0、标签 0）。
+     * 旧实现按空行切段 ⇒ 这类正文整章塌成**一个 `<p>`** ⇒ 段落语义装饰（首段 / 对白段 / 场景分隔段）
+     * 最多只可能命中首段一个 ⇒ 用户可感知的「段落效果全没了」；且**同时**打在自研主题与 archive 主题上
+     * （archive 的 `as-lead`/`as-dialogue`/`as-scene` 与本方的 `dh-*` 都只点 `.reader-paragraph`，
+     * 段落只剩一段时判据自然落到空处）。
+     *
+     * 分段口径与 archive / [io.legado.app.model.localBook.epubcore.direct.TextReaderDocument] 的
+     * `lineSequence` 逐行成段**完全同源** ⇒ "同一段正文在两侧得到同一分段"，导入导出与换主题后观感连续。
+     * 首尾空白（含全角空格 `\u3000`，来源常用作段首缩进）统一 trim ⇒ 与 CSS `text-indent` 不叠加。
      */
     private fun toParagraphHtml(text: String): String =
-        text.split(BlankLineRegex)
-            .map { it.trim().replace(InlineNewlineRegex, " ") }
+        text.replace("\r\n", "\n").replace('\r', '\n')
+            .lineSequence()
+            .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .joinToString("\n") { "<p>" + escapeHtml(it) + "</p>" }
+            .joinToString("\n") { "<p class=\"reader-paragraph\">" + escapeHtml(it) + "</p>" }
 
     private fun escapeHtml(value: String): String = value
         .replace("&", "&amp;")
@@ -108,12 +120,6 @@ object TextRichContentProbe {
         "<(p|div|br|img|span|h[1-6]|ul|ol|li|table|tr|td|th|pre|code|blockquote|em|strong|a|hr|figure)\\b",
         RegexOption.IGNORE_CASE
     )
-
-    /** 段落分隔（一个换行 + 若干空白 + 再一个换行）。 */
-    private val BlankLineRegex = Regex("\\n\\s*\\n")
-
-    /** 段内换行（折叠为空格）。 */
-    private val InlineNewlineRegex = Regex("\\s*\\n\\s*")
 
     /**
      * mermaid 块判定：`class="mermaid"`（可含其它类，单双引号均可）。

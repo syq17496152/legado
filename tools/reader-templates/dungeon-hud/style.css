@@ -41,7 +41,9 @@
   --dh-requiem-glow: rgba(122, 28, 23, .42);
   --dh-veil: rgba(14, 14, 15, .56);
   --dh-fade: rgba(182, 178, 169, .92);
-  --dh-veil-strong: rgba(181, 177, 168, .84);
+  /* 正文纸页幕（**唯一消费者**是 `.dh-paper::before`）：≥.95 ⇒ 石纹残余透出 ≤5%，
+     只作纸面质感、不成暗斑（2026-10-20「正文区一大片阴影遮挡」修复，见 `.dh-paper` 注释）。 */
+  --dh-veil-strong: rgba(181, 177, 168, .95);
   --dh-deco: .72;
 }
 
@@ -60,7 +62,7 @@ html[data-reader-theme="night"] {
   --dh-requiem-glow: rgba(168, 38, 31, .46);
   --dh-veil: rgba(5, 5, 7, .58);
   --dh-fade: rgba(12, 13, 15, .90);
-  --dh-veil-strong: rgba(9, 10, 12, .88);
+  --dh-veil-strong: rgba(9, 10, 12, .95);
   --dh-deco: .88;
 }
 
@@ -79,7 +81,7 @@ html[data-reader-theme="eink"] {
   --dh-requiem-glow: rgba(40, 40, 40, .32);
   --dh-veil: rgba(70, 70, 70, .46);
   --dh-fade: rgba(236, 236, 235, .92);
-  --dh-veil-strong: rgba(238, 238, 237, .88);
+  --dh-veil-strong: rgba(238, 238, 237, .95);
   --dh-deco: .28;
 }
 
@@ -302,7 +304,12 @@ body {
 .dh-page.dh-fallen .dh-foe { filter: grayscale(.7) brightness(.55) }
 .dh-page.dh-fallen .dh-fx-slash { opacity: 0 }
 
-/* —— 正文纸页：**游戏原图第二取景位铺底** + 石色幕（保正文可读） —— */
+/* —— 正文纸页：**石色净面**（可读性优先） ——
+   ⚠️ 2026-10-20 用户实测缺陷修（「阅读正文区域一大片阴影遮挡」，产物截图 `output/body_check.png` 可见）：
+   此前纸页同时铺 `--dh-scene`（**整幅暗场景照片**，cover 取景位）+ `--dh-stone`（**深色石纹**），
+   再盖 84% 幕 ⇒ 透出的深色图案在正文区形成**成片暗斑**，即用户感知的"阴影遮挡"。
+   正文区**不得出现可辨图案**：场景照片一律撤出纸页（它只属于页眉场景带），石纹只作**极淡**纸面质感
+   （配合 `--dh-veil-strong ≥ .95` ⇒ 残余透出 ≤5%，不构成视觉遮挡）。 */
 .dh-paper {
   position: relative;
   z-index: 2;
@@ -314,10 +321,10 @@ body {
   overflow: hidden;
   border: 1px solid var(--dh-paper-edge);
   background-color: var(--dh-paper);
-  background-image: var(--dh-stone), var(--dh-scene);
-  background-size: 168px 168px, cover;
-  background-position: 0 0, 66% 92%;
-  background-repeat: repeat, no-repeat;
+  background-image: var(--dh-stone);
+  background-size: 168px 168px;
+  background-position: 0 0;
+  background-repeat: repeat;
   box-shadow: 0 8px 22px rgba(0, 0, 0, calc(.28 * var(--dh-deco)));
 }
 .dh-paper::before {
