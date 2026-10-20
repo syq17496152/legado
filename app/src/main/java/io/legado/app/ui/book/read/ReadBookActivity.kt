@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -196,6 +197,7 @@ import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
 import io.legado.app.ui.book.read.epub.EpubReadView
+import io.legado.app.ui.book.read.loading.LoadingTemplateOverlayView
 import io.legado.app.ui.book.searchContent.SearchContentActivity
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.model.SourceCallBack
@@ -2248,6 +2250,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         binding.readView.cancelSelect()
         binding.readView.pageDelegate?.isCancel = false
+        // 3.13：canvas 面翻页是"切章"的 Activity 侧入口（章末翻页会经 delegate → `ReadBook.moveToNextChapter`）
+        // ⇒ 先同步一次；真正切章时 `curTextChapter` 被置 null 并回调 `upContent`，仍会再同步一次兜底。
+        syncTextLoadingOverlay()
         binding.readView.pageDelegate?.keyTurnPage(direction)
     }
 
@@ -2275,6 +2280,8 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 内容加载完成
      */
     override fun contentLoadFinish() {
+        // 3.13：加载收尾必同步 —— 内容就绪时 `curTextChapter != null` ⇒ 首屏模板层必隐藏（保证"加载完成即隐藏"）
+        syncTextLoadingOverlay()
         if (intent.getBooleanExtra("readAloud", false)) {
             intent.removeExtra("readAloud")
             ReadBook.readAloud()
@@ -2336,6 +2343,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         // 首帧 onResume 时 `ReadBook.book` 可能尚未就绪 ⇒ 该函数早退、此后不再有 onResume ⇒ **恒漏计**
         // （本轮真机实测：bookOpen 0→0，而同批 templateOpen 正常 +1）。
         reportBookOpenedOnce()
+        // 3.13：文本面首屏模板随"内容更新"同步（切章时 `curTextChapter` 会被置 null 后回调本函数 ⇒ 正是加载起始点）
+        syncTextLoadingOverlay()
         lifecycleScope.launch {
             if (isTextRichMode()) {
                 // 阶段 4.14：启用页面模板时走模板沙箱面（同一 WebView 承载位），否则走文本富渲染面
@@ -2392,6 +2401,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         resetPageOffset: Boolean,
         success: (() -> Unit)?
     ) = withContext(Main.immediate) {
+        // 3.13：与 [upContent] 同口径（挂起版本同样在"内容更新"时同步文本面首屏模板）
+        syncTextLoadingOverlay()
         if (isTextRichMode()) {
             if (ensureTemplateAwait() != null) {
                 loadTemplateContentAwait(relativePosition, resetPageOffset, success)
@@ -2602,6 +2613,37 @@ class ReadBookActivity : BaseReadBookActivity(),
         epubReadView.isVisible = epubCoreActive
         textRichReadView.isVisible = textRichActive || templateActive
         readView.isVisible = !epubCoreActive && !textRichActive && !templateActive
+    }
+
+    /**
+     * 文本面首屏加载模板覆盖层的**唯一同步点**（reader-theme-family 3.13）。
+     *
+     * 口径：**只有文本面**（非 EPUB 书且未启用 EPUB 内核）才谈得上"文本首屏"；当前**无任何内容页**
+     * （`curTextChapter == null`）即"正在加载/等待内容"⇒ 显示模板层。内容就绪（页已就位）一律 `hide()`，
+     * 保证"加载完成即隐藏"。EPUB 书与 EPUB 内核面一律 `hide()`（其首屏由 `EpubReadView` 自管，**不得改动**）。
+     *
+     * 模板取 `EpubLoadingTemplateManager.selected(...)`（与 EPUB 侧、设置页摘要**同源** ⇒ 三处必然一致），
+     * 文案回落 `ReadBook.msg ?: R.string.loading`（在线章节正常加载时 `msg` 多为 null）。
+     */
+    private fun syncTextLoadingOverlay() {
+        // ⚠️ 线程守门：本函数的调用点包含 `ReadBook.upMsg(...)` → `callBack.upContent()` 这条链，而
+        // 该链由 `BaseViewModel.execute{}`（body 跑在 `Dispatchers.IO`）触发 ⇒ **并非总在主线程**。
+        // View 操作必须在主线程，否则真机崩溃；非主线程一律转投主线程再执行。
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            binding.root.post { syncTextLoadingOverlay() }
+            return
+        }
+        val textSurface = ReadBook.book?.isEpub != true && !epubCoreActive
+        if (!textSurface || ReadBook.curTextChapter != null) {
+            binding.loadingTemplateOverlay.hide()
+            return
+        }
+        val template = runCatching { EpubLoadingTemplateManager.selected(this) }.getOrNull()
+        binding.loadingTemplateOverlay.show(
+            template,
+            AppConfig.isNightTheme,
+            ReadBook.msg ?: getString(R.string.loading)
+        )
     }
 
     /** 模板面与文本富渲染面**共用同一个 WebView 承载位**，二者互斥（同屏只允许一个面）。 */
@@ -3760,6 +3802,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         } else {
             switchEpubCore(false)
             ChapterProvider.upStyle()
+            // 3.13：上面刚 `clearTextChapter()` ⇒ 文本面此时无内容页 ⇒ 立刻挂上首屏模板，再发起加载
+            syncTextLoadingOverlay()
             ReadBook.loadContent(resetPageOffset = false)
         }
         binding.readMenu.upBookView()

@@ -51,7 +51,8 @@ internal fun EpubLoadingTemplateManageScreen(
     val editText = stringResource(R.string.edit)
     AppPackageManageScreen(
         isNightMode = false,
-        summaryText = "开书首屏（整章加载）时显示的画面模板：可应用、预览、导入导出与删除；模板不可用时自动回落原有遮罩。",
+        summaryText = "开书首屏（正在加载、尚无内容页）时显示的画面模板：可应用、预览、导入导出与删除。" +
+            "EPUB 与在线/离线文本书均适用；已有内容页（无需加载）或模板不可用时，自动回落原有加载态。",
         addText = "导入模板（JSON）",
         onSwitchDayNight = {},
         onAdd = onAddClick,
