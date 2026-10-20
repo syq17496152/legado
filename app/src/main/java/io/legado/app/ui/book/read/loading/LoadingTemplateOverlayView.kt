@@ -57,6 +57,11 @@ class LoadingTemplateOverlayView @JvmOverloads constructor(
     fun show(template: EpubLoadingTemplate?, night: Boolean, message: String) {
         state.inject(template, night)
         this.message = message
+        // ⚠️ **每轮重置去重键**（2026-10-20 真机可计数化）：`show()` 是**离散事件**（每轮加载一次），
+        // 不像逐帧绘制那样高频 ⇒ 每轮记一条 `loading overlay mode=...` 既不会刷屏，又能让真机**数出
+        // "本轮加载到底有没有走模板"**（若沿用"仅模式变化记一条"，同一 Activity 内后续章节切换就不再有日志
+        // ⇒ "切章也有首屏"这件事在真机不可证）。
+        lastLoggedMode = null
         visibility = VISIBLE
         invalidate()
     }

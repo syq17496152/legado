@@ -2258,6 +2258,10 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun upMenuView() {
         handler.post {
+            // 3.13：`ReadBook.upData(book)`（同书重开且保存的章节号变了）**只置空内容、不回调 `upContent`**
+            // ⇒ 若只挂 `upContent`/`contentLoadFinish`，该切章路径的加载期覆盖层不会出现（实测缺口）。
+            // 而 `upData` 必经 `callBack.upMenuView()` ⇒ 在此补一个同步点即闭合（无需改模型层、无重复加载风险）。
+            syncTextLoadingOverlay()
             upMenu()
             binding.readMenu.upBookView()
             binding.readAloudPlayerPanel.onChapterContentChanged()
@@ -2633,7 +2637,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             binding.root.post { syncTextLoadingOverlay() }
             return
         }
-        val textSurface = ReadBook.book?.isEpub != true && !epubCoreActive
+        // ⚠️ 排除图片书/漫画（`isImage`）：漫画内容不进 `curTextChapter`（走 `ReadManga`）⇒ 若纳入，
+        // 该条件恒为"无内容页"⇒ 覆盖层会**常驻不消失**（真实回归风险）。`book == null` 同样判不显示。
+        val textSurface = ReadBook.book?.let { !it.isEpub && !it.isImage } == true && !epubCoreActive
         if (!textSurface || ReadBook.curTextChapter != null) {
             binding.loadingTemplateOverlay.hide()
             return
