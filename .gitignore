@@ -260,3 +260,9 @@ git_log.txt
 /皮皮喵漫画书源_*.json
 /ppcat2legado转换器.py
 /.trae-html-share-packages/
+
+# === 远端误提交清理（2026-10-21，仅本地保留）===
+# 日期化备份文件（*.bak 的变体，原规则未覆盖）
+*.bak_*
+# brooks-lint 本地运行历史（工具状态，非项目产物）
+/.brooks-lint-history.json
