@@ -57,4 +57,12 @@ class TTSReadAloudServiceTest {
         // 未识别对白不冒充当旁白（AD-15 不猜）
         assertEquals("", readAloudRoleLabel("dialogue", ""))
     }
+
+    @Test
+    fun `角色标签写入徽章展示态`() {
+        io.legado.app.help.readaloud.ReadAloudRoleBadge.update(readAloudRoleLabel("dialogue", "张三"))
+        assertEquals("张三", io.legado.app.help.readaloud.ReadAloudRoleBadge.state.value)
+        io.legado.app.help.readaloud.ReadAloudRoleBadge.clear()
+        assertEquals("", io.legado.app.help.readaloud.ReadAloudRoleBadge.state.value)
+    }
 }

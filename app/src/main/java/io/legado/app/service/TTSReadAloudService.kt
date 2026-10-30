@@ -14,6 +14,7 @@ import io.legado.app.help.MediaHelp
 import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.readaloud.ReadAloudRoleBadge
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.CastingProsody
 import io.legado.app.help.readaloud.casting.CastingTag
@@ -141,6 +142,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         super.onDestroy()
         removeWatchdog()
         clearTTS()
+        ReadAloudRoleBadge.clear()
     }
 
     private fun currentEngineLabel(): String {
@@ -301,6 +303,8 @@ class TTSReadAloudService : BaseReadAloudService() {
             if (ruleSet != null && ruleSet.rules.isNotEmpty()) {
                 speakMultiRole(ruleSet)
             } else {
+                // 单声路径没有角色概念 ⇒ 徽章必须清空（防残留上一轮多角色的角色名）
+                ReadAloudRoleBadge.clear()
                 speakLegacyLoop()
             }
         }.onError {
@@ -515,8 +519,9 @@ class TTSReadAloudService : BaseReadAloudService() {
                     )
                     else -> fallbackVoiceRef
                 }
-                // T8.7 角色徽章：把本段角色名随 utterance 透传给引擎（内置引擎通知显示「正在朗读：张三」）
+                // T8.7 角色徽章：把本段角色名随 utterance 透传给引擎（内置引擎通知显示「正在朗读：张三」+ 阅读页浮层）
                 val roleLabel = readAloudRoleLabel(segment.tag, roleHit?.characterName.orEmpty())
+                ReadAloudRoleBadge.update(roleLabel)
                 if (voiceRef != null && roleLabel.isNotBlank()) {
                     voiceRef = voiceRef.copy(roleName = roleLabel)
                 }
@@ -616,6 +621,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     }
 
     override fun playStop() {
+        ReadAloudRoleBadge.clear()
         textToSpeech?.runCatching {
             stop()
         }
