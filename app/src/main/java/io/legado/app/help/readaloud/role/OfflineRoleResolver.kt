@@ -147,6 +147,22 @@ object OfflineRoleResolver {
         val confidence: Double
     )
 
+    /** 引号附近最近的角色名：前文取最靠后一次出现（离引号最近），后文取最靠前一次出现 */
+    private fun nearestKnownName(
+        cueBefore: String,
+        cueAfter: String,
+        knownNames: List<String>
+    ): String? {
+        val beforeHit = knownNames
+            .mapNotNull { name -> cueBefore.lastIndexOf(name).takeIf { it >= 0 }?.let { name to it } }
+            .maxByOrNull { it.second }
+        if (beforeHit != null) return beforeHit.first
+        return knownNames
+            .mapNotNull { name -> cueAfter.indexOf(name).takeIf { it >= 0 }?.let { name to it } }
+            .minByOrNull { it.second }
+            ?.first
+    }
+
     private fun assign(
         unit: ReadAloudRoleUnit,
         paragraph: String,
@@ -163,6 +179,8 @@ object OfflineRoleResolver {
             append(' ')
             append(unit.cueAfter)
         }.trim()
+        // 近场 cue：只保留引号两侧各 24 字（cueBefore 带跨段上下文，远场文本会污染正则兜底与学习 cue）
+        val nearCue = unit.cueBefore.takeLast(24) + " " + unit.cueAfter.take(24)
 
         // ① 显式 speakerHint（若上游提供）
         matchName(unit.speakerHint, nameMap)?.let { return Assigned(it.name, it.id, "alias", CONF_ALIAS) }
@@ -178,17 +196,17 @@ object OfflineRoleResolver {
             }
         }
 
-        // ③ cue 命中：已知角色名直接出现在 cue 文本（最稳），再退回正则抽取
+        // ③ cue 命中：取**离引号最近**的角色名（前文取 lastIndexOf、后文取 indexOf）。
+        // 不能用"cue 文本里任意包含"：preprocessor 的 cueBefore 会带上跨段上下文，
+        // 上一段的角色名会抢先命中 ⇒ 张冠李戴（2026-10-31 回归集实证：s01 第二句被判给张三）
         if (cueText.isNotBlank()) {
-            knownNames.sortedByDescending { it.length }.forEach { name ->
-                if (cueText.contains(name)) {
-                    matchName(name, nameMap)?.let {
-                        return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
-                    }
+            nearestKnownName(unit.cueBefore, unit.cueAfter, knownNames)?.let { name ->
+                matchName(name, nameMap)?.let {
+                    return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
                 }
             }
         }
-        cueNames(cueText).forEach { candidate ->
+        cueNames(nearCue).forEach { candidate ->
             matchName(candidate, nameMap)?.let {
                 return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
             }

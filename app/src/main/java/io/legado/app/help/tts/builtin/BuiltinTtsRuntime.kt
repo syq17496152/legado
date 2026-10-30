@@ -44,6 +44,15 @@ object BuiltinTtsRuntime {
         val lastError: String
     )
 
+    /** 存储占用三分类（T4.9 总览）：模型 / 音色 / 合成缓存（预合成与实时共用同一缓存目录） */
+    data class StorageBreakdown(
+        val modelBytes: Long = 0,
+        val voiceBytes: Long = 0,
+        val cacheBytes: Long = 0
+    ) {
+        val totalBytes: Long get() = modelBytes + voiceBytes + cacheBytes
+    }
+
     data class SelfCheckReport(
         val ok: Boolean,
         val profileId: String,
@@ -223,6 +232,26 @@ object BuiltinTtsRuntime {
             lastError = lastError
         )
     }
+
+    /**
+     * 存储总览（T4.9）：模型目录 / 音色目录 / 合成缓存三类实占字节。
+     * 未初始化返回全 0（早调安全，与 [state] 同口径）。
+     */
+    fun storageBreakdown(): StorageBreakdown {
+        if (!initialized) return StorageBreakdown()
+        val modelBytes = profiles().sumOf { profile ->
+            runCatching { dirBytes(paths.modelDir(profile.id)) }.getOrDefault(0L)
+        }
+        val voiceBytes = runCatching { dirBytes(paths.voiceRoot) }.getOrDefault(0L)
+        return StorageBreakdown(
+            modelBytes = modelBytes,
+            voiceBytes = voiceBytes,
+            cacheBytes = cache.sizeBytes()
+        )
+    }
+
+    private fun dirBytes(dir: File): Long =
+        if (!dir.isDirectory) 0L else dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     /** 合成到 PCM（命中缓存零耗时）；失败返回 null 并记录最近错误 */
     suspend fun synthesizeToPcm(

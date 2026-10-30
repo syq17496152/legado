@@ -405,6 +405,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         }
         val voices = runCatching { BuiltinTtsRuntime.voices() }.getOrDefault(emptyList())
         val stats = BuiltinTtsRuntime.stats()
+        val storage = runCatching { BuiltinTtsRuntime.storageBreakdown() }
+            .getOrDefault(BuiltinTtsRuntime.StorageBreakdown())
         val bookKey = ReadBook.book?.characterBookKey()
         pageState.value = pageState.value.copy(
             profiles = profiles,
@@ -414,6 +416,11 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 cacheBytes = stats.cacheBytes,
                 lastRtf = stats.lastRtf,
                 lastError = stats.lastError.ifBlank { getString(R.string.builtin_tts_no_error) }
+            ),
+            storageText = BuiltinTtsUiSupport.storageSummary(
+                modelBytes = storage.modelBytes,
+                voiceBytes = storage.voiceBytes,
+                cacheBytes = storage.cacheBytes
             ),
             importDir = BuiltinTtsRuntime.paths().importDir.absolutePath,
             hasBook = bookKey != null,
@@ -452,6 +459,7 @@ data class BuiltinTtsPageState(
     val profiles: List<ProfileRow> = emptyList(),
     val voices: List<BuiltinVoice> = emptyList(),
     val stats: StatsRow = StatsRow(),
+    val storageText: String = "",
     val importDir: String = "",
     val hasBook: Boolean = false,
     val roleSummary: String = "",
@@ -593,6 +601,9 @@ private fun EnginePanel(
         }
         Spacer(Modifier.height(12.dp))
         Text("音色 ${state.stats.voiceCount} · 缓存 ${formatBytes(state.stats.cacheBytes)} · RTF ${"%.2f".format(state.stats.lastRtf)}")
+        if (state.storageText.isNotBlank()) {
+            Text(state.storageText, style = MaterialTheme.typography.bodySmall)
+        }
         Text("最近错误：${state.stats.lastError}")
         TextButton(onClick = { onAction(PageAction.ClearCache) }) {
             Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_clear_cache))
@@ -744,5 +755,12 @@ internal object BuiltinTtsUiSupport {
     ): String {
         val template = if (activated) "已启用多角色" else "多角色模板启用失败"
         return "角色 $characters（新增 $discovered）· 配声 $assigned · $template"
+    }
+
+    /** 存储总览文案（T4.9，纯函数可单测）：模型 / 音色 / 缓存 / 合计 */
+    fun storageSummary(modelBytes: Long, voiceBytes: Long, cacheBytes: Long): String {
+        val total = modelBytes + voiceBytes + cacheBytes
+        return "存储：模型 ${formatBytes(modelBytes)} · 音色 ${formatBytes(voiceBytes)}" +
+            " · 缓存 ${formatBytes(cacheBytes)} · 合计 ${formatBytes(total)}"
     }
 }

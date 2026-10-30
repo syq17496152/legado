@@ -64,6 +64,26 @@ class OfflineRoleResolverTest {
     }
 
     @Test
+    fun `跨段 cue 上下文取最近角色名不张冠李戴`() {
+        // preprocessor 的 cueBefore 会带上上一段原文：上一段出现"张三"，本段真正的 cue 是"李四说："
+        val paragraphs = listOf(
+            "张三说：“你终于来了，我等了很久。”",
+            "李四说：“路上耽搁了，别急，先喝口茶。”"
+        )
+        val units = listOf(
+            unit("u1", 0, 4, 18, cueBefore = "张三说："),
+            unit(
+                "u2", 1, 4, 22,
+                cueBefore = "张三说：“你终于来了，我等了很久。”\n李四说："
+            )
+        )
+        val result = OfflineRoleResolver.resolve(paragraphs, units, characters)
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("李四", result.segments[1].characterName)
+        assertEquals("cue-hit", result.segments[1].reason)
+    }
+
+    @Test
     fun `同段连续对白对话锁继承`() {
         val paragraphs = listOf("张三说：“一。”他顿了顿，又说：“二。”")
         val units = listOf(

@@ -17,4 +17,13 @@ class BuiltinTtsRuntimeTest {
         assertFalse(BuiltinTtsRuntime.isReady())
         assertEquals(BuiltinEngineState.NONE, BuiltinTtsRuntime.stats().state)
     }
+
+    @Test
+    fun `未初始化时存储总览为全零`() {
+        val storage = BuiltinTtsRuntime.storageBreakdown()
+        assertEquals(0L, storage.modelBytes)
+        assertEquals(0L, storage.voiceBytes)
+        assertEquals(0L, storage.cacheBytes)
+        assertEquals(0L, storage.totalBytes)
+    }
 }

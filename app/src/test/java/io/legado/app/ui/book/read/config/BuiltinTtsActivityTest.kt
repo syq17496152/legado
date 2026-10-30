@@ -35,4 +35,16 @@ class BuiltinTtsActivityTest {
             BuiltinTtsUiSupport.multiRoleSummary(characters = 0, discovered = 0, assigned = 0, activated = false)
         )
     }
+
+    @Test
+    fun `存储总览文案含三类与合计`() {
+        assertEquals(
+            "存储：模型 20 MB · 音色 1 KB · 缓存 1.5 GB · 合计 1.5 GB",
+            BuiltinTtsUiSupport.storageSummary(
+                modelBytes = 20L * 1024 * 1024,
+                voiceBytes = 1024L,
+                cacheBytes = 1536L * 1024 * 1024
+            )
+        )
+    }
 }
