@@ -12,7 +12,9 @@ object BuiltinVoiceFilter {
         val query: String = "",
         val gender: Gender = Gender.ALL,
         val untaggedOnly: Boolean = false,
-        val origin: String = ""
+        val origin: String = "",
+        /** 声音池（T8.16）：空=全部；非空按 groupId 精确匹配 */
+        val poolId: String = ""
     )
 
     /** 性别归一：兼容 male/female 与 男/女，空值与"未定"视为未知 */
@@ -36,7 +38,8 @@ object BuiltinVoiceFilter {
             val matchesGender = criteria.gender == Gender.ALL || genderOf(voice) == criteria.gender
             val matchesUntagged = !criteria.untaggedOnly || genderOf(voice) == Gender.UNKNOWN
             val matchesOrigin = criteria.origin.isBlank() || voice.origin == criteria.origin
-            matchesQuery && matchesGender && matchesUntagged && matchesOrigin
+            val matchesPool = criteria.poolId.isBlank() || voice.groupId == criteria.poolId
+            matchesQuery && matchesGender && matchesUntagged && matchesOrigin && matchesPool
         }
     }
 

@@ -52,6 +52,14 @@ internal object BuiltinTtsUiSupport {
     fun previewBatch(voices: List<BuiltinVoice>, limit: Int = 5): List<BuiltinVoice> =
         voices.filter { it.origin != BuiltinVoice.ORIGIN_PRESET }.ifEmpty { voices }.take(limit)
 
+    /** 打标结果文案（T6.2/T6.3）：处理数 + 三分类 + 本次新建池数 */
+    fun autoTagMessage(processed: Int, male: Int, female: Int, unknown: Int, pooled: Int): String =
+        "打标完成：处理 $processed · 男 $male / 女 $female / 未定 $unknown · 分组 $pooled"
+
+    /** 池筛选 chips 显示哪些池（T8.16）：去重 + 上限，避免 chips 行溢出 */
+    fun visiblePoolNames(voices: List<BuiltinVoice>, limit: Int = 4): List<String> =
+        voices.map { it.groupId }.filter { it.isNotBlank() }.distinct().take(limit)
+
     /** 分镜改绑结果文案（纯函数可单测） */
     fun segmentAssignMessage(ok: Boolean, narrator: Boolean, characterName: String): String = when {
         !ok -> "改绑失败（本章还没有识别缓存，请先点“识别角色”）"

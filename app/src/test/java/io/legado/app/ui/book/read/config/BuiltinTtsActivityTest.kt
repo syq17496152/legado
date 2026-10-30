@@ -107,6 +107,26 @@ class BuiltinTtsActivityTest {
     }
 
     @Test
+    fun `打标文案含处理数与池数 T6-3`() {
+        assertEquals(
+            "打标完成：处理 6 · 男 3 / 女 3 / 未定 0 · 分组 4",
+            BuiltinTtsUiSupport.autoTagMessage(processed = 6, male = 3, female = 3, unknown = 0, pooled = 4)
+        )
+    }
+
+    @Test
+    fun `池 chips 只显示去重后的前四个池`() {
+        fun voice(id: String, pool: String) = io.legado.app.help.tts.builtin.BuiltinVoice(
+            id = id, name = id, groupId = pool
+        )
+        val voices = listOf(
+            voice("1", "旁白"), voice("2", "旁白"), voice("3", "male"),
+            voice("4", "female"), voice("5", "youth"), voice("6", "aged"), voice("7", "")
+        )
+        assertEquals(listOf("旁白", "male", "female", "youth"), BuiltinTtsUiSupport.visiblePoolNames(voices))
+    }
+
+    @Test
     fun `分镜改绑结果文案 IF-10 回归 失败与旁白与角色`() {
         assertEquals(
             "改绑失败（本章还没有识别缓存，请先点“识别角色”）",

@@ -37,11 +37,15 @@ object CharacterVoiceAssignService {
         val conflicts: List<Assignment> = emptyList()
     )
 
-    /** 纯函数配声（可单测）：不读写数据库 */
+    /**
+     * 纯函数配声（可单测）：不读写数据库。
+     * 优先级（T8.17）：固定绑定（fixed_roles：角色名→音色）> 性别/年龄打分 > 撞音避让 > 兜底。
+     */
     fun plan(
         characters: List<BookCharacter>,
         voices: List<BuiltinVoice>,
-        narratorHint: String = ""
+        narratorHint: String = "",
+        fixedVoiceMap: Map<String, String> = emptyMap()
     ): AssignResult {
         if (voices.isEmpty()) return AssignResult(emptyList())
         val used = HashSet<String>()
@@ -51,6 +55,24 @@ object CharacterVoiceAssignService {
             compareByDescending<BookCharacter> { it.roleLevel }.thenBy { it.id }
         )
         ordered.forEach { character ->
+            // ① 固定绑定优先（与 CloneTTS fixed_roles.json 同 schema，用户手改过就必须尊重）
+            val fixed = fixedVoiceMap[character.name]?.takeIf { it.isNotBlank() }
+                ?.let { bound -> voices.firstOrNull { it.matches(bound) } }
+            if (fixed != null) {
+                val conflict = fixed.voiceName in used
+                used.add(fixed.voiceName)
+                assignments.add(
+                    Assignment(
+                        characterId = character.id,
+                        characterName = character.name,
+                        voiceName = fixed.voiceName,
+                        voiceDisplayName = fixed.displayName,
+                        reason = "固定绑定",
+                        conflict = conflict
+                    )
+                )
+                return@forEach
+            }
             val gender = BookCharacter.normalizeGender(character.gender).ifBlank {
                 BookCharacter.inferGender(listOf(character.name, character.identity, character.biography).joinToString(" "))
             }
@@ -96,7 +118,8 @@ object CharacterVoiceAssignService {
         val planned = plan(
             characters = characters.filter { overwrite || it.speechRouteJson.isBlank() },
             voices = voices,
-            narratorHint = aliasStore.narratorVoice(bookKey).orEmpty()
+            narratorHint = aliasStore.narratorVoice(bookKey).orEmpty(),
+            fixedVoiceMap = aliasStore.merged(bookKey).roles
         )
         val packageName = context.packageName
         var changed = 0

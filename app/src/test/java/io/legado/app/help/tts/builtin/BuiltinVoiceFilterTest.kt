@@ -1,4 +1,4 @@
-package io.legado.app.help.tts.builtin
+﻿package io.legado.app.help.tts.builtin
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -65,6 +65,18 @@ class BuiltinVoiceFilterTest {
             BuiltinVoiceFilter.Criteria(untaggedOnly = true, origin = BuiltinVoice.ORIGIN_SELF)
         )
         assertEquals(listOf("c"), untaggedSelf.map { it.id })
+    }
+
+    @Test
+    fun `按声音池筛选 T8-16`() {
+        val withPool = voices.map { voice ->
+            voice.copy(groupId = if (voice.id == "a" || voice.id == "d") "male" else "")
+        }
+        val males = BuiltinVoiceFilter.apply(
+            withPool,
+            BuiltinVoiceFilter.Criteria(poolId = "male")
+        )
+        assertEquals(listOf("a", "d"), males.map { it.id })
     }
 
     @Test

@@ -63,6 +63,7 @@ import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceExporter
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
+import io.legado.app.help.tts.builtin.BuiltinVoicePools
 import io.legado.app.help.tts.builtin.ClonettsVoiceImporter
 import io.legado.app.help.tts.builtin.ReferenceAudioProcessor
 import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
@@ -156,6 +157,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     target.outputStream().use { out -> input.copyTo(out) }
                 }
                 ClonettsVoiceImporter(BuiltinTtsRuntime.voiceStore()).importZip(target)
+                // T8.16：导入后按 tag 聚合成声音池（幂等，失败不阻断导入结果）
+                    .also { runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) } }
             }.getOrNull()
             pageState.value = pageState.value.copy(
                 busy = false,
@@ -313,10 +316,22 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 }
                 PageAction.AutoTag -> {
                     pageState.value = pageState.value.copy(busy = true, message = "打标中…")
-                    val result = VoiceAutoTagger.tagAll(BuiltinTtsRuntime.voiceStore())
+                    // T6.3：页内可见进度（已打标的音色自动跳过 ⇒ 可断点续）
+                    val result = VoiceAutoTagger.tagAll(BuiltinTtsRuntime.voiceStore()) { done, total ->
+                        pageState.value = pageState.value.copy(message = "打标中 $done/$total")
+                    }
+                    // T8.16：打标后按 tag 自动聚合声音池（幂等）
+                    val pooled = runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
+                        .getOrDefault(0)
                     pageState.value = pageState.value.copy(
                         busy = false,
-                        message = "打标完成：男 ${result.male} / 女 ${result.female} / 未定 ${result.unknown}"
+                        message = BuiltinTtsUiSupport.autoTagMessage(
+                            processed = result.processed,
+                            male = result.male,
+                            female = result.female,
+                            unknown = result.unknown,
+                            pooled = pooled
+                        )
                     )
                 }
                 is PageAction.DeleteVoice -> {

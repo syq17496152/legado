@@ -270,6 +270,7 @@ private fun VoicesPanel(
     var query by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf(BuiltinVoiceFilter.Gender.ALL) }
     var untaggedOnly by remember { mutableStateOf(false) }
+    var poolId by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onPickVoiceZip) {
@@ -309,7 +310,12 @@ private fun VoicesPanel(
         Spacer(Modifier.height(8.dp))
         val filtered = BuiltinVoiceFilter.apply(
             state.voices,
-            BuiltinVoiceFilter.Criteria(query = query, gender = gender, untaggedOnly = untaggedOnly)
+            BuiltinVoiceFilter.Criteria(
+                query = query,
+                gender = gender,
+                untaggedOnly = untaggedOnly,
+                poolId = poolId
+            )
         )
         if (state.voices.isNotEmpty()) {
             // 音色库检索（T6.4）：名称/标签搜索 + 性别筛选 + 未打标
@@ -320,6 +326,24 @@ private fun VoicesPanel(
                 label = { Text("搜索音色（名称/标签）") },
                 singleLine = true
             )
+            val poolNames = BuiltinTtsUiSupport.visiblePoolNames(state.voices)
+            if (poolNames.isNotEmpty()) {
+                // 声音池筛选（T8.16）：池名来自 tag 自动聚合
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = poolId.isBlank(),
+                        onClick = { poolId = "" },
+                        label = { Text("全部池") }
+                    )
+                    poolNames.forEach { name ->
+                        FilterChip(
+                            selected = poolId == name,
+                            onClick = { poolId = name },
+                            label = { Text(name) }
+                        )
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(
                     BuiltinVoiceFilter.Gender.ALL to "全部",
@@ -368,6 +392,7 @@ private fun VoicesPanel(
                             }
                             val meta = buildList {
                                 add(badge)
+                                if (voice.groupId.isNotBlank()) add("池:${voice.groupId}")
                                 if (voice.gender.isNotBlank()) add(if (voice.gender == "male") "男" else "女")
                                 if (voice.age.isNotBlank()) add(voice.age)
                                 if (voice.refText.length > 0) add("稿${voice.refText.length}字")

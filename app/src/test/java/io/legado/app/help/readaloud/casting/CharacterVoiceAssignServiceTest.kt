@@ -1,4 +1,4 @@
-package io.legado.app.help.readaloud.casting
+﻿package io.legado.app.help.readaloud.casting
 
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.tts.builtin.BuiltinVoice
@@ -85,6 +85,31 @@ class CharacterVoiceAssignServiceTest {
         )
         assertTrue(result.assignments.isEmpty())
         assertFalse(result.conflicts.isNotEmpty())
+    }
+
+    @Test
+    fun `固定绑定优先于性别年龄打分 T8-17`() {
+        // 张三为男，但固定绑定指定女声音色 → 必须尊重固定绑定（用户手改过）
+        val female = voices.first { it.gender == "female" }
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character(1, "张三", BookCharacter.GENDER_MALE)),
+            voices = voices,
+            fixedVoiceMap = mapOf("张三" to female.name)
+        )
+        assertEquals(1, result.assignments.size)
+        assertEquals(female.voiceName, result.assignments.first().voiceName)
+        assertEquals("固定绑定", result.assignments.first().reason)
+    }
+
+    @Test
+    fun `固定绑定值为不存在的音色时回落到打分`() {
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character(1, "张三", BookCharacter.GENDER_MALE)),
+            voices = voices,
+            fixedVoiceMap = mapOf("张三" to "不存在的音色")
+        )
+        assertEquals(1, result.assignments.size)
+        assertTrue(result.assignments.first().reason != "固定绑定")
     }
 
     @Test
