@@ -40,12 +40,17 @@ data class TtsVoiceRef(
     val voiceId: String = "",
     val displayName: String = "",
     // system/multitts/clonetts/script
-    val channel: String = CHANNEL_SYSTEM
+    val channel: String = CHANNEL_SYSTEM,
+    /** 当前句的角色名（旁白/张三…）：仅用于引擎侧徽章展示（内置引擎通知「正在朗读：」） */
+    val roleName: String = ""
 ) {
     companion object {
         const val CHANNEL_SYSTEM = "system"
         const val CHANNEL_HTTP = "http"
         const val CHANNEL_SCRIPT = "script"
+
+        /** per-utterance 透传角色名的 Bundle 键（framework 会把 Bundle 原样送进 SynthesisRequest.params） */
+        const val EXTRA_ROLE_NAME = "io.legado.builtin.roleName"
     }
 }
 
@@ -124,6 +129,10 @@ class SystemEngineSource(
                         val bundle = android.os.Bundle().apply {
                             if (prosody.volume > 0f) {
                                 putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, prosody.volume.coerceIn(0f, 1.0f))
+                            }
+                            // T8.7 角色徽章：角色名随 utterance 透传给引擎（内置引擎据此更新通知文案）
+                            if (!voice?.roleName.isNullOrBlank()) {
+                                putString(TtsVoiceRef.EXTRA_ROLE_NAME, voice?.roleName)
                             }
                         }
                         val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, utteranceId)

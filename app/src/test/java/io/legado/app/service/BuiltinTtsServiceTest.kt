@@ -37,13 +37,19 @@ class BuiltinTtsServiceTest {
     }
 
     /**
-     * TextToSpeechService 在 `super.onCreate()` 内即回调 onLoadLanguage → onIsLanguageAvailable：
-     * 运行时空态必须"判空返回 NONE"，绝不能抛异常（否则系统拉起引擎服务直接崩，2026-10-30 铁证）。
+     * 未初始化时状态查询安全返回 NONE
      */
     @Test
     fun `未初始化时状态查询安全返回 NONE`() {
         assertFalse(BuiltinTtsRuntime.isInitialized())
         assertEquals(BuiltinEngineState.NONE, BuiltinTtsRuntime.state())
         assertFalse(BuiltinTtsRuntime.isReady())
+    }
+
+    @Test
+    fun `角色徽章文案`() {
+        assertEquals("正在朗读", BuiltinNotificationText.content("正在朗读", null))
+        assertEquals("正在朗读", BuiltinNotificationText.content("正在朗读", "  "))
+        assertEquals("正在朗读 · 正在朗读：张三", BuiltinNotificationText.content("正在朗读", "张三"))
     }
 }

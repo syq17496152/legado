@@ -25,6 +25,17 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
+ * 引擎服务纯逻辑（可单测）：角色徽章文案（T8.7）。
+ * 角色为空 → 原文；非空 → 「base · 正在朗读：角色」，避免空角色时出现悬空冒号。
+ */
+internal object BuiltinNotificationText {
+    fun content(base: String, role: String?): String {
+        val name = role.orEmpty().trim()
+        return if (name.isBlank()) base else "$base · 正在朗读：$name"
+    }
+}
+
+/**
  * 内置离线 TTS 引擎（AD-01，注册为**系统 TTS 引擎**）。
  *
  * PoC 实证约束（docs/specs/builtin-offline-tts/poc-results.md）：
@@ -117,16 +128,21 @@ class BuiltinTtsService : TextToSpeechService() {
             return
         }
         val voiceName = request.voiceName.orEmpty()
+        // T8.7 角色徽章：朗读服务把本段角色名放进 per-utterance Bundle，framework 原样透传给引擎
+        val roleName = runCatching {
+            request.params?.getString(io.legado.app.help.readaloud.casting.TtsVoiceRef.EXTRA_ROLE_NAME)
+        }.getOrNull().orEmpty()
         // 框架下发的是百分比（setSpeechRate(1.5f) → 150），换算为倍率
         val rate = BuiltinTtsSynthesisMath.speedFromPercent(request.speechRate)
         val generation = BuiltinTtsRuntime.currentGeneration()
         AppLog.putDebugWithTag(
             AppLog.TAG_TTS_TRACE,
-            "builtin 合成请求 len=${text.length} voice=$voiceName rate=$rate",
+            "builtin 合成请求 len=${text.length} voice=$voiceName rate=$rate role=${roleName.ifBlank { "-" }}",
             level = AppLog.Level.INFO
         )
 
         enterForeground()
+        updateNotificationRole(roleName)
         acquireWakeLock()
         synthJob?.cancel()
         synthJob = scope.launch {
@@ -208,16 +224,7 @@ class BuiltinTtsService : TextToSpeechService() {
         if (inForeground) return
         inForeground = true
         runCatching {
-            val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Notification.Builder(this, CHANNEL_ID)
-            } else {
-                Notification.Builder(this)
-            }.apply {
-                setContentTitle(getString(R.string.builtin_tts_channel_name))
-                setContentText(getString(R.string.builtin_tts_foreground_text))
-                setSmallIcon(R.drawable.ic_volume_up)
-                setOngoing(true)
-            }.build()
+            val notification = buildNotification(null)
             startForeground(NOTIFICATION_ID, notification)
         }.onFailure {
             LogUtils.e(TAG, "前台化失败（降级为普通服务）：${it.message}")
@@ -241,6 +248,34 @@ class BuiltinTtsService : TextToSpeechService() {
     private fun scheduleIdleExit() {
         idleHandler.removeCallbacks(idleExit)
         idleHandler.postDelayed(idleExit, IDLE_EXIT_MS)
+    }
+
+    /** 构建前台通知（同一 id 复用；role 非空时显示「正在朗读：角色」） */
+    private fun buildNotification(role: String?): Notification {
+        val text = BuiltinNotificationText.content(
+            base = getString(R.string.builtin_tts_foreground_text),
+            role = role
+        )
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }.apply {
+            setContentTitle(getString(R.string.builtin_tts_channel_name))
+            setContentText(text)
+            setSmallIcon(R.drawable.ic_volume_up)
+            setOngoing(true)
+        }.build()
+    }
+
+    /** T8.7 角色徽章：合成开始时刷新通知文案（未前台化则跳过，避免残留通知） */
+    private fun updateNotificationRole(role: String?) {
+        if (!inForeground) return
+        runCatching {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildNotification(role))
+        }.onFailure { LogUtils.e(TAG, "更新角色徽章通知失败：${it.message}") }
     }
 
     private val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())

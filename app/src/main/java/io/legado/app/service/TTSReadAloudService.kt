@@ -51,6 +51,12 @@ internal fun readAloudRoleBookKey(book: io.legado.app.data.entities.Book?): Stri
     book?.characterBookKey().orEmpty()
 
 /**
+ * 角色徽章标签（T8.7，纯函数可单测）：角色名优先；无角色时旁白段显示"旁白"，其余留空（不猜）。
+ */
+internal fun readAloudRoleLabel(tag: String, characterName: String): String =
+    characterName.ifBlank { if (tag == "narration") "旁白" else "" }
+
+/**
  * 旁白音色选择（纯函数可单测）：命中本书 fixed_roles.narrator 的显示名 → 否则回落音色表首个。
  * 返回 (`voiceName`=`id|显示名`, `displayName`)；表为空返回 null。
  */
@@ -480,14 +486,14 @@ class TTSReadAloudService : BaseReadAloudService() {
                     readAloudNumber += text.length
                     continue
                 }
+                // C-10：离线命中角色 → 走既有六级链的 ai: 命名空间（①角色绑定 ②本书绑定）
+                val roleHit = if (builtinActive) {
+                    OfflineRoleResolver.lookup(
+                        roleBookKey, chapterIndex, p,
+                        segment.offsetInParagraph, segment.length
+                    )
+                } else null
                 val sourceRoute = runCatching {
-                    // C-10：离线命中角色 → 走既有六级链的 ai: 命名空间（①角色绑定 ②本书绑定）
-                    val roleHit = if (builtinActive) {
-                        OfflineRoleResolver.lookup(
-                            roleBookKey, chapterIndex, p,
-                            segment.offsetInParagraph, segment.length
-                        )
-                    } else null
                     val resolveTag = roleHit?.let { CastingTag.AI_PREFIX + it.characterName } ?: segment.tag
                     TtsCastingStore.resolveSourceForTag(
                         roleBookKey, resolveTag, ruleSet, roleHit?.characterId ?: 0L
@@ -496,7 +502,7 @@ class TTSReadAloudService : BaseReadAloudService() {
                 // 通道门禁（P1-15 门禁版）：模板声源指向 HTTP/脚本通道时本服务无法合成，
                 // 明示降级为引擎默认音（静默降级会表现为"角色不生效"，须留痕可排查）
                 // 无 toneID 的段（旁白/模板对白）必须显式兜底音色，否则沿用上一段角色音色（音色泄漏）
-                val voiceRef = when {
+                var voiceRef = when {
                     sourceRoute.engineType != SpeechRoute.ENGINE_SYSTEM &&
                         sourceRoute.engineType != SpeechRoute.ENGINE_DEFAULT -> {
                         AppLog.put("多人听书：模板声源指向非系统通道（${sourceRoute.engineType}），该角色降级为引擎默认音")
@@ -508,6 +514,11 @@ class TTSReadAloudService : BaseReadAloudService() {
                         channel = TtsVoiceRef.CHANNEL_SYSTEM
                     )
                     else -> fallbackVoiceRef
+                }
+                // T8.7 角色徽章：把本段角色名随 utterance 透传给引擎（内置引擎通知显示「正在朗读：张三」）
+                val roleLabel = readAloudRoleLabel(segment.tag, roleHit?.characterName.orEmpty())
+                if (voiceRef != null && roleLabel.isNotBlank()) {
+                    voiceRef = voiceRef.copy(roleName = roleLabel)
                 }
                 // 韵律送达（P1-14）：取命中规则配置的韵律（0=跟随全局），不再恒传默认全零
                 val ruleProsody = ruleSet.rules.firstOrNull { it.tag == segment.tag }?.prosody

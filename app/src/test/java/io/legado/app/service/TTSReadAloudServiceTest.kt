@@ -49,4 +49,12 @@ class TTSReadAloudServiceTest {
         assertEquals("b6_m_teen|内置·男·少年" to "内置·男·少年", pickNarratorVoice(voices, "未知音色"))
         assertNull(pickNarratorVoice(emptyList(), "内置·男·少年"))
     }
+
+    @Test
+    fun `角色徽章标签：角色名优先，旁白段回落旁白，未知留空`() {
+        assertEquals("张三", readAloudRoleLabel("dialogue", "张三"))
+        assertEquals("旁白", readAloudRoleLabel("narration", ""))
+        // 未识别对白不冒充当旁白（AD-15 不猜）
+        assertEquals("", readAloudRoleLabel("dialogue", ""))
+    }
 }
