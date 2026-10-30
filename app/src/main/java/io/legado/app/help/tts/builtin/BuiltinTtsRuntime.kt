@@ -169,8 +169,16 @@ object BuiltinTtsRuntime {
         return profiles.firstOrNull { modelManager.state(it) == BuiltinEngineState.READY }
     }
 
+    /**
+     * 是否已完成 [init]。
+     * TextToSpeechService 生命周期里 `super.onCreate()` 会先回调 `onLoadLanguage`/`onIsLanguageAvailable`，
+     * 这类早调入口必须能安全判空（否则抛异常导致系统拉起引擎服务即崩溃，2026-10-30 模拟器铁证）。
+     */
+    fun isInitialized(): Boolean = initialized
+
     fun state(): BuiltinEngineState {
-        check(initialized) { "BuiltinTtsRuntime 未初始化" }
+        // 早调安全：未初始化一律视为无可用档（不得抛异常，见 isInitialized 注释）
+        if (!initialized) return BuiltinEngineState.NONE
         val profile = activeProfile() ?: return BuiltinEngineState.NONE
         return modelManager.state(profile)
     }

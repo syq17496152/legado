@@ -11,6 +11,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.MediaHelp
+import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
@@ -40,6 +41,28 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
+
+/**
+ * 角色绑定口径（纯函数可单测）：`BookCharacter.bookUrl` / cast_role / 离线归因缓存一律按
+ * [characterBookKey]（`work:作者/书名`）存档；只有模板偏好键沿用 raw bookUrl（与既有 UI 写入口一致）。
+ * 两种键混用 ⇒ 角色库永远查不到（2026-10-31 模拟器铁证）。
+ */
+internal fun readAloudRoleBookKey(book: io.legado.app.data.entities.Book?): String =
+    book?.characterBookKey().orEmpty()
+
+/**
+ * 旁白音色选择（纯函数可单测）：命中本书 fixed_roles.narrator 的显示名 → 否则回落音色表首个。
+ * 返回 (`voiceName`=`id|显示名`, `displayName`)；表为空返回 null。
+ */
+internal fun pickNarratorVoice(
+    voices: List<Pair<String, String>>,
+    narrator: String?
+): Pair<String, String>? {
+    if (voices.isEmpty()) return null
+    val name = narrator.orEmpty()
+    return if (name.isNotBlank()) voices.firstOrNull { it.second == name } ?: voices.first()
+    else voices.first()
+}
 
 /**
  * 本地朗读（AD-03/AD-05/AD-09）
@@ -360,6 +383,10 @@ class TTSReadAloudService : BaseReadAloudService() {
      */
     private suspend fun speakMultiRole(ruleSet: CastingRuleSet) {
         val bookKey = ReadBook.book?.bookUrl.orEmpty()
+        // 角色/绑定口径必须用 BookIdentity 键（work:作者/书名）：本服务给 TtsCastingStore 用 raw bookUrl（与既有 UI 写入口一致），
+        // 但 BookCharacter.bookUrl / cast_role 绑定 / OfflineRoleResolver 缓存全部按 characterBookKey 存档
+        // ⇒ 混用会让角色库永远查不到（2026-10-31 模拟器铁证：dialogue 段 tag 恒为 dialogue，ai: 从未命中）
+        val roleBookKey = readAloudRoleBookKey(ReadBook.book)
         // 监听器所有权归一（P1-9）：utterance 完成信号经 sink 分发表回收，不再逐句覆盖服务级监听器
         val source = SystemEngineSource(
             this,
@@ -387,10 +414,10 @@ class TTSReadAloudService : BaseReadAloudService() {
         val chapterIndex = textChapter.chapter.index
         if (builtinActive) {
             runCatching {
-                val roleCharacters = CharacterVoiceAssignService.roleCharacters(bookKey)
+                val roleCharacters = CharacterVoiceAssignService.roleCharacters(roleBookKey)
                 if (roleCharacters.isNotEmpty()) {
                     OfflineRoleResolver.ensure(
-                        bookKey = bookKey,
+                        bookKey = roleBookKey,
                         chapterIndex = chapterIndex,
                         chapterTitle = textChapter.chapter.title,
                         paragraphs = contentList,
@@ -400,6 +427,18 @@ class TTSReadAloudService : BaseReadAloudService() {
                 }
             }.onFailure { AppLog.put("离线角色归因准备失败：${it.message}") }
         }
+        // 音色泄漏防护（P1，2026-10-31 铁证）：SystemEngineSource.applyVoice 只在 voiceId 非空时 setVoice，
+        // 没有 toneID 的旁白/对白会沿用上一段角色音色（实测旁白段 voice=b6_m_youth=张三音色）。
+        // 内置引擎激活时给"未绑定音色"的段补一个显式 voiceRef：旁白优先取本书 fixed_roles.narrator，否则引擎首音。
+        val fallbackVoiceRef = if (builtinActive) {
+            runCatching {
+                val narrator = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot).narratorVoice(roleBookKey)
+                val voices = BuiltinTtsRuntime.voices().map { it.voiceName to it.displayName }
+                pickNarratorVoice(voices, narrator)?.let { (voiceName, display) ->
+                    TtsVoiceRef(voiceName, display, TtsVoiceRef.CHANNEL_SYSTEM)
+                }
+            }.getOrNull()
+        } else null
         for (p in nowSpeak until contentList.size) {
             currentCoroutineContext().ensureActive()
             val rawParagraphStart = if (p == nowSpeak) paragraphStartPos else 0
@@ -445,30 +484,30 @@ class TTSReadAloudService : BaseReadAloudService() {
                     // C-10：离线命中角色 → 走既有六级链的 ai: 命名空间（①角色绑定 ②本书绑定）
                     val roleHit = if (builtinActive) {
                         OfflineRoleResolver.lookup(
-                            bookKey, chapterIndex, p,
+                            roleBookKey, chapterIndex, p,
                             segment.offsetInParagraph, segment.length
                         )
                     } else null
                     val resolveTag = roleHit?.let { CastingTag.AI_PREFIX + it.characterName } ?: segment.tag
                     TtsCastingStore.resolveSourceForTag(
-                        bookKey, resolveTag, ruleSet, roleHit?.characterId ?: 0L
+                        roleBookKey, resolveTag, ruleSet, roleHit?.characterId ?: 0L
                     )
                 }.getOrNull() ?: SpeechRoute(engineType = SpeechRoute.ENGINE_DEFAULT)
                 // 通道门禁（P1-15 门禁版）：模板声源指向 HTTP/脚本通道时本服务无法合成，
                 // 明示降级为引擎默认音（静默降级会表现为"角色不生效"，须留痕可排查）
-                val voiceRef = if (sourceRoute.engineType != SpeechRoute.ENGINE_SYSTEM &&
-                    sourceRoute.engineType != SpeechRoute.ENGINE_DEFAULT
-                ) {
-                    AppLog.put("多人听书：模板声源指向非系统通道（${sourceRoute.engineType}），该角色降级为引擎默认音")
-                    null
-                } else if (sourceRoute.speakerName.isNotBlank()) {
-                    TtsVoiceRef(
+                // 无 toneID 的段（旁白/模板对白）必须显式兜底音色，否则沿用上一段角色音色（音色泄漏）
+                val voiceRef = when {
+                    sourceRoute.engineType != SpeechRoute.ENGINE_SYSTEM &&
+                        sourceRoute.engineType != SpeechRoute.ENGINE_DEFAULT -> {
+                        AppLog.put("多人听书：模板声源指向非系统通道（${sourceRoute.engineType}），该角色降级为引擎默认音")
+                        fallbackVoiceRef
+                    }
+                    sourceRoute.toneID.isNotBlank() -> TtsVoiceRef(
                         voiceId = sourceRoute.toneID,
-                        displayName = sourceRoute.speakerName,
+                        displayName = sourceRoute.speakerName.ifBlank { sourceRoute.toneID },
                         channel = TtsVoiceRef.CHANNEL_SYSTEM
                     )
-                } else {
-                    null
+                    else -> fallbackVoiceRef
                 }
                 // 韵律送达（P1-14）：取命中规则配置的韵律（0=跟随全局），不再恒传默认全零
                 val ruleProsody = ruleSet.rules.firstOrNull { it.tag == segment.tag }?.prosody
@@ -513,16 +552,18 @@ class TTSReadAloudService : BaseReadAloudService() {
                         } else nextRaw
                         if (nextSpeech.isNotBlank()) {
                             val nextHit = OfflineRoleResolver.lookup(
-                                bookKey, chapterIndex, p,
+                                roleBookKey, chapterIndex, p,
                                 nextSegment.offsetInParagraph, nextSegment.length
                             )
                             val nextTag = nextHit?.let { CastingTag.AI_PREFIX + it.characterName }
                                 ?: nextSegment.tag
                             val nextVoice = runCatching {
                                 TtsCastingStore.resolveSourceForTag(
-                                    bookKey, nextTag, ruleSet, nextHit?.characterId ?: 0L
+                                    roleBookKey, nextTag, ruleSet, nextHit?.characterId ?: 0L
                                 )
                             }.getOrNull()?.toneID.orEmpty()
+                                // 与主循环同一兜底口径：无 toneID 的段预取也必须用旁白/首音，否则缓存必然不命中
+                                .ifBlank { fallbackVoiceRef?.voiceId.orEmpty() }
                             BuiltinTtsRuntime.prefetchAsync(
                                 nextSpeech, nextVoice, (AppConfig.ttsSpeechRate + 5) / 10f
                             )

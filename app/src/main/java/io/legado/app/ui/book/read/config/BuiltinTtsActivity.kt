@@ -45,8 +45,10 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.help.book.characterBookKey
+import io.legado.app.help.readaloud.casting.BuiltinCastingSetup
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.role.BookAliasStore
+import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleCacheStore
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.tts.builtin.BuiltinEngineState
@@ -250,6 +252,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 is PageAction.PreviewVoice -> previewVoice(action.voiceName)
                 PageAction.AssignCasting -> assignCasting()
                 PageAction.IdentifyRoles -> identifyRoles()
+                PageAction.EnableMultiRole -> enableMultiRole()
                 PageAction.Reload -> Unit
             }
     }
@@ -270,6 +273,44 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 "已配声 ${result.assignments.size} 个角色（撞音 ${result.conflicts.size}）"
             }
         )
+    }
+
+    /**
+     * 一键开书（T5.3）：角色发现（离线）→ 一键配声 → 激活内置多角色模板。
+     * 三步缺一不可：没有角色=配声空转；没有模板=阅读服务永远走 legacy 单声（铁证见 issues-found IF-05）。
+     */
+    private suspend fun enableMultiRole() {
+        val book = ReadBook.book
+        if (book == null) {
+            pageState.value = pageState.value.copy(message = "请先打开一本书")
+            return
+        }
+        val chapter = ReadBook.curTextChapter
+        if (chapter == null) {
+            pageState.value = pageState.value.copy(message = "请先在阅读页打开当前章节")
+            return
+        }
+        pageState.value = pageState.value.copy(busy = true, message = "准备多角色…")
+        val bookKey = book.characterBookKey()
+        val paragraphs = chapter.paragraphs.map { it.text }
+        var discovered = 0
+        var characters = CharacterVoiceAssignService.roleCharacters(bookKey)
+        if (characters.isEmpty()) {
+            discovered = OfflineCharacterDiscovery.ensureCharacters(bookKey, paragraphs)
+            characters = CharacterVoiceAssignService.roleCharacters(bookKey)
+        }
+        val assigned = CharacterVoiceAssignService.assignAll(this, book)
+        val activated = BuiltinCastingSetup.ensureAndActivate(assets)
+        pageState.value = pageState.value.copy(
+            busy = false,
+            message = BuiltinTtsUiSupport.multiRoleSummary(
+                characters = characters.size,
+                discovered = discovered,
+                assigned = assigned.assignments.size,
+                activated = activated
+            )
+        )
+        reload()
     }
 
     private suspend fun identifyRoles() {
@@ -432,6 +473,7 @@ sealed interface PageAction {
     data class PreviewVoice(val voiceName: String) : PageAction
     data object AssignCasting : PageAction
     data object IdentifyRoles : PageAction
+    data object EnableMultiRole : PageAction
     data object Reload : PageAction
 }
 
@@ -666,6 +708,11 @@ private fun WizardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Un
         Spacer(Modifier.height(6.dp))
         Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step3))
         Text("回到阅读页点「听书」即可；未识别段会用模板对白音色（并在分镜里标红）。")
+        Spacer(Modifier.height(8.dp))
+        // 一键开书（T5.3）：角色发现 + 配声 + 激活多角色模板，缺任一步都会退化成单声
+        Button(onClick = { onAction(PageAction.EnableMultiRole) }, enabled = state.hasBook) {
+            Text("一键开书（识别 + 配声 + 启用多角色）")
+        }
         Spacer(Modifier.height(10.dp))
         Text(state.roleSummary, style = MaterialTheme.typography.bodySmall)
     }
@@ -686,5 +733,16 @@ internal object BuiltinTtsUiSupport {
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         bytes < 1024L * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
         else -> String.format(Locale.US, "%.1f GB", bytes.toDouble() / (1024 * 1024 * 1024))
+    }
+
+    /** 一键开书结果文案（纯函数可单测）：四段信息缺一不可，便于用户/日志定位卡在哪一步 */
+    fun multiRoleSummary(
+        characters: Int,
+        discovered: Int,
+        assigned: Int,
+        activated: Boolean
+    ): String {
+        val template = if (activated) "已启用多角色" else "多角色模板启用失败"
+        return "角色 $characters（新增 $discovered）· 配声 $assigned · $template"
     }
 }

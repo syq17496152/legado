@@ -23,4 +23,16 @@ class BuiltinTtsActivityTest {
         assertEquals("20 MB", BuiltinTtsUiSupport.formatBytes(20L * 1024 * 1024))
         assertEquals("1.5 GB", BuiltinTtsUiSupport.formatBytes(1536L * 1024 * 1024))
     }
+
+    @Test
+    fun `一键开书结果文案区分模板是否启用`() {
+        assertEquals(
+            "角色 2（新增 2）· 配声 2 · 已启用多角色",
+            BuiltinTtsUiSupport.multiRoleSummary(characters = 2, discovered = 2, assigned = 2, activated = true)
+        )
+        assertEquals(
+            "角色 0（新增 0）· 配声 0 · 多角色模板启用失败",
+            BuiltinTtsUiSupport.multiRoleSummary(characters = 0, discovered = 0, assigned = 0, activated = false)
+        )
+    }
 }

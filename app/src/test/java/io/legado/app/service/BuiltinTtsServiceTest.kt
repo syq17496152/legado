@@ -1,6 +1,9 @@
 package io.legado.app.service
 
+import io.legado.app.help.tts.builtin.BuiltinEngineState
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -31,5 +34,16 @@ class BuiltinTtsServiceTest {
         assertEquals(9600, BuiltinTtsSynthesisMath.chunkBytes(24000, 200))
         assertEquals(8820, BuiltinTtsSynthesisMath.chunkBytes(22050, 200))
         assertEquals(2048, BuiltinTtsSynthesisMath.chunkBytes(1000, 200))
+    }
+
+    /**
+     * TextToSpeechService 在 `super.onCreate()` 内即回调 onLoadLanguage → onIsLanguageAvailable：
+     * 运行时空态必须"判空返回 NONE"，绝不能抛异常（否则系统拉起引擎服务直接崩，2026-10-30 铁证）。
+     */
+    @Test
+    fun `未初始化时状态查询安全返回 NONE`() {
+        assertFalse(BuiltinTtsRuntime.isInitialized())
+        assertEquals(BuiltinEngineState.NONE, BuiltinTtsRuntime.state())
+        assertFalse(BuiltinTtsRuntime.isReady())
     }
 }

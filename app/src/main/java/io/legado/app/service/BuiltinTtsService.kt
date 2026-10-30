@@ -46,8 +46,10 @@ class BuiltinTtsService : TextToSpeechService() {
     }
 
     override fun onCreate() {
-        super.onCreate()
+        // 必须先于 super.onCreate()：TextToSpeechService 在 super.onCreate() 内即回调
+        // onLoadLanguage/onIsLanguageAvailable，晚初始化会因运行时空态而崩服务（2026-10-30 铁证）
         BuiltinTtsRuntime.init(this)
+        super.onCreate()
         createNotificationChannel()
         AppLog.putDebugWithTag(
             AppLog.TAG_TTS_TRACE,
