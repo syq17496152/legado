@@ -13,8 +13,12 @@ import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
 import io.legado.app.help.source.SourceRecycleBinHelp
+import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
+import io.legado.app.help.tts.builtin.BuiltinVoice
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
+import splitties.init.appCtx
 
 /**
  * ⑦ TTS 听书域**配置侧**内核（web-mcp-productization 二期 · tasks 2.13 / 2.28）。
@@ -73,6 +77,90 @@ object TtsKernel {
     suspend fun httpTtsList(): Map<String, Any?> = withContext(IO) {
         val all = appDb.httpTTSDao.all
         mapOf("total" to all.size, "engines" to all.map { it.toDetail() })
+    }
+
+    // ============================================================ 内置离线引擎（T8.9）
+
+    /** `builtin_tts_status`：内置引擎状态 + 存储总览（只读） */
+    suspend fun builtinStatus(): Map<String, Any?> = withContext(IO) {
+        BuiltinTtsRuntime.init(appCtx)
+        val stats = BuiltinTtsRuntime.stats()
+        val storage = runCatching { BuiltinTtsRuntime.storageBreakdown() }.getOrNull()
+        mapOf(
+            "state" to stats.state.name,
+            "profileId" to stats.profileId,
+            "voiceCount" to stats.voiceCount,
+            "cacheBytes" to stats.cacheBytes,
+            "lastRtf" to stats.lastRtf,
+            "avgRtf" to stats.avgRtf,
+            "cacheHits" to stats.cacheHits,
+            "cacheMisses" to stats.cacheMisses,
+            "lastError" to stats.lastError,
+            "storage" to mapOf(
+                "modelBytes" to (storage?.modelBytes ?: 0L),
+                "voiceBytes" to (storage?.voiceBytes ?: 0L),
+                "cacheBytes" to (storage?.cacheBytes ?: 0L),
+                "totalBytes" to (storage?.totalBytes ?: 0L)
+            )
+        )
+    }
+
+    /** `builtin_voice_list`：内置/导入/自录音色（只读；可按性别或标签过滤） */
+    suspend fun builtinVoiceList(filter: String? = null): Map<String, Any?> = withContext(IO) {
+        BuiltinTtsRuntime.init(appCtx)
+        BuiltinTtsRuntime.ensureSeeded()
+        val keyword = filter?.trim().orEmpty()
+        val all = BuiltinTtsRuntime.voices()
+        val filtered = if (keyword.isBlank()) all else all.filter { builtinVoiceMatches(it, keyword) }
+        mapOf(
+            "total" to filtered.size,
+            "voices" to filtered.map { voice ->
+                mapOf(
+                    "id" to voice.id,
+                    "name" to voice.displayName,
+                    "origin" to voice.origin,
+                    "gender" to voice.gender,
+                    "age" to voice.age,
+                    "groupId" to voice.groupId,
+                    "tags" to voice.tags,
+                    "readOnly" to voice.readOnly
+                )
+            }
+        )
+    }
+
+    /** 内置音色过滤判定（纯函数，供 `builtin_voice_list` 与单测共用） */
+    internal fun builtinVoiceMatches(voice: BuiltinVoice, keyword: String): Boolean {
+        val key = keyword.trim()
+        if (key.isBlank()) return true
+        return voice.gender.equals(key, true) ||
+            voice.age.equals(key, true) ||
+            voice.tags.any { it.equals(key, true) }
+    }
+
+    /** `builtin_assign_voices`：给某角色手动绑定内置音色（写操作） */
+    suspend fun builtinAssignVoice(
+        bookKey: String,
+        characterId: Long,
+        voiceName: String
+    ): Map<String, Any?> = withContext(IO) {
+        require(bookKey.isNotBlank()) { "bookKey 不能为空" }
+        require(characterId > 0) { "characterId 必须为正数" }
+        require(voiceName.isNotBlank()) { "voiceName 不能为空" }
+        BuiltinTtsRuntime.init(appCtx)
+        val voice = BuiltinTtsRuntime.voices().firstOrNull {
+            it.voiceName == voiceName || it.id == voiceName
+        } ?: throw NoSuchElementException("音色不存在：$voiceName")
+        val ok = CharacterVoiceAssignService.assignVoice(appCtx, bookKey, characterId, voice)
+        if (!ok) throw NoSuchElementException("角色不存在或分类键不匹配：$characterId")
+        mapOf(
+            "bookKey" to bookKey,
+            "characterId" to characterId,
+            "voiceId" to voice.id,
+            "voiceName" to voice.voiceName,
+            "displayName" to voice.displayName,
+            "note" to "重开朗读生效"
+        )
     }
 
     /** `http_tts_save`：新增 / 覆盖 HTTP TTS（`id` 相同即覆盖，DAO 为 REPLACE 语义）。 */

@@ -113,6 +113,13 @@ class CharacterVoiceAssignServiceTest {
     }
 
     @Test
+    fun `角色配音行是否已配声只看音色字段`() {
+        assertTrue(CharacterVoiceAssignService.RoleVoiceRow(1, "张三", "male", 0, "a|男", "男").configured)
+        assertTrue(CharacterVoiceAssignService.RoleVoiceRow(2, "李四", "male", 0, "", "旁白男").configured)
+        assertFalse(CharacterVoiceAssignService.RoleVoiceRow(3, "王五", "", 0, "", "").configured)
+    }
+
+    @Test
     fun `角色配音页撞音判定只针对重复绑定`() {
         val rows = listOf(
             CharacterVoiceAssignService.RoleVoiceRow(1, "张三", "male", 0, "a|男", "男"),

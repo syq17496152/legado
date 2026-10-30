@@ -389,6 +389,61 @@ object TtsTools {
         ) { _ ->
             AudioKernel.audiobookProgress()
         },
+
+        McpTool(
+            name = "builtin_tts_status",
+            title = "内置离线朗读状态",
+            description = "读取内置离线 TTS 引擎状态：引擎态（NONE/READY/CORRUPT…）/当前档位/音色数/缓存命中与 RTF/" +
+                "存储总览（模型/音色/缓存/合计字节）。只读。",
+            domain = MCP_DOMAIN_TTS,
+            level = TokenManager.Level.READONLY,
+            readOnlyHint = true,
+            inputSchema = McpJsonSchema.empty(),
+        ) { _ ->
+            TtsKernel.builtinStatus()
+        },
+
+        McpTool(
+            name = "builtin_voice_list",
+            title = "内置音色清单",
+            description = "列出自录音色（含来源 内置/导入/自录、性别/年龄/声音池/标签/是否只读）。" +
+                "可按性别(male/female)或标签过滤。只读。",
+            domain = MCP_DOMAIN_TTS,
+            level = TokenManager.Level.READONLY,
+            readOnlyHint = true,
+            inputSchema = McpJsonSchema.of(
+                descriptions = mapOf("filter" to "可选：性别 male/female、年龄 teen/youth/aged 或标签名"),
+            ),
+        ) { args ->
+            TtsKernel.builtinVoiceList(args.str("filter"))
+        },
+
+        McpTool(
+            name = "builtin_assign_voices",
+            title = "给角色绑定内置音色",
+            description = "把某个内置/导入音色手动绑定到指定角色（写 BookCharacter 朗读路由，source=manual）。" +
+                "**写操作**：重开朗读生效；返回绑定结果。",
+            domain = MCP_DOMAIN_TTS,
+            level = TokenManager.Level.MANAGE,
+            inputSchema = McpJsonSchema.of(
+                required = mapOf(
+                    "bookKey" to McpJsonSchema.TYPE_STRING,
+                    "characterId" to TYPE_INTEGER,
+                    "voiceName" to McpJsonSchema.TYPE_STRING
+                ),
+                descriptions = mapOf(
+                    "bookKey" to "书籍角色键（work:作者/书名，取阅读域返回值）",
+                    "characterId" to "角色卡 id（取阅读域 character_list 返回值）",
+                    "voiceName" to "音色名（id|显示名，取 builtin_voice_list 的 name 字段）"
+                ),
+            ),
+        ) { args ->
+            TtsKernel.builtinAssignVoice(
+                bookKey = args.str("bookKey").orEmpty(),
+                characterId = args.long("characterId"),
+                voiceName = args.str("voiceName").orEmpty()
+            )
+        },
     )
 
     /** 与 REST 门面同口径：对象或 JSON 字符串均可。 */

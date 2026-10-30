@@ -223,8 +223,15 @@ object CharacterVoiceAssignService {
         book: Book,
         characterId: Long,
         voice: BuiltinVoice
+    ): Boolean = assignVoice(context, book.characterBookKey(), characterId, voice)
+
+    /** 单角色换音色（按 bookKey；供 MCP/Web 等无 Book 对象场景复用） */
+    suspend fun assignVoice(
+        context: Context,
+        bookKey: String,
+        characterId: Long,
+        voice: BuiltinVoice
     ): Boolean = withContext(Dispatchers.IO) {
-        val bookKey = book.characterBookKey()
         val character = runCatching {
             appDb.bookCharacterDao.characters(bookKey).firstOrNull { it.id == characterId }
         }.getOrNull() ?: return@withContext false

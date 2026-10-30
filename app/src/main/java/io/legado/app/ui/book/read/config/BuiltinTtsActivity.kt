@@ -227,7 +227,32 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 )
                 reload()
             }
+            // 联调用：adb 传 --es import_voices <包名> → 直接从外置导入目录导入音色包（L2 验证 653 规模）
+            intent?.getStringExtra(EXTRA_IMPORT_VOICES)?.takeIf { it.isNotBlank() }?.let { fileName ->
+                importVoicesFromImportDir(fileName)
+            }
         }
+    }
+
+    /** 联调用：从外置导入目录按文件名导入音色包（不经过 SAF，便于 adb push 后自动验证） */
+    private suspend fun importVoicesFromImportDir(fileName: String) {
+        val file = File(BuiltinTtsRuntime.paths().importDir, fileName)
+        if (!file.isFile) {
+            pageState.value = pageState.value.copy(message = "导入目录内没有 $fileName")
+            return
+        }
+        pageState.value = pageState.value.copy(busy = true, message = "导入音色包中…")
+        val report = runCatching {
+            ClonettsVoiceImporter(BuiltinTtsRuntime.voiceStore()).importZip(file)
+        }.onFailure {
+            LogUtils.e("BuiltinTtsUi", "音色包导入失败：${it.stackTraceToString()}")
+        }.getOrNull()
+        runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
+        pageState.value = pageState.value.copy(
+            busy = false,
+            message = report?.message ?: "音色包导入失败"
+        )
+        reload()
     }
 
     /** 扫描外置导入目录并逐项导入（返回结果文案） */
@@ -682,6 +707,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     companion object {
         const val EXTRA_AUTO_SETUP = "auto_setup"
+        /** 联调：从外置导入目录自动导入指定音色包（文件名），供 653 规模 L2 验证 */
+        const val EXTRA_IMPORT_VOICES = "import_voices"
         /** 改绑学习时截取的 cue 窗口（引号两侧各 24 字，与离线归因的近场口径一致） */
         private const val CUE_WINDOW = 24
         /** 批量试听一次最多几个（T8.8，避免一次播太久） */
@@ -721,10 +748,13 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             ),
             importDir = BuiltinTtsRuntime.paths().importDir.absolutePath,
             hasBook = bookKey != null,
-            roleSummary = roleSummary(bookKey),
-            storyboard = buildStoryboard(bookKey),
+            roleSummary = BuiltinTtsViewMapper.roleSummary(
+                bookKey,
+                getString(R.string.builtin_tts_roles_need_book)
+            ),
+            storyboard = BuiltinTtsViewMapper.storyboard(bookKey),
             pickCharacters = emptyList(),
-            storyboardHint = storyboardHint(bookKey)
+            storyboardHint = BuiltinTtsViewMapper.storyboardHint(bookKey)
         )
         // 角色卡是挂起查询（DAO），异步补进状态（分镜改绑弹窗 + 角色配音页用）
         if (bookKey != null) {
@@ -748,48 +778,5 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 )
             }
         }
-    }
-
-    /** 分镜行（T5.5）：只展示当前章已识别的段；未识别段标"未识别"，不静默归旁白 */
-    private fun buildStoryboard(bookKey: String?): List<StoryboardRow> {
-        if (bookKey == null) return emptyList()
-        val chapter = ReadBook.curTextChapter ?: return emptyList()
-        val segments = OfflineRoleResolver.cached(bookKey, chapter.chapter.index) ?: return emptyList()
-        val paragraphs = chapter.paragraphs.map { it.text }
-        return segments.map { segment ->
-            val paragraph = paragraphs.getOrNull(segment.paragraphIndex).orEmpty()
-            StoryboardRow(
-                paragraphIndex = segment.paragraphIndex,
-                start = segment.start,
-                end = segment.end,
-                text = BuiltinTtsUiSupport.storyboardSnippet(paragraph, segment.start, segment.end),
-                roleLabel = BuiltinTtsUiSupport.storyboardLabel(
-                    roleType = segment.roleType,
-                    recognized = segment.recognized,
-                    characterName = segment.characterName
-                ),
-                confidence = segment.confidence,
-                narrator = segment.roleType == "narrator",
-                recognized = segment.recognized
-            )
-        }
-    }
-
-    private fun storyboardHint(bookKey: String?): String = when {
-        bookKey == null -> "请先打开一本书"
-        ReadBook.curTextChapter == null -> "请先在阅读页打开当前章节"
-        buildStoryboard(bookKey).isEmpty() -> "本章还没有分镜：先点「识别角色」（离线，零网络）"
-        else -> "点任意一段可改绑角色；改动只写本地缓存，不会触发联网"
-    }
-
-    private fun roleSummary(bookKey: String?): String {
-        if (bookKey == null) return getString(R.string.builtin_tts_roles_need_book)
-        val chapter = ReadBook.curTextChapter
-        val segments = chapter?.let { OfflineRoleResolver.cached(bookKey, it.chapter.index) }
-        if (segments.isNullOrEmpty()) {
-            return "尚未识别（开读或点“识别角色”即可）"
-        }
-        val recognized = segments.count { it.recognized }
-        return "本章 ${segments.size} 段，命中角色 $recognized 段"
     }
 }
