@@ -59,7 +59,11 @@ class ClonettsVoiceImporter(
             if (file.isFile) BuiltinHash.md5Hex(file.readBytes()) else null
         }.toSet()
 
-    suspend fun importZip(zipFile: File, profileId: String = "clone"): Report =
+    suspend fun importZip(
+        zipFile: File,
+        profileId: String = "clone",
+        targetSampleRate: Int = 24000
+    ): Report =
         withContext(Dispatchers.IO) {
             if (!zipFile.isFile) return@withContext Report(message = "文件不存在")
             var total = 0
@@ -105,12 +109,19 @@ class ClonettsVoiceImporter(
                             return@forEach
                         }
                         val packEntry = packById[id]
+                        // T2.2：入库前统一加工（下混/裁静音/重采样/峰值归一/时长校验）；
+                        // 加工失败保留原始音频（不能因为"太短/太长"就让整包导入失败）
+                        val processed = ReferenceAudioProcessor.process(wavBytes, targetSampleRate)
+                        val audioBytes = (processed as? ReferenceAudioProcessor.Result.Success)
+                            ?.wavBytes ?: wavBytes
+                        val durationMs = (processed as? ReferenceAudioProcessor.Result.Success)
+                            ?.durationMs ?: (packEntry?.dur ?: 0f).toLong() * 1000
                         val gender = packEntry?.gender.orEmpty()
                         val age = packEntry?.ageByName.orEmpty()
                         val tags = (packEntry?.tags.orEmpty() + profile.roleTags).filter { it.isNotBlank() }
                         val voice = store.addVoice(
                             name = name,
-                            pcmWavBytes = wavBytes,
+                            pcmWavBytes = audioBytes,
                             refText = refText,
                             tags = tags,
                             origin = BuiltinVoice.ORIGIN_ZIP,
@@ -118,7 +129,7 @@ class ClonettsVoiceImporter(
                             gender = gender,
                             age = age,
                             numSteps = (packEntry?.numSteps ?: 0).takeIf { it > 0 } ?: profile.numSteps,
-                            durationMs = (packEntry?.dur ?: 0f).toLong() * 1000
+                            durationMs = durationMs
                         )
                         if (voice == null) {
                             skipped++

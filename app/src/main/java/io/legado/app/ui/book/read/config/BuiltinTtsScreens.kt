@@ -1,0 +1,526 @@
+﻿package io.legado.app.ui.book.read.config
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import io.legado.app.R
+import io.legado.app.help.tts.builtin.BuiltinEngineState
+import io.legado.app.help.tts.builtin.BuiltinVoice
+import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
+import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
+
+data class ProfileRow(
+    val id: String,
+    val title: String,
+    val state: BuiltinEngineState,
+    val active: Boolean,
+    val sampleRate: Int
+)
+
+data class StatsRow(
+    val voiceCount: Int = 0,
+    val cacheBytes: Long = 0,
+    val lastRtf: Float = 0f,
+    val lastError: String = ""
+)
+
+data class BuiltinTtsPageState(
+    val profiles: List<ProfileRow> = emptyList(),
+    val voices: List<BuiltinVoice> = emptyList(),
+    val stats: StatsRow = StatsRow(),
+    val storageText: String = "",
+    val importDir: String = "",
+    val hasBook: Boolean = false,
+    val roleSummary: String = "",
+    val message: String = "",
+    val busy: Boolean = false,
+    val progress: Int = 0,
+    /** 自录音色（T2.4）：示范文本 / 录音状态 / 进度提示 */
+    val recordText: String = ReferenceAudioRecorder.DEFAULT_SAMPLE_TEXT,
+    val recording: Boolean = false,
+    val recordHint: String = "",
+    /** 分镜预览（T5.5）：本章段落角色 + 可改绑的角色列表 */
+    val storyboard: List<StoryboardRow> = emptyList(),
+    val pickCharacters: List<RolePickRow> = emptyList(),
+    val storyboardHint: String = ""
+)
+
+/** 分镜一行：段落片段 + 当前角色判定（未识别不静默归旁白） */
+data class StoryboardRow(
+    val paragraphIndex: Int,
+    val start: Int,
+    val end: Int,
+    val text: String,
+    val roleLabel: String,
+    val confidence: Double,
+    val narrator: Boolean,
+    val recognized: Boolean
+)
+
+data class RolePickRow(val id: Long, val name: String, val gender: String, val roleLevel: Int)
+
+sealed interface PageAction {
+    data class DownloadModel(val profileId: String) : PageAction
+    data class DeleteModel(val profileId: String) : PageAction
+    data class ActivateProfile(val profileId: String) : PageAction
+    data object ActivateEngine : PageAction
+    data object SelfCheck : PageAction
+    data object DiscoverImport : PageAction
+    data object ClearCache : PageAction
+    data object AutoTag : PageAction
+    data class DeleteVoice(val voiceId: String) : PageAction
+    data class PreviewVoice(val voiceName: String) : PageAction
+    data class UpdateRecordText(val text: String) : PageAction
+    data object StartRecord : PageAction
+    data object StopRecord : PageAction
+    data object ExportVoices : PageAction
+    data object AssignCasting : PageAction
+    data object IdentifyRoles : PageAction
+    data object EnableMultiRole : PageAction
+    data object QuickEnable : PageAction
+    data class AssignSegment(
+        val paragraphIndex: Int,
+        val start: Int,
+        val end: Int,
+        val narrator: Boolean,
+        val characterId: Long,
+        val characterName: String
+    ) : PageAction
+    data object Reload : PageAction
+    data class EditCharacter(val characterId: Long) : PageAction
+}
+
+private enum class PageTab(val labelRes: Int) {
+    ENGINE(R.string.builtin_tts_tab_engine),
+    VOICES(R.string.builtin_tts_tab_voices),
+    ROLES(R.string.builtin_tts_tab_roles),
+    WIZARD(R.string.builtin_tts_tab_wizard),
+    STORYBOARD(R.string.builtin_tts_tab_storyboard)
+}
+
+@Composable
+internal fun BuiltinTtsScreen(
+    state: BuiltinTtsPageState,
+    onPickModel: (String) -> Unit,
+    onPickVoiceZip: () -> Unit,
+    onAction: (PageAction) -> Unit
+) {
+    var tab by remember { mutableStateOf(PageTab.ENGINE) }
+    LaunchedEffect(state.message) { /* 触发重组展示提示 */ }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PageTab.entries.forEach { item ->
+                FilterChip(
+                    selected = tab == item,
+                    onClick = { tab = item },
+                    label = { Text(androidx.compose.ui.platform.LocalContext.current.getString(item.labelRes)) }
+                )
+            }
+        }
+        if (state.busy) {
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        if (state.message.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(state.message, style = MaterialTheme.typography.bodyMedium)
+        }
+        Spacer(Modifier.height(12.dp))
+        when (tab) {
+            PageTab.ENGINE -> EnginePanel(state, onPickModel, onAction)
+            PageTab.VOICES -> VoicesPanel(state, onPickVoiceZip, onAction)
+            PageTab.ROLES -> RolesPanel(state, onAction)
+            PageTab.WIZARD -> WizardPanel(state, onAction)
+            PageTab.STORYBOARD -> RoleStoryboardPanel(state, onAction)
+        }
+    }
+}
+
+@Composable
+private fun EnginePanel(
+    state: BuiltinTtsPageState,
+    onPickModel: (String) -> Unit,
+    onAction: (PageAction) -> Unit
+) {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        state.profiles.forEach { profile ->
+            Card(modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = (if (profile.id == "fast") "极速单声档" else "高质量克隆档") +
+                                (if (profile.active) " · 当前" else ""),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = when (profile.state) {
+                            BuiltinEngineState.READY -> "已就绪（${profile.sampleRate}Hz）"
+                            BuiltinEngineState.CORRUPT -> "已损坏（请重新下载/导入）"
+                            BuiltinEngineState.DOWNLOADING -> "下载中"
+                            BuiltinEngineState.LOW_MEM -> "内存不足"
+                            BuiltinEngineState.NONE -> "未下载"
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (profile.state != BuiltinEngineState.READY) {
+                            Button(onClick = { onAction(PageAction.DownloadModel(profile.id)) }) {
+                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_download))
+                            }
+                            OutlinedButton(onClick = { onPickModel(profile.id) }) {
+                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_import))
+                            }
+                        } else {
+                            OutlinedButton(onClick = { onAction(PageAction.ActivateProfile(profile.id)) }) {
+                                Text("设为当前档")
+                            }
+                            TextButton(onClick = { onAction(PageAction.DeleteModel(profile.id)) }) {
+                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_delete))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onAction(PageAction.ActivateEngine) }) {
+                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_activate_engine))
+            }
+            OutlinedButton(onClick = { onAction(PageAction.SelfCheck) }) {
+                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_self_check))
+            }
+            TextButton(onClick = { onAction(PageAction.DiscoverImport) }) {
+                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_discover))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("音色 ${state.stats.voiceCount} · 缓存 ${formatBytes(state.stats.cacheBytes)} · RTF ${"%.2f".format(state.stats.lastRtf)}")
+        if (state.storageText.isNotBlank()) {
+            Text(state.storageText, style = MaterialTheme.typography.bodySmall)
+        }
+        Text("最近错误：${state.stats.lastError}")
+        TextButton(onClick = { onAction(PageAction.ClearCache) }) {
+            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_clear_cache))
+        }
+        if (state.importDir.isNotBlank()) {
+            Text(
+                text = androidx.compose.ui.platform.LocalContext.current
+                    .getString(R.string.builtin_tts_import_dir_hint, state.importDir),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoicesPanel(
+    state: BuiltinTtsPageState,
+    onPickVoiceZip: () -> Unit,
+    onAction: (PageAction) -> Unit
+) {
+    // 检索状态是纯展示态，放 Composable 本地即可（不污染页面状态）
+    var query by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf(BuiltinVoiceFilter.Gender.ALL) }
+    var untaggedOnly by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onPickVoiceZip) {
+                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_import_zip))
+            }
+            OutlinedButton(onClick = { onAction(PageAction.AutoTag) }) {
+                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_auto_tag))
+            }
+            OutlinedButton(onClick = { onAction(PageAction.ExportVoices) }) {
+                Text("导出音色包")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        // 自录音色（T2.4）：先给示范句（参考文本必须与录音逐字一致），再录 3~15 秒
+        OutlinedTextField(
+            value = state.recordText,
+            onValueChange = { onAction(PageAction.UpdateRecordText(it)) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("照着这句话读（参考文本）") },
+            enabled = !state.recording,
+            maxLines = 3
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (state.recording) {
+                Button(onClick = { onAction(PageAction.StopRecord) }) { Text("停止并保存") }
+            } else {
+                Button(onClick = { onAction(PageAction.StartRecord) }) { Text("自录音色") }
+            }
+            if (state.recordHint.isNotBlank()) {
+                Text(state.recordHint, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        val filtered = BuiltinVoiceFilter.apply(
+            state.voices,
+            BuiltinVoiceFilter.Criteria(query = query, gender = gender, untaggedOnly = untaggedOnly)
+        )
+        if (state.voices.isNotEmpty()) {
+            // 音色库检索（T6.4）：名称/标签搜索 + 性别筛选 + 未打标
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("搜索音色（名称/标签）") },
+                singleLine = true
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    BuiltinVoiceFilter.Gender.ALL to "全部",
+                    BuiltinVoiceFilter.Gender.MALE to "男",
+                    BuiltinVoiceFilter.Gender.FEMALE to "女",
+                    BuiltinVoiceFilter.Gender.UNKNOWN to "未定"
+                ).forEach { (value, label) ->
+                    FilterChip(
+                        selected = gender == value,
+                        onClick = { gender = value },
+                        label = { Text(label) }
+                    )
+                }
+                FilterChip(
+                    selected = untaggedOnly,
+                    onClick = { untaggedOnly = !untaggedOnly },
+                    label = { Text("未打标") }
+                )
+            }
+            Text(
+                BuiltinVoiceFilter.summary(state.voices.size, filtered.size),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        if (state.voices.isEmpty()) {
+            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_empty))
+            return@Column
+        }
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(filtered, key = { it.id }) { voice ->
+                Card(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(voice.displayName, fontWeight = FontWeight.SemiBold)
+                            val badge = when (voice.origin) {
+                                BuiltinVoice.ORIGIN_PRESET -> "内置"
+                                BuiltinVoice.ORIGIN_SELF -> "自录"
+                                else -> "导入"
+                            }
+                            val meta = buildList {
+                                add(badge)
+                                if (voice.gender.isNotBlank()) add(if (voice.gender == "male") "男" else "女")
+                                if (voice.age.isNotBlank()) add(voice.age)
+                                if (voice.refText.length > 0) add("稿${voice.refText.length}字")
+                            }.joinToString(" · ")
+                            Text(meta, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { onAction(PageAction.PreviewVoice(voice.voiceName)) }) {
+                            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_preview))
+                        }
+                        if (!voice.readOnly) {
+                            TextButton(onClick = { onAction(PageAction.DeleteVoice(voice.id)) }) {
+                                Text("删除")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        Text(state.roleSummary)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
+                Text("识别当前章角色")
+            }
+            OutlinedButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
+                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_roles_assign_all))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "说明：离线识别只做“人名 + 引号邻接 + 轮转/对话锁”，置信不足一律标未识别，不会乱猜。",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "纠错：在阅读页改一次角色后，同 cue 模式会自动学习到本书（可在本书 fixed_roles 中查看）。",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun WizardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        // 首次启用一键卡（T4.1）：模型就绪后一次点击完成「切引擎 + 多角色 + 自检」
+        Button(onClick = { onAction(PageAction.QuickEnable) }, modifier = Modifier.fillMaxWidth()) {
+            Text("一键启用（引擎 + 多角色 + 自检）")
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step1))
+        TextButton(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
+            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_run))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step2))
+        TextButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
+            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_run))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step3))
+        Text("回到阅读页点「听书」即可；未识别段会用模板对白音色（并在分镜里标红）。")
+        Spacer(Modifier.height(8.dp))
+        // 一键开书（T5.3）：角色发现 + 配声 + 激活多角色模板，缺任一步都会退化成单声
+        Button(onClick = { onAction(PageAction.EnableMultiRole) }, enabled = state.hasBook) {
+            Text("一键开书（识别 + 配声 + 启用多角色）")
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(state.roleSummary, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
+    var selected by remember { mutableStateOf<StoryboardRow?>(null) }
+    Column(Modifier.fillMaxSize()) {
+        Text(state.storyboardHint, style = MaterialTheme.typography.bodySmall)
+        if (state.storyboard.isEmpty()) return@Column
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(
+                state.storyboard,
+                key = { "${it.paragraphIndex}:${it.start}:${it.end}" }
+            ) { row ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("P${row.paragraphIndex + 1} · ${row.roleLabel}", fontWeight = FontWeight.SemiBold)
+                            Text(row.text, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { selected = row }) { Text("改角色") }
+                    }
+                }
+            }
+        }
+    }
+    val target = selected
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { selected = null },
+            title = { Text("这段话由谁来说？") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(target.text, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = {
+                        onAction(
+                            PageAction.AssignSegment(
+                                target.paragraphIndex, target.start, target.end, true, 0L, ""
+                            )
+                        )
+                        selected = null
+                    }) { Text("旁白") }
+                    state.pickCharacters.forEach { character ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = {
+                                onAction(
+                                    PageAction.AssignSegment(
+                                        target.paragraphIndex,
+                                        target.start,
+                                        target.end,
+                                        false,
+                                        character.id,
+                                        character.name
+                                    )
+                                )
+                                selected = null
+                            }) {
+                                Text(
+                                    character.name +
+                                            if (character.gender.isNotBlank()) "（${character.gender}）" else ""
+                                )
+                            }
+                            // T8.11：行内编辑角色卡（改性别/别名后返回自动刷新，可重算配声）
+                            TextButton(onClick = { onAction(PageAction.EditCharacter(character.id)) }) {
+                                Text("编辑", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    if (state.pickCharacters.isEmpty()) {
+                        Text("还没有角色卡：请先回到「角色配音」点识别角色", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { selected = null }) { Text("取消") } }
+        )
+    }
+}
+
+private fun formatBytes(bytes: Long): String = BuiltinTtsUiSupport.formatBytes(bytes)
+

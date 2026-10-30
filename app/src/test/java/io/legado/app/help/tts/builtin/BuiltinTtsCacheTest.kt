@@ -31,6 +31,14 @@ class BuiltinTtsCacheTest {
     }
 
     @Test
+    fun `音色增益不同则缓存键不同`() {
+        val base = BuiltinCacheKeys.key("clone", "b6_m_youth|内置·男·少年", 1.0f, "你好")
+        assertNotEquals(base, BuiltinCacheKeys.key("clone", "b6_m_youth|内置·男·少年", 1.0f, "你好", 1.5f))
+        assertEquals("1.00", BuiltinCacheKeys.gainKey(1.0f))
+        assertEquals("1.50", BuiltinCacheKeys.gainKey(1.5f))
+    }
+
+    @Test
     fun `写盘后可读回且采样率自描述`() {
         val cache = BuiltinTtsCache(temp.newFolder("cache"))
         val pcm = PcmAudioUtils.floatToPcm16(floatArrayOf(0.1f, -0.2f, 0.3f))

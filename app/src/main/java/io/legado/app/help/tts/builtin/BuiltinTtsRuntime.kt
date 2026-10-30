@@ -269,10 +269,12 @@ object BuiltinTtsRuntime {
             return null
         }
         val voice = voiceStore.find(voiceName) ?: voices().firstOrNull()
-        val normalizedText = pronDict.transform(text)
+        // T8.2：繁体章节先简化再送引擎（只影响合成，正文显示不变）
+        val normalizedText = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
         // 单声档（vits/matcha）音色不参与合成，缓存键固定，避免同音频多份缓存
         val voiceKey = if (profile.requiresReference) voice?.voiceName.orEmpty() else "single"
-        val key = BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalizedText)
+        val gain = voice?.gainMultiplier ?: 1.0f
+        val key = BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalizedText, gain)
         if (!bypassCache) {
             cache.get(key)?.let {
                 if (requestGeneration != currentGeneration()) return null
@@ -305,8 +307,10 @@ object BuiltinTtsRuntime {
                             numSteps = 0,
                             shouldAbort = { requestGeneration != currentGeneration() },
                             onSamples = { samples ->
-                                pcmOut.write(PcmAudioUtils.floatToPcm16(samples))
-                                audioSamples += samples.size
+                                // T8.1：出流前响度归一 + 音色增益 + 峰值限制（跨音色听感一致）
+                                val adjusted = BuiltinLoudnessNormalizer.apply(samples, gain)
+                                pcmOut.write(PcmAudioUtils.floatToPcm16(adjusted))
+                                audioSamples += adjusted.size
                             }
                         )
                         if (!success) {
@@ -376,8 +380,8 @@ object BuiltinTtsRuntime {
                 return@forEachIndexed
             }
             val voice = voiceStore.find(unit.voiceName) ?: voiceList.firstOrNull()
-            val normalized = pronDict.transform(unit.text)
-            val key = BuiltinCacheKeys.key(profile.id, voice?.voiceName.orEmpty(), rate, normalized)
+            // 与实时合成共用同一键口径（含单声档 voiceKey=single 与音色增益），否则幂等判定永远不命中
+            val key = cacheKeyOf(profile, voice, rate, unit.text)
             if (cache.contains(key)) {
                 hit++
             } else {
@@ -512,6 +516,18 @@ object BuiltinTtsRuntime {
         )
         referenceCache[key] = ref
         return ref
+    }
+
+    /** 缓存键单源口径：实时合成与预合成必须一致（含单声档 voiceKey、音色增益、简繁归一） */
+    private fun cacheKeyOf(
+        profile: BuiltinModelProfile,
+        voice: BuiltinVoice?,
+        rate: Float,
+        text: String
+    ): String {
+        val voiceKey = if (profile.requiresReference) voice?.voiceName.orEmpty() else "single"
+        val normalized = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
+        return BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalized, voice?.gainMultiplier ?: 1.0f)
     }
 
     private fun recordRtf(costMs: Long, audioSamples: Int, sampleRate: Int) {

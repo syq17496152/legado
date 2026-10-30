@@ -66,6 +66,49 @@ object PcmAudioUtils {
     fun readWav(input: InputStream): CachedAudio {
         val bytes = input.readBytes()
         require(bytes.size > WAV_HEADER_BYTES) { "WAV 文件过小" }
+        val header = parseWavHeader(bytes)
+        require(header.sampleRate > 0 && header.dataOffset > 0) { "WAV 头非法" }
+        require(header.channels == 1 && header.bits == 16) {
+            "仅支持 16bit 单声道 WAV（实际 ${header.bits} bit / ${header.channels} 声道）"
+        }
+        return CachedAudio(header.sampleRate, bytes.copyOfRange(header.dataOffset, header.dataOffset + header.dataLen))
+    }
+
+    /**
+     * 解析 WAV 并把**立体声**按平均下混为单声道（T2.2 参考音频加工：外部录音/备份包常见双声道）。
+     * 仍只接受 16bit；单声道直接返回原始 PCM。
+     */
+    fun readWavDownmix(input: InputStream): CachedAudio {
+        val bytes = input.readBytes()
+        require(bytes.size > WAV_HEADER_BYTES) { "WAV 文件过小" }
+        val header = parseWavHeader(bytes)
+        require(header.sampleRate > 0 && header.dataOffset > 0) { "WAV 头非法" }
+        require(header.bits == 16 && header.channels in 1..2) {
+            "仅支持 16bit 单声道/立体声 WAV（实际 ${header.bits} bit / ${header.channels} 声道）"
+        }
+        val raw = bytes.copyOfRange(header.dataOffset, header.dataOffset + header.dataLen)
+        if (header.channels == 1) return CachedAudio(header.sampleRate, raw)
+        val frames = raw.size / 4
+        val out = ByteArray(frames * 2)
+        for (i in 0 until frames) {
+            val left = readPcm16(raw, i * 4)
+            val right = readPcm16(raw, i * 4 + 2)
+            val mixed = (left + right) / 2
+            out[i * 2] = (mixed and 0xFF).toByte()
+            out[i * 2 + 1] = (mixed shr 8 and 0xFF).toByte()
+        }
+        return CachedAudio(header.sampleRate, out)
+    }
+
+    private class WavHeader(
+        val sampleRate: Int,
+        val channels: Int,
+        val bits: Int,
+        val dataOffset: Int,
+        val dataLen: Int
+    )
+
+    private fun parseWavHeader(bytes: ByteArray): WavHeader {
         var pos = 12
         var sampleRate = 0
         var channels = 0
@@ -89,10 +132,15 @@ object PcmAudioUtils {
             if (dataOffset >= 0 && sampleRate > 0) break
             pos += 8 + chunkSize + (chunkSize % 2)
         }
-        require(sampleRate > 0 && dataOffset > 0) { "WAV 头非法" }
-        require(channels == 1 && bits == 16) { "仅支持 16bit 单声道 WAV（实际 $bits bit / $channels 声道）" }
-        val pcm = bytes.copyOfRange(dataOffset, dataOffset + dataLen)
-        return CachedAudio(sampleRate, pcm)
+        return WavHeader(sampleRate, channels, bits, dataOffset, dataLen)
+    }
+
+    private fun readPcm16(bytes: ByteArray, offset: Int): Int {
+        val lo = bytes[offset].toInt() and 0xFF
+        val hi = bytes[offset + 1].toInt() and 0xFF
+        val value = (hi shl 8) or lo
+        // 16bit 有符号：高位为 1 时补成负数
+        return if (value >= 0x8000) value - 0x10000 else value
     }
 
     /**

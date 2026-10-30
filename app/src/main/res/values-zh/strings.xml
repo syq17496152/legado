@@ -1,4 +1,4 @@
-<resources>
+﻿<resources>
     <!--App-->
     <string name="app_name">阅读M</string>
 
@@ -2967,6 +2967,7 @@ bookUrl：%7$s
     <string name="builtin_tts_foreground_text">正在离线合成语音…</string>
     <string name="builtin_tts_title">离线多角色朗读</string>
     <string name="builtin_tts_tab_engine">引擎</string>
+    <string name="builtin_tts_tab_storyboard">分镜</string>
     <string name="builtin_tts_tab_voices">音色</string>
     <string name="builtin_tts_tab_roles">角色配音</string>
     <string name="builtin_tts_tab_wizard">开书向导</string>

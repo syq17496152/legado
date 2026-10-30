@@ -1,11 +1,15 @@
-package io.legado.app.ui.book.read.config
+﻿package io.legado.app.ui.book.read.config
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,11 +24,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,11 +61,18 @@ import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinModelProfile
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.help.tts.builtin.BuiltinVoice
+import io.legado.app.help.tts.builtin.BuiltinVoiceExporter
+import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
 import io.legado.app.help.tts.builtin.ClonettsVoiceImporter
+import io.legado.app.help.tts.builtin.ReferenceAudioProcessor
+import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
 import io.legado.app.help.tts.builtin.VoiceAutoTagger
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.book.character.BookCharacterEditActivity
+import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.LogUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
@@ -72,8 +85,25 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     private var previewTts: TextToSpeech? = null
     private var pendingProfileId: String = ""
+    private var recorder: ReferenceAudioRecorder? = null
 
     private val pageState = mutableStateOf(BuiltinTtsPageState())
+
+    private val requestRecordPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                startRecord()
+            } else {
+                pageState.value = pageState.value.copy(message = "未授予录音权限，无法自录音色")
+            }
+        }
+
+    /** 角色卡编辑（T8.11）：跳既有编辑页，返回后刷新角色列表与分镜 */
+    private val editCharacter =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            reload()
+            pageState.value = pageState.value.copy(message = "角色卡已更新（可重新配声）")
+        }
 
     private val pickModelFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
@@ -110,6 +140,26 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             )
             targetCleanup()
             reload()
+        }
+    }
+
+    private val exportVoices = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            pageState.value = pageState.value.copy(busy = true, message = "导出中…")
+            val target = File(cacheDir, "voice-export.zip")
+            val report = BuiltinVoiceExporter(BuiltinTtsRuntime.voiceStore()).export(target)
+            val ok = runCatching {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    target.inputStream().use { input -> input.copyTo(out) }
+                }
+                true
+            }.getOrDefault(false)
+            runCatching { target.delete() }
+            pageState.value = pageState.value.copy(
+                busy = false,
+                message = if (ok && report.exported > 0) report.message else "导出失败（无音色或写入被拒绝）"
+            )
         }
     }
 
@@ -192,6 +242,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     }
 
     override fun onDestroy() {
+        runCatching { recorder?.cancel() }
+        recorder = null
         runCatching { previewTts?.stop(); previewTts?.shutdown() }
         previewTts = null
         super.onDestroy()
@@ -250,11 +302,174 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     pageState.value = pageState.value.copy(message = "音色已删除")
                 }
                 is PageAction.PreviewVoice -> previewVoice(action.voiceName)
+                is PageAction.UpdateRecordText ->
+                    pageState.value = pageState.value.copy(recordText = action.text)
+                PageAction.StartRecord -> startRecord()
+                PageAction.StopRecord -> stopRecord()
+                PageAction.ExportVoices -> exportVoices.launch("legado-voices.zip")
                 PageAction.AssignCasting -> assignCasting()
                 PageAction.IdentifyRoles -> identifyRoles()
                 PageAction.EnableMultiRole -> enableMultiRole()
+                PageAction.QuickEnable -> quickEnable()
+                is PageAction.AssignSegment -> assignSegment(action)
+                is PageAction.EditCharacter -> openCharacterEditor(action.characterId)
                 PageAction.Reload -> Unit
             }
+    }
+
+    /**
+     * 自录音色（T2.4）：录音前先让用户照读示范句（参考文本必须与音频一致），
+     * 停止后统一走 `ReferenceAudioProcessor`（裁静音/重采样/归一/时长校验）再入库。
+     */
+    private fun startRecord() {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            requestRecordPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        val sampleText = pageState.value.recordText.ifBlank { ReferenceAudioRecorder.DEFAULT_SAMPLE_TEXT }
+        val target = ReferenceAudioRecorder(File(cacheDir, "voice-record"))
+        target.listener = object : ReferenceAudioRecorder.Listener {
+            override fun onStarted() {
+                pageState.value = pageState.value.copy(
+                    recording = true,
+                    recordHint = ReferenceAudioRecorder.statusText(true, 0)
+                )
+            }
+
+            override fun onProgress(durationMs: Long) {
+                pageState.value = pageState.value.copy(
+                    recordHint = ReferenceAudioRecorder.statusText(true, durationMs)
+                )
+            }
+
+            override fun onStopped(wavFile: File?, durationMs: Long) {
+                pageState.value = pageState.value.copy(
+                    recording = false,
+                    recordHint = ReferenceAudioRecorder.durationHint(durationMs) +
+                            if (wavFile == null) "，请重录" else ""
+                )
+                if (wavFile != null) saveRecordedVoice(wavFile, sampleText, durationMs)
+            }
+
+            override fun onError(message: String) {
+                pageState.value = pageState.value.copy(recording = false, recordHint = message)
+            }
+        }
+        recorder = target
+        val started = target.start()
+        pageState.value = pageState.value.copy(
+            recording = started,
+            recordHint = if (started) ReferenceAudioRecorder.statusText(true, 0) else "录音启动失败"
+        )
+    }
+
+    private fun stopRecord() {
+        val target = recorder
+        recorder = null
+        if (target == null) return
+        pageState.value = pageState.value.copy(recordHint = "正在保存录音…")
+        // stop() 会 join 录音线程（最多 1s），放 IO 线程避免卡 UI
+        lifecycleScope.launch(Dispatchers.IO) { target.stop() }
+    }
+
+    /** 加工并入库自录音色（origin=self，可在「音色」页删除；内置只读不可删） */
+    private fun saveRecordedVoice(wavFile: File, refText: String, durationMs: Long) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            pageState.value = pageState.value.copy(busy = true, message = "加工录音…")
+            val sampleRate = BuiltinTtsRuntime.activeProfile()?.sampleRate ?: 24000
+            val processed = ReferenceAudioProcessor.process(wavFile.readBytes(), sampleRate)
+            val success = processed as? ReferenceAudioProcessor.Result.Success
+            if (success == null) {
+                pageState.value = pageState.value.copy(
+                    busy = false,
+                    message = "录音不可用：" +
+                            ((processed as? ReferenceAudioProcessor.Result.Failure)?.reason ?: "加工失败")
+                )
+                runCatching { wavFile.delete() }
+                return@launch
+            }
+            val name = "我的音色 ${BuiltinTtsRuntime.voices().count { it.origin == BuiltinVoice.ORIGIN_SELF } + 1}"
+            val voice = BuiltinTtsRuntime.voiceStore().addVoice(
+                name = name,
+                pcmWavBytes = success.wavBytes,
+                refText = refText.trim(),
+                tags = listOf("self"),
+                origin = BuiltinVoice.ORIGIN_SELF,
+                profileId = BuiltinTtsRuntime.activeProfile()?.id.orEmpty(),
+                durationMs = success.durationMs)
+            runCatching { wavFile.delete() }
+            pageState.value = pageState.value.copy(
+                busy = false,
+                message = if (voice == null) {
+                    "保存失败（请确认示范文本非空）"
+                } else {
+                    "已保存音色「${voice.displayName}」（${durationMs / 1000}s，已自动去静音）"
+                }
+            )
+            reload()
+        }
+    }
+
+    /**
+     * 分镜改绑（T5.5）：写离线缓存（`OfflineRoleCacheStore`，零网络、不触发 AI 重跑），
+     * 同时把"该 cue → 角色"学习进本书（`BookAliasStore`），后续章同模式自动命中。
+     */
+    private suspend fun assignSegment(action: PageAction.AssignSegment) {
+        val book = ReadBook.book
+        val chapter = ReadBook.curTextChapter
+        if (book == null || chapter == null) {
+            pageState.value = pageState.value.copy(message = "请先在阅读页打开当前章节")
+            return
+        }
+        val bookKey = book.characterBookKey()
+        val paragraphs = chapter.paragraphs.map { it.text }
+        val ok = OfflineRoleCacheStore.updateSegmentAssignment(
+            bookKey = bookKey,
+            chapterIndex = chapter.chapter.index,
+            paragraphs = paragraphs,
+            paragraphIndex = action.paragraphIndex,
+            start = action.start,
+            end = action.end,
+            roleType = if (action.narrator) "narrator" else "character",
+            characterId = if (action.narrator) 0L else action.characterId,
+            characterName = if (action.narrator) "" else action.characterName
+        )
+        if (!action.narrator && action.characterName.isNotBlank()) {
+            val paragraph = paragraphs.getOrNull(action.paragraphIndex).orEmpty()
+            val cue = paragraph.take(action.start).takeLast(CUE_WINDOW) +
+                    paragraph.substring(action.end.coerceAtMost(paragraph.length))
+            cue.trim().takeIf { it.isNotBlank() }?.let { text ->
+                BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot).learnCue(bookKey, text, action.characterName)
+            }
+        }
+        // 内存缓存与数据库会分叉：清掉本章内存，下一次 ensure/播放重新读库
+        OfflineRoleResolver.clearMemory(bookKey)
+        pageState.value = pageState.value.copy(
+            busy = false,
+            message = when {
+                !ok -> "改绑失败（本章还没有识别缓存，请先点“识别角色”）"
+                action.narrator -> "已改为旁白（返回阅读页重开朗读生效）"
+                else -> "已改为${action.characterName}（可在分镜页继续校正）"
+            }
+        )
+        reload()
+    }
+
+    /** T8.11：跳既有角色卡编辑页（改性别/别名后返回，由 result 回调刷新并提示重新配声） */
+    private fun openCharacterEditor(characterId: Long) {
+        val book = ReadBook.book
+        if (book == null) {
+            pageState.value = pageState.value.copy(message = "请先打开一本书")
+            return
+        }
+        val intent = Intent(this, BookCharacterEditActivity::class.java)
+            .putExtra(BookCharacterManageActivity.EXTRA_BOOK_URL, book.bookUrl)
+            .putExtra(BookCharacterManageActivity.EXTRA_CHARACTER_BOOK_KEY, book.characterBookKey())
+            .putExtra(BookCharacterManageActivity.EXTRA_CHARACTER_ID, characterId)
+        runCatching { editCharacter.launch(intent) }
+            .onFailure { LogUtils.e("BuiltinTtsUi", "打开角色卡编辑失败：${it.message}") }
     }
 
     private suspend fun assignCasting() {
@@ -309,6 +524,32 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 assigned = assigned.assignments.size,
                 activated = activated
             )
+        )
+        reload()
+    }
+
+    /**
+     * 首次启用一键卡（T4.1）：模型就绪 → 切系统引擎 → 启用多角色模板 → 自检。
+     * 小白用户只需点一次（模型下载/导入仍是必要前置，不计入点击数）。
+     */
+    private suspend fun quickEnable() {
+        pageState.value = pageState.value.copy(busy = true, message = "正在启用…")
+        BuiltinTtsRuntime.ensureSeeded()
+        if (!BuiltinTtsRuntime.isReady()) {
+            pageState.value = pageState.value.copy(
+                busy = false,
+                message = "还差语音包：请先下载或导入（引擎页），再点一键启用"
+            )
+            return
+        }
+        val profileId = BuiltinTtsRuntime.activeProfile()?.id.orEmpty()
+        BuiltinTtsRuntime.setActiveProfile(profileId)
+        val engineMessage = activateAsSystemEngine()
+        val castingActivated = BuiltinCastingSetup.ensureAndActivate(assets)
+        val checkMessage = runSelfCheck()
+        pageState.value = pageState.value.copy(
+            busy = false,
+            message = BuiltinTtsUiSupport.quickEnableSummary(engineMessage, castingActivated, checkMessage)
         )
         reload()
     }
@@ -389,6 +630,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     companion object {
         const val EXTRA_AUTO_SETUP = "auto_setup"
+        /** 改绑学习时截取的 cue 窗口（引号两侧各 24 字，与离线归因的近场口径一致） */
+        private const val CUE_WINDOW = 24
     }
 
     private fun reload() {
@@ -424,8 +667,61 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             ),
             importDir = BuiltinTtsRuntime.paths().importDir.absolutePath,
             hasBook = bookKey != null,
-            roleSummary = roleSummary(bookKey)
+            roleSummary = roleSummary(bookKey),
+            storyboard = buildStoryboard(bookKey),
+            pickCharacters = emptyList(),
+            storyboardHint = storyboardHint(bookKey)
         )
+        // 角色卡是挂起查询（DAO），异步补进状态（分镜改绑弹窗用）
+        if (bookKey != null) {
+            lifecycleScope.launch {
+                val characters = runCatching {
+                    CharacterVoiceAssignService.roleCharacters(bookKey)
+                }.getOrDefault(emptyList())
+                pageState.value = pageState.value.copy(
+                    pickCharacters = characters.map { character ->
+                        RolePickRow(
+                            id = character.id,
+                            name = character.name,
+                            gender = character.gender,
+                            roleLevel = character.roleLevel
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    /** 分镜行（T5.5）：只展示当前章已识别的段；未识别段标"未识别"，不静默归旁白 */
+    private fun buildStoryboard(bookKey: String?): List<StoryboardRow> {
+        if (bookKey == null) return emptyList()
+        val chapter = ReadBook.curTextChapter ?: return emptyList()
+        val segments = OfflineRoleResolver.cached(bookKey, chapter.chapter.index) ?: return emptyList()
+        val paragraphs = chapter.paragraphs.map { it.text }
+        return segments.map { segment ->
+            val paragraph = paragraphs.getOrNull(segment.paragraphIndex).orEmpty()
+            StoryboardRow(
+                paragraphIndex = segment.paragraphIndex,
+                start = segment.start,
+                end = segment.end,
+                text = BuiltinTtsUiSupport.storyboardSnippet(paragraph, segment.start, segment.end),
+                roleLabel = BuiltinTtsUiSupport.storyboardLabel(
+                    roleType = segment.roleType,
+                    recognized = segment.recognized,
+                    characterName = segment.characterName
+                ),
+                confidence = segment.confidence,
+                narrator = segment.roleType == "narrator",
+                recognized = segment.recognized
+            )
+        }
+    }
+
+    private fun storyboardHint(bookKey: String?): String = when {
+        bookKey == null -> "请先打开一本书"
+        ReadBook.curTextChapter == null -> "请先在阅读页打开当前章节"
+        buildStoryboard(bookKey).isEmpty() -> "本章还没有分镜：先点「识别角色」（离线，零网络）"
+        else -> "点任意一段可改绑角色；改动只写本地缓存，不会触发联网"
     }
 
     private fun roleSummary(bookKey: String?): String {
@@ -437,330 +733,5 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         }
         val recognized = segments.count { it.recognized }
         return "本章 ${segments.size} 段，命中角色 $recognized 段"
-    }
-}
-
-data class ProfileRow(
-    val id: String,
-    val title: String,
-    val state: BuiltinEngineState,
-    val active: Boolean,
-    val sampleRate: Int
-)
-
-data class StatsRow(
-    val voiceCount: Int = 0,
-    val cacheBytes: Long = 0,
-    val lastRtf: Float = 0f,
-    val lastError: String = ""
-)
-
-data class BuiltinTtsPageState(
-    val profiles: List<ProfileRow> = emptyList(),
-    val voices: List<BuiltinVoice> = emptyList(),
-    val stats: StatsRow = StatsRow(),
-    val storageText: String = "",
-    val importDir: String = "",
-    val hasBook: Boolean = false,
-    val roleSummary: String = "",
-    val message: String = "",
-    val busy: Boolean = false,
-    val progress: Int = 0
-)
-
-sealed interface PageAction {
-    data class DownloadModel(val profileId: String) : PageAction
-    data class DeleteModel(val profileId: String) : PageAction
-    data class ActivateProfile(val profileId: String) : PageAction
-    data object ActivateEngine : PageAction
-    data object SelfCheck : PageAction
-    data object DiscoverImport : PageAction
-    data object ClearCache : PageAction
-    data object AutoTag : PageAction
-    data class DeleteVoice(val voiceId: String) : PageAction
-    data class PreviewVoice(val voiceName: String) : PageAction
-    data object AssignCasting : PageAction
-    data object IdentifyRoles : PageAction
-    data object EnableMultiRole : PageAction
-    data object Reload : PageAction
-}
-
-private enum class PageTab(val labelRes: Int) {
-    ENGINE(R.string.builtin_tts_tab_engine),
-    VOICES(R.string.builtin_tts_tab_voices),
-    ROLES(R.string.builtin_tts_tab_roles),
-    WIZARD(R.string.builtin_tts_tab_wizard)
-}
-
-@Composable
-private fun BuiltinTtsScreen(
-    state: BuiltinTtsPageState,
-    onPickModel: (String) -> Unit,
-    onPickVoiceZip: () -> Unit,
-    onAction: (PageAction) -> Unit
-) {
-    var tab by remember { mutableStateOf(PageTab.ENGINE) }
-    LaunchedEffect(state.message) { /* 触发重组展示提示 */ }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_title),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PageTab.entries.forEach { item ->
-                FilterChip(
-                    selected = tab == item,
-                    onClick = { tab = item },
-                    label = { Text(androidx.compose.ui.platform.LocalContext.current.getString(item.labelRes)) }
-                )
-            }
-        }
-        if (state.busy) {
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-        if (state.message.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Text(state.message, style = MaterialTheme.typography.bodyMedium)
-        }
-        Spacer(Modifier.height(12.dp))
-        when (tab) {
-            PageTab.ENGINE -> EnginePanel(state, onPickModel, onAction)
-            PageTab.VOICES -> VoicesPanel(state, onPickVoiceZip, onAction)
-            PageTab.ROLES -> RolesPanel(state, onAction)
-            PageTab.WIZARD -> WizardPanel(state, onAction)
-        }
-    }
-}
-
-@Composable
-private fun EnginePanel(
-    state: BuiltinTtsPageState,
-    onPickModel: (String) -> Unit,
-    onAction: (PageAction) -> Unit
-) {
-    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-        state.profiles.forEach { profile ->
-            Card(modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = (if (profile.id == "fast") "极速单声档" else "高质量克隆档") +
-                                (if (profile.active) " · 当前" else ""),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = when (profile.state) {
-                            BuiltinEngineState.READY -> "已就绪（${profile.sampleRate}Hz）"
-                            BuiltinEngineState.CORRUPT -> "已损坏（请重新下载/导入）"
-                            BuiltinEngineState.DOWNLOADING -> "下载中"
-                            BuiltinEngineState.LOW_MEM -> "内存不足"
-                            BuiltinEngineState.NONE -> "未下载"
-                        },
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (profile.state != BuiltinEngineState.READY) {
-                            Button(onClick = { onAction(PageAction.DownloadModel(profile.id)) }) {
-                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_download))
-                            }
-                            OutlinedButton(onClick = { onPickModel(profile.id) }) {
-                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_import))
-                            }
-                        } else {
-                            OutlinedButton(onClick = { onAction(PageAction.ActivateProfile(profile.id)) }) {
-                                Text("设为当前档")
-                            }
-                            TextButton(onClick = { onAction(PageAction.DeleteModel(profile.id)) }) {
-                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_delete))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onAction(PageAction.ActivateEngine) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_activate_engine))
-            }
-            OutlinedButton(onClick = { onAction(PageAction.SelfCheck) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_self_check))
-            }
-            TextButton(onClick = { onAction(PageAction.DiscoverImport) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_discover))
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text("音色 ${state.stats.voiceCount} · 缓存 ${formatBytes(state.stats.cacheBytes)} · RTF ${"%.2f".format(state.stats.lastRtf)}")
-        if (state.storageText.isNotBlank()) {
-            Text(state.storageText, style = MaterialTheme.typography.bodySmall)
-        }
-        Text("最近错误：${state.stats.lastError}")
-        TextButton(onClick = { onAction(PageAction.ClearCache) }) {
-            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_clear_cache))
-        }
-        if (state.importDir.isNotBlank()) {
-            Text(
-                text = androidx.compose.ui.platform.LocalContext.current
-                    .getString(R.string.builtin_tts_import_dir_hint, state.importDir),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
-
-@Composable
-private fun VoicesPanel(
-    state: BuiltinTtsPageState,
-    onPickVoiceZip: () -> Unit,
-    onAction: (PageAction) -> Unit
-) {
-    Column(Modifier.fillMaxSize()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onPickVoiceZip) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_import_zip))
-            }
-            OutlinedButton(onClick = { onAction(PageAction.AutoTag) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_auto_tag))
-            }
-        }
-        if (state.voices.isEmpty()) {
-            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_empty))
-            return@Column
-        }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(state.voices, key = { it.id }) { voice ->
-                Card(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(voice.displayName, fontWeight = FontWeight.SemiBold)
-                            val badge = when (voice.origin) {
-                                BuiltinVoice.ORIGIN_PRESET -> "内置"
-                                BuiltinVoice.ORIGIN_SELF -> "自录"
-                                else -> "导入"
-                            }
-                            val meta = buildList {
-                                add(badge)
-                                if (voice.gender.isNotBlank()) add(if (voice.gender == "male") "男" else "女")
-                                if (voice.age.isNotBlank()) add(voice.age)
-                                if (voice.refText.length > 0) add("稿${voice.refText.length}字")
-                            }.joinToString(" · ")
-                            Text(meta, style = MaterialTheme.typography.bodySmall)
-                        }
-                        TextButton(onClick = { onAction(PageAction.PreviewVoice(voice.voiceName)) }) {
-                            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_preview))
-                        }
-                        if (!voice.readOnly) {
-                            TextButton(onClick = { onAction(PageAction.DeleteVoice(voice.id)) }) {
-                                Text("删除")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text(state.roleSummary)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
-                Text("识别当前章角色")
-            }
-            OutlinedButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_roles_assign_all))
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "说明：离线识别只做“人名 + 引号邻接 + 轮转/对话锁”，置信不足一律标未识别，不会乱猜。",
-            style = MaterialTheme.typography.bodySmall
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "纠错：在阅读页改一次角色后，同 cue 模式会自动学习到本书（可在本书 fixed_roles 中查看）。",
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
-}
-
-@Composable
-private fun WizardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step1))
-        TextButton(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
-            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_run))
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step2))
-        TextButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
-            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_run))
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step3))
-        Text("回到阅读页点「听书」即可；未识别段会用模板对白音色（并在分镜里标红）。")
-        Spacer(Modifier.height(8.dp))
-        // 一键开书（T5.3）：角色发现 + 配声 + 激活多角色模板，缺任一步都会退化成单声
-        Button(onClick = { onAction(PageAction.EnableMultiRole) }, enabled = state.hasBook) {
-            Text("一键开书（识别 + 配声 + 启用多角色）")
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(state.roleSummary, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-private fun formatBytes(bytes: Long): String = BuiltinTtsUiSupport.formatBytes(bytes)
-
-/** 管理页纯逻辑（可单测）：导入档案推断 + 体积格式化 + 页签数量 */
-internal object BuiltinTtsUiSupport {
-
-    fun guessProfile(name: String): String = when {
-        name.equals("fast", true) || name.contains("piper", true) || name.contains("vits", true) -> "fast"
-        else -> "clone"
-    }
-
-    fun formatBytes(bytes: Long): String = when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        bytes < 1024L * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-        else -> String.format(Locale.US, "%.1f GB", bytes.toDouble() / (1024 * 1024 * 1024))
-    }
-
-    /** 一键开书结果文案（纯函数可单测）：四段信息缺一不可，便于用户/日志定位卡在哪一步 */
-    fun multiRoleSummary(
-        characters: Int,
-        discovered: Int,
-        assigned: Int,
-        activated: Boolean
-    ): String {
-        val template = if (activated) "已启用多角色" else "多角色模板启用失败"
-        return "角色 $characters（新增 $discovered）· 配声 $assigned · $template"
-    }
-
-    /** 存储总览文案（T4.9，纯函数可单测）：模型 / 音色 / 缓存 / 合计 */
-    fun storageSummary(modelBytes: Long, voiceBytes: Long, cacheBytes: Long): String {
-        val total = modelBytes + voiceBytes + cacheBytes
-        return "存储：模型 ${formatBytes(modelBytes)} · 音色 ${formatBytes(voiceBytes)}" +
-            " · 缓存 ${formatBytes(cacheBytes)} · 合计 ${formatBytes(total)}"
     }
 }

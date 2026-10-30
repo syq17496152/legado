@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--App-->
     <string name="app_name">阅读M</string>
@@ -3491,6 +3491,7 @@ Selected text or question:
     <string name="builtin_tts_foreground_text">Synthesizing offline speech…</string>
     <string name="builtin_tts_title">Offline multi-voice reading</string>
     <string name="builtin_tts_tab_engine">Engine</string>
+    <string name="builtin_tts_tab_storyboard">Storyboard</string>
     <string name="builtin_tts_tab_voices">Voices</string>
     <string name="builtin_tts_tab_roles">Casting</string>
     <string name="builtin_tts_tab_wizard">Open book</string>

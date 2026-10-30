@@ -9,13 +9,24 @@ import java.util.Locale
  */
 object BuiltinCacheKeys {
 
-    /** key = md5("bt|<profile>|<voiceName>|<rateKey>|<normalizedText>") */
-    fun key(profile: String, voiceName: String, rate: Float, text: String): String {
-        return BuiltinHash.md5Hex("bt|$profile|$voiceName|${rateKey(rate)}|${normalize(text)}")
+    /** key = md5("bt|<profile>|<voiceName>|<rateKey>|<gainKey>|<normalizedText>") */
+    fun key(
+        profile: String,
+        voiceName: String,
+        rate: Float,
+        text: String,
+        gain: Float = 1.0f
+    ): String {
+        return BuiltinHash.md5Hex(
+            "bt|$profile|$voiceName|${rateKey(rate)}|${gainKey(gain)}|${normalize(text)}"
+        )
     }
 
     /** 语速键保留两位（0.50~2.00），避免浮点尾差导致同义不同键 */
     fun rateKey(rate: Float): String = String.format(Locale.US, "%.2f", rate.coerceIn(0.1f, 4.0f))
+
+    /** 音色增益键保留两位（T8.1：改增益必须换缓存键，否则旧音频以旧音量播放） */
+    fun gainKey(gain: Float): String = String.format(Locale.US, "%.2f", gain.coerceIn(0.1f, 10.0f))
 
     /** 空白归一（不含章节信息：跨书复用是特性） */
     fun normalize(text: String): String = text.trim().replace(Regex("\\s+"), " ")

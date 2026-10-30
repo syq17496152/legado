@@ -38,22 +38,12 @@ class BuiltinModelManager(
     fun profile(id: String): BuiltinModelProfile? = catalogCache.firstOrNull { it.id == id }
 
     /** 目录就绪判定（全部必需文件存在且非空） */
-    fun state(profile: BuiltinModelProfile): BuiltinEngineState {
-        val dir = paths.modelDir(profile.id)
-        if (!dir.isDirectory) return BuiltinEngineState.NONE
-        val missing = missingFiles(profile)
-        if (missing.isNotEmpty()) {
-            return if (dir.listFiles().orEmpty().isEmpty()) BuiltinEngineState.NONE else BuiltinEngineState.CORRUPT
-        }
-        return BuiltinEngineState.READY
-    }
+    fun state(profile: BuiltinModelProfile): BuiltinEngineState =
+        BuiltinModelState.evaluate(paths.modelDir(profile.id), profile)
 
     fun missingFiles(profile: BuiltinModelProfile): List<String> {
         val dir = paths.modelDir(profile.id)
-        return profile.files.filter { name ->
-            val file = findRequired(dir, name)
-            file == null || !file.isFile || file.length() <= 0
-        }
+        return BuiltinModelState.missingFiles(dir, profile)
     }
 
     fun verifySha(profile: BuiltinModelProfile): Boolean {
@@ -224,12 +214,7 @@ class BuiltinModelManager(
         return stripped
     }
 
-    private fun findRequired(dir: File, name: String): File? {
-        if (!dir.isDirectory) return null
-        val direct = File(dir, name)
-        if (direct.exists()) return direct
-        return dir.walkTopDown().firstOrNull { it.name.equals(name, true) }
-    }
+    private fun findRequired(dir: File, name: String): File? = BuiltinModelState.findRequired(dir, name)
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

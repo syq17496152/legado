@@ -47,4 +47,43 @@ class BuiltinTtsActivityTest {
             )
         )
     }
+
+    @Test
+    fun `一键启用文案包含引擎 多角色 自检三段`() {
+        assertEquals(
+            "已切换到内置离线引擎 · 多角色已启用 · 自检通过",
+            BuiltinTtsUiSupport.quickEnableSummary(
+                engineMessage = "已切换到内置离线引擎",
+                castingActivated = true,
+                checkMessage = "自检通过"
+            )
+        )
+        assertEquals(
+            "切换失败：原因 · 多角色未启用（可稍后在开书向导重试） · 自检失败",
+            BuiltinTtsUiSupport.quickEnableSummary(
+                engineMessage = "切换失败：原因",
+                castingActivated = false,
+                checkMessage = "自检失败"
+            )
+        )
+    }
+
+    @Test
+    fun `分镜标签 未识别不静默归旁白`() {
+        assertEquals("旁白", BuiltinTtsUiSupport.storyboardLabel("narrator", false, ""))
+        assertEquals("张三", BuiltinTtsUiSupport.storyboardLabel("character", true, "张三"))
+        assertEquals("未识别", BuiltinTtsUiSupport.storyboardLabel("character", false, ""))
+        assertEquals("未识别", BuiltinTtsUiSupport.storyboardLabel("other", true, ""))
+    }
+
+    @Test
+    fun `分镜片段按区间裁剪且越界安全`() {
+        val paragraph = "张三说：今天天气不错，我们去公园吧。"
+        assertEquals("天气不错", BuiltinTtsUiSupport.storyboardSnippet(paragraph, 6, 10))
+        // 越界：start > length / end > length 均被夹紧，不抛异常
+        assertEquals("", BuiltinTtsUiSupport.storyboardSnippet(paragraph, 200, 300))
+        assertEquals(paragraph, BuiltinTtsUiSupport.storyboardSnippet(paragraph, -5, 300, 200))
+        // 超长截断
+        assertEquals(60, BuiltinTtsUiSupport.storyboardSnippet("字".repeat(100), 0, 100).length)
+    }
 }
