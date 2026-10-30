@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
@@ -71,7 +72,10 @@ data class BuiltinTtsPageState(
     /** 分镜预览（T5.5）：本章段落角色 + 可改绑的角色列表 */
     val storyboard: List<StoryboardRow> = emptyList(),
     val pickCharacters: List<RolePickRow> = emptyList(),
-    val storyboardHint: String = ""
+    val storyboardHint: String = "",
+    /** 角色配音页（T5.4）：角色→音色 行 + 撞音音色集合 */
+    val roleRows: List<CharacterVoiceAssignService.RoleVoiceRow> = emptyList(),
+    val conflictVoices: Set<String> = emptySet()
 )
 
 /** 分镜一行：段落片段 + 当前角色判定（未识别不静默归旁白） */
@@ -99,6 +103,7 @@ sealed interface PageAction {
     data object AutoTag : PageAction
     data class DeleteVoice(val voiceId: String) : PageAction
     data class PreviewVoice(val voiceName: String) : PageAction
+    data object PreviewAllVoices : PageAction
     data class UpdateRecordText(val text: String) : PageAction
     data object StartRecord : PageAction
     data object StopRecord : PageAction
@@ -115,6 +120,7 @@ sealed interface PageAction {
         val characterId: Long,
         val characterName: String
     ) : PageAction
+    data class AssignVoice(val characterId: Long, val voiceName: String) : PageAction
     data object Reload : PageAction
     data class EditCharacter(val characterId: Long) : PageAction
 }
@@ -275,6 +281,9 @@ private fun VoicesPanel(
             OutlinedButton(onClick = { onAction(PageAction.ExportVoices) }) {
                 Text("导出音色包")
             }
+            OutlinedButton(onClick = { onAction(PageAction.PreviewAllVoices) }) {
+                Text("连续试听")
+            }
         }
         Spacer(Modifier.height(8.dp))
         // 自录音色（T2.4）：先给示范句（参考文本必须与录音逐字一致），再录 3~15 秒
@@ -382,7 +391,8 @@ private fun VoicesPanel(
 
 @Composable
 private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    var selected by remember { mutableStateOf<CharacterVoiceAssignService.RoleVoiceRow?>(null) }
+    Column(Modifier.fillMaxSize()) {
         Text(state.roleSummary)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -393,15 +403,77 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
                 Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_roles_assign_all))
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
+        if (state.roleRows.isNotEmpty()) {
+            // T5.4：角色→音色一览（撞音标红提示，可单角色换音色）
+            LazyColumn(Modifier.weight(1f)) {
+                items(state.roleRows, key = { it.characterId }) { row ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                val genderText = if (row.gender.isNotBlank()) "（${row.gender}）" else ""
+                                val conflictText =
+                                    if (row.voiceName in state.conflictVoices) " · 撞音" else ""
+                                Text("${row.name}$genderText", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    (if (row.configured) row.voiceDisplayName else "未配声") + conflictText,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            TextButton(onClick = { selected = row }) { Text("换音色") }
+                        }
+                    }
+                }
+            }
+        } else {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "还没有角色卡：先点「识别当前章角色」或到「开书向导」一键开书。",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Text(
             "说明：离线识别只做“人名 + 引号邻接 + 轮转/对话锁”，置信不足一律标未识别，不会乱猜。",
             style = MaterialTheme.typography.bodySmall
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "纠错：在阅读页改一次角色后，同 cue 模式会自动学习到本书（可在本书 fixed_roles 中查看）。",
-            style = MaterialTheme.typography.bodySmall
+    }
+    val target = selected
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { selected = null },
+            title = { Text("给「${target.name}」换个音色") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    state.voices.forEach { voice ->
+                        val isCurrent = voice.voiceName == target.voiceName
+                        TextButton(onClick = {
+                            onAction(PageAction.AssignVoice(target.characterId, voice.voiceName))
+                            selected = null
+                        }) {
+                            val suffix = buildString {
+                                if (isCurrent) append("（当前）")
+                                if (voice.voiceName in state.conflictVoices) append(" · 撞音")
+                            }
+                            Text(voice.displayName + suffix)
+                        }
+                    }
+                    if (state.voices.isEmpty()) {
+                        Text("还没有可用音色：先到「音色」页导入或自录", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { selected = null }) { Text("取消") } }
         )
     }
 }

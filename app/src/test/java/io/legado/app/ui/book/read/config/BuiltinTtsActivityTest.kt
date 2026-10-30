@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.config
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -83,6 +84,41 @@ class BuiltinTtsActivityTest {
                 castingActivated = false,
                 checkMessage = "自检失败"
             )
+        )
+    }
+
+    @Test
+    fun `批量试听优先非内置音色且不超过上限`() {
+        val preset = (1..6).map {
+            io.legado.app.help.tts.builtin.BuiltinVoice(
+                id = "p$it", name = "内置$it", origin = io.legado.app.help.tts.builtin.BuiltinVoice.ORIGIN_PRESET
+            )
+        }
+        val imported = (1..3).map {
+            io.legado.app.help.tts.builtin.BuiltinVoice(
+                id = "i$it", name = "导入$it", origin = io.legado.app.help.tts.builtin.BuiltinVoice.ORIGIN_ZIP
+            )
+        }
+        val batch = BuiltinTtsUiSupport.previewBatch(preset + imported, limit = 5)
+        assertEquals(3, batch.size)
+        assertTrue(batch.all { it.id.startsWith("i") })
+        // 全是内置时回落全量取样（受 limit 约束，全新用户也能"连续试听"）
+        assertEquals(5, BuiltinTtsUiSupport.previewBatch(preset, limit = 5).size)
+    }
+
+    @Test
+    fun `分镜改绑结果文案 IF-10 回归 失败与旁白与角色`() {
+        assertEquals(
+            "改绑失败（本章还没有识别缓存，请先点“识别角色”）",
+            BuiltinTtsUiSupport.segmentAssignMessage(ok = false, narrator = false, characterName = "张三")
+        )
+        assertEquals(
+            "已改为旁白（返回阅读页重开朗读生效）",
+            BuiltinTtsUiSupport.segmentAssignMessage(ok = true, narrator = true, characterName = "")
+        )
+        assertEquals(
+            "已改为张三（可在分镜页继续校正）",
+            BuiltinTtsUiSupport.segmentAssignMessage(ok = true, narrator = false, characterName = "张三")
         )
     }
 

@@ -85,9 +85,32 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     private var previewTts: TextToSpeech? = null
     private var pendingProfileId: String = ""
-    private var recorder: ReferenceAudioRecorder? = null
 
     private val pageState = mutableStateOf(BuiltinTtsPageState())
+
+    /** 自录音色控制器（T2.4）：录音/加工/入库细节不在 Activity 内（也避免文件超行数门禁） */
+    private val recordController: BuiltinVoiceRecordController by lazy {
+        BuiltinVoiceRecordController(
+            scope = lifecycleScope,
+            cacheDir = cacheDir,
+            sampleRateProvider = { BuiltinTtsRuntime.activeProfile()?.sampleRate ?: 24000 },
+            voiceStore = { BuiltinTtsRuntime.voiceStore() },
+            profileIdProvider = { BuiltinTtsRuntime.activeProfile()?.id.orEmpty() },
+            onState = { recording, hint ->
+                pageState.value = pageState.value.copy(recording = recording, recordHint = hint)
+            },
+            onSaved = { voice, durationMs ->
+                pageState.value = pageState.value.copy(
+                    busy = false,
+                    message = "已保存音色「${voice.displayName}」（${durationMs / 1000}s，已自动去静音）"
+                )
+                reload()
+            },
+            onError = { message ->
+                pageState.value = pageState.value.copy(busy = false, message = message)
+            }
+        )
+    }
 
     private val requestRecordPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -242,8 +265,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     }
 
     override fun onDestroy() {
-        runCatching { recorder?.cancel() }
-        recorder = null
+        runCatching { recordController.cancel() }
         runCatching { previewTts?.stop(); previewTts?.shutdown() }
         previewTts = null
         super.onDestroy()
@@ -302,6 +324,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     pageState.value = pageState.value.copy(message = "音色已删除")
                 }
                 is PageAction.PreviewVoice -> previewVoice(action.voiceName)
+                PageAction.PreviewAllVoices -> previewAllVoices()
                 is PageAction.UpdateRecordText ->
                     pageState.value = pageState.value.copy(recordText = action.text)
                 PageAction.StartRecord -> startRecord()
@@ -312,14 +335,15 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 PageAction.EnableMultiRole -> enableMultiRole()
                 PageAction.QuickEnable -> quickEnable()
                 is PageAction.AssignSegment -> assignSegment(action)
+                is PageAction.AssignVoice -> assignVoice(action)
                 is PageAction.EditCharacter -> openCharacterEditor(action.characterId)
                 PageAction.Reload -> Unit
             }
     }
 
     /**
-     * 自录音色（T2.4）：录音前先让用户照读示范句（参考文本必须与音频一致），
-     * 停止后统一走 `ReferenceAudioProcessor`（裁静音/重采样/归一/时长校验）再入库。
+     * 自录音色（T2.4）：录音前先让用户照读示范句（参考文本必须与音频一致）；
+     * 录音/加工/入库细节在 [BuiltinVoiceRecordController]，这里只处理权限与页面状态。
      */
     private fun startRecord() {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -329,89 +353,12 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             return
         }
         val sampleText = pageState.value.recordText.ifBlank { ReferenceAudioRecorder.DEFAULT_SAMPLE_TEXT }
-        val target = ReferenceAudioRecorder(File(cacheDir, "voice-record"))
-        target.listener = object : ReferenceAudioRecorder.Listener {
-            override fun onStarted() {
-                pageState.value = pageState.value.copy(
-                    recording = true,
-                    recordHint = ReferenceAudioRecorder.statusText(true, 0)
-                )
-            }
-
-            override fun onProgress(durationMs: Long) {
-                pageState.value = pageState.value.copy(
-                    recordHint = ReferenceAudioRecorder.statusText(true, durationMs)
-                )
-            }
-
-            override fun onStopped(wavFile: File?, durationMs: Long) {
-                pageState.value = pageState.value.copy(
-                    recording = false,
-                    recordHint = ReferenceAudioRecorder.durationHint(durationMs) +
-                            if (wavFile == null) "，请重录" else ""
-                )
-                if (wavFile != null) saveRecordedVoice(wavFile, sampleText, durationMs)
-            }
-
-            override fun onError(message: String) {
-                pageState.value = pageState.value.copy(recording = false, recordHint = message)
-            }
-        }
-        recorder = target
-        val started = target.start()
-        pageState.value = pageState.value.copy(
-            recording = started,
-            recordHint = if (started) ReferenceAudioRecorder.statusText(true, 0) else "录音启动失败"
-        )
+        recordController.start(sampleText)
     }
 
     private fun stopRecord() {
-        val target = recorder
-        recorder = null
-        if (target == null) return
-        pageState.value = pageState.value.copy(recordHint = "正在保存录音…")
-        // stop() 会 join 录音线程（最多 1s），放 IO 线程避免卡 UI
-        lifecycleScope.launch(Dispatchers.IO) { target.stop() }
+        recordController.stop()
     }
-
-    /** 加工并入库自录音色（origin=self，可在「音色」页删除；内置只读不可删） */
-    private fun saveRecordedVoice(wavFile: File, refText: String, durationMs: Long) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            pageState.value = pageState.value.copy(busy = true, message = "加工录音…")
-            val sampleRate = BuiltinTtsRuntime.activeProfile()?.sampleRate ?: 24000
-            val processed = ReferenceAudioProcessor.process(wavFile.readBytes(), sampleRate)
-            val success = processed as? ReferenceAudioProcessor.Result.Success
-            if (success == null) {
-                pageState.value = pageState.value.copy(
-                    busy = false,
-                    message = "录音不可用：" +
-                            ((processed as? ReferenceAudioProcessor.Result.Failure)?.reason ?: "加工失败")
-                )
-                runCatching { wavFile.delete() }
-                return@launch
-            }
-            val name = "我的音色 ${BuiltinTtsRuntime.voices().count { it.origin == BuiltinVoice.ORIGIN_SELF } + 1}"
-            val voice = BuiltinTtsRuntime.voiceStore().addVoice(
-                name = name,
-                pcmWavBytes = success.wavBytes,
-                refText = refText.trim(),
-                tags = listOf("self"),
-                origin = BuiltinVoice.ORIGIN_SELF,
-                profileId = BuiltinTtsRuntime.activeProfile()?.id.orEmpty(),
-                durationMs = success.durationMs)
-            runCatching { wavFile.delete() }
-            pageState.value = pageState.value.copy(
-                busy = false,
-                message = if (voice == null) {
-                    "保存失败（请确认示范文本非空）"
-                } else {
-                    "已保存音色「${voice.displayName}」（${durationMs / 1000}s，已自动去静音）"
-                }
-            )
-            reload()
-        }
-    }
-
     /**
      * 分镜改绑（T5.5）：写离线缓存（`OfflineRoleCacheStore`，零网络、不触发 AI 重跑），
      * 同时把"该 cue → 角色"学习进本书（`BookAliasStore`），后续章同模式自动命中。
@@ -444,14 +391,53 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot).learnCue(bookKey, text, action.characterName)
             }
         }
-        // 内存缓存与数据库会分叉：清掉本章内存，下一次 ensure/播放重新读库
+        // 内存缓存与数据库会分叉：清掉本章内存后**必须重新读库回填**，否则分镜页会瞬间变空（IF-10）
         OfflineRoleResolver.clearMemory(bookKey)
+        if (ok) {
+            runCatching {
+                OfflineRoleResolver.ensure(
+                    bookKey = bookKey,
+                    chapterIndex = chapter.chapter.index,
+                    chapterTitle = chapter.chapter.title,
+                    paragraphs = paragraphs,
+                    characters = CharacterVoiceAssignService.roleCharacters(bookKey),
+                    aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+                )
+            }.onFailure {
+                LogUtils.e("BuiltinTtsUi", "改绑后回填分镜失败：${it.stackTraceToString()}")
+            }
+        }
         pageState.value = pageState.value.copy(
             busy = false,
-            message = when {
-                !ok -> "改绑失败（本章还没有识别缓存，请先点“识别角色”）"
-                action.narrator -> "已改为旁白（返回阅读页重开朗读生效）"
-                else -> "已改为${action.characterName}（可在分镜页继续校正）"
+            message = BuiltinTtsUiSupport.segmentAssignMessage(
+                ok = ok,
+                narrator = action.narrator,
+                characterName = action.characterName
+            )
+        )
+        reload()
+    }
+
+    /** 角色配音单角色换音色（T5.4）：手动绑定写 `source=manual`，撞音由页面即时标记 */
+    private suspend fun assignVoice(action: PageAction.AssignVoice) {
+        val book = ReadBook.book
+        if (book == null) {
+            pageState.value = pageState.value.copy(message = "请先打开一本书")
+            return
+        }
+        val voice = BuiltinTtsRuntime.voices().firstOrNull {
+            it.voiceName == action.voiceName || it.id == action.voiceName
+        }
+        if (voice == null) {
+            pageState.value = pageState.value.copy(message = "音色不存在（可能已被删除）")
+            return
+        }
+        val ok = CharacterVoiceAssignService.assignVoice(this, book, action.characterId, voice)
+        pageState.value = pageState.value.copy(
+            message = if (ok) {
+                "已把「${voice.displayName}」配给该角色（重开朗读生效）"
+            } else {
+                "换音色失败（角色卡可能已被删除）"
             }
         )
         reload()
@@ -595,6 +581,43 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         )
     }
 
+    /**
+     * 批量试听（T8.8）：按列表顺序连续播报，优先抽非内置音色（内置 6 个用户已熟悉）。
+     * 用 QUEUE_ADD 串行，不打断正在进行的朗读（试听走独立 TextToSpeech 实例）。
+     */
+    private fun previewAllVoices() {
+        val all = BuiltinTtsRuntime.voices()
+        if (all.isEmpty()) {
+            pageState.value = pageState.value.copy(message = "还没有音色可试听")
+            return
+        }
+        val batch = BuiltinTtsUiSupport.previewBatch(all, PREVIEW_BATCH_SIZE)
+        val run = {
+            val tts = previewTts
+            if (tts != null) {
+                batch.forEach { voice ->
+                    runCatching {
+                        tts.voices?.firstOrNull { it.name == voice.voiceName }?.let { tts.setVoice(it) }
+                        tts.speak(
+                            "这是${voice.displayName}的声音。",
+                            TextToSpeech.QUEUE_ADD,
+                            null,
+                            "builtin_preview_all"
+                        )
+                    }
+                }
+            }
+        }
+        if (previewTts == null) {
+            previewTts = TextToSpeech(this, { status ->
+                if (status == TextToSpeech.SUCCESS) run()
+            }, packageName)
+        } else {
+            run()
+        }
+        pageState.value = pageState.value.copy(message = "连续试听 ${batch.size} 个音色")
+    }
+
     private fun previewVoice(voiceName: String) {
         val target = BuiltinTtsRuntime.voices().firstOrNull { it.voiceName == voiceName || it.id == voiceName }
         if (target == null) {
@@ -646,6 +669,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         const val EXTRA_AUTO_SETUP = "auto_setup"
         /** 改绑学习时截取的 cue 窗口（引号两侧各 24 字，与离线归因的近场口径一致） */
         private const val CUE_WINDOW = 24
+        /** 批量试听一次最多几个（T8.8，避免一次播太久） */
+        private const val PREVIEW_BATCH_SIZE = 5
     }
 
     private fun reload() {
@@ -686,12 +711,14 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             pickCharacters = emptyList(),
             storyboardHint = storyboardHint(bookKey)
         )
-        // 角色卡是挂起查询（DAO），异步补进状态（分镜改绑弹窗用）
+        // 角色卡是挂起查询（DAO），异步补进状态（分镜改绑弹窗 + 角色配音页用）
         if (bookKey != null) {
             lifecycleScope.launch {
                 val characters = runCatching {
                     CharacterVoiceAssignService.roleCharacters(bookKey)
                 }.getOrDefault(emptyList())
+                val rows = runCatching { CharacterVoiceAssignService.rows(bookKey) }
+                    .getOrDefault(emptyList())
                 pageState.value = pageState.value.copy(
                     pickCharacters = characters.map { character ->
                         RolePickRow(
@@ -700,7 +727,9 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                             gender = character.gender,
                             roleLevel = character.roleLevel
                         )
-                    }
+                    },
+                    roleRows = rows,
+                    conflictVoices = CharacterVoiceAssignService.conflictingVoices(rows)
                 )
             }
         }

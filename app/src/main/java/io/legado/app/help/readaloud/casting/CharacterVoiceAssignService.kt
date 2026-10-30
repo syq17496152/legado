@@ -161,6 +161,65 @@ object CharacterVoiceAssignService {
             }.getOrDefault(emptyList())
         }
 
+    /** 角色配音页一行（T5.4）：角色 + 当前绑定音色 + 撞音标记 */
+    data class RoleVoiceRow(
+        val characterId: Long,
+        val name: String,
+        val gender: String,
+        val roleLevel: Int,
+        val voiceName: String,
+        val voiceDisplayName: String
+    ) {
+        val configured: Boolean get() = voiceName.isNotBlank() || voiceDisplayName.isNotBlank()
+    }
+
+    suspend fun rows(bookKey: String): List<RoleVoiceRow> = withContext(Dispatchers.IO) {
+        runCatching {
+            appDb.bookCharacterDao.characters(bookKey).map { character ->
+                val route = SpeechRoute.fromJson(character.speechRouteJson)
+                RoleVoiceRow(
+                    characterId = character.id,
+                    name = character.name,
+                    gender = BookCharacter.normalizeGender(character.gender),
+                    roleLevel = character.roleLevel,
+                    voiceName = route.toneID,
+                    voiceDisplayName = route.speakerName
+                )
+            }.sortedWith(compareByDescending<RoleVoiceRow> { it.roleLevel }.thenBy { it.characterId })
+        }.getOrDefault(emptyList())
+    }
+
+    /** 撞音键（同一音色被多个角色绑定）；空音色不算撞音 */
+    fun conflictingVoices(rows: List<RoleVoiceRow>): Set<String> =
+        rows.map { it.voiceName }.filter { it.isNotBlank() }
+            .groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+
+    /** 单角色换音色（T5.4，手动绑定 ⇒ source=manual） */
+    suspend fun assignVoice(
+        context: Context,
+        book: Book,
+        characterId: Long,
+        voice: BuiltinVoice
+    ): Boolean = withContext(Dispatchers.IO) {
+        val bookKey = book.characterBookKey()
+        val character = runCatching {
+            appDb.bookCharacterDao.characters(bookKey).firstOrNull { it.id == characterId }
+        }.getOrNull() ?: return@withContext false
+        val route = SpeechRoute(
+            engineType = SpeechRoute.ENGINE_SYSTEM,
+            engineValue = context.packageName,
+            speakerName = voice.displayName,
+            toneID = voice.voiceName,
+            source = SpeechRoute.SOURCE_MANUAL
+        )
+        runCatching {
+            appDb.bookCharacterDao.updateCharacter(
+                character.copy(speechRouteJson = route.toJson(), updatedAt = System.currentTimeMillis())
+            )
+            true
+        }.getOrDefault(false)
+    }
+
     private fun pickNarrator(voices: List<BuiltinVoice>, hint: String): BuiltinVoice? {
         voices.firstOrNull { it.voiceName == hint || it.name == hint || it.id == hint }?.let { return it }
         return voices.firstOrNull { it.tags.contains("narration") }

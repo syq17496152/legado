@@ -1,5 +1,6 @@
 ﻿package io.legado.app.ui.book.read.config
 
+import io.legado.app.help.tts.builtin.BuiltinVoice
 import java.util.Locale
 
 /** 管理页纯逻辑（可单测）：导入档案推断 + 体积格式化 + 页签数量 */
@@ -45,6 +46,17 @@ internal object BuiltinTtsUiSupport {
     fun quickEnableSummary(engineMessage: String, castingActivated: Boolean, checkMessage: String): String {
         val casting = if (castingActivated) "多角色已启用" else "多角色未启用（可稍后在开书向导重试）"
         return "$engineMessage · $casting · $checkMessage"
+    }
+
+    /** 批量试听取样（T8.8，纯函数可单测）：优先非内置音色，最多 limit 个；全是内置时回落全量 */
+    fun previewBatch(voices: List<BuiltinVoice>, limit: Int = 5): List<BuiltinVoice> =
+        voices.filter { it.origin != BuiltinVoice.ORIGIN_PRESET }.ifEmpty { voices }.take(limit)
+
+    /** 分镜改绑结果文案（纯函数可单测） */
+    fun segmentAssignMessage(ok: Boolean, narrator: Boolean, characterName: String): String = when {
+        !ok -> "改绑失败（本章还没有识别缓存，请先点“识别角色”）"
+        narrator -> "已改为旁白（返回阅读页重开朗读生效）"
+        else -> "已改为${characterName}（可在分镜页继续校正）"
     }
 
     /**

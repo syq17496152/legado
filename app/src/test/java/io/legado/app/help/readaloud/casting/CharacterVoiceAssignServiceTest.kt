@@ -86,4 +86,17 @@ class CharacterVoiceAssignServiceTest {
         assertTrue(result.assignments.isEmpty())
         assertFalse(result.conflicts.isNotEmpty())
     }
+
+    @Test
+    fun `角色配音页撞音判定只针对重复绑定`() {
+        val rows = listOf(
+            CharacterVoiceAssignService.RoleVoiceRow(1, "张三", "male", 0, "a|男", "男"),
+            CharacterVoiceAssignService.RoleVoiceRow(2, "李四", "male", 0, "a|男", "男"),
+            CharacterVoiceAssignService.RoleVoiceRow(3, "王五", "female", 0, "b|女", "女"),
+            CharacterVoiceAssignService.RoleVoiceRow(4, "旁白", "", 0, "", "")
+        )
+        assertEquals(setOf("a|男"), CharacterVoiceAssignService.conflictingVoices(rows))
+        // 空音色不参与撞音（未配声的角色不应被标红）
+        assertFalse(CharacterVoiceAssignService.conflictingVoices(rows).contains(""))
+    }
 }
