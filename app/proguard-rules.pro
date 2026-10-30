@@ -281,3 +281,14 @@ cn.hutool.core.util.**{*;}
 -keep class com.google.mediapipe.** { *; }
 -dontwarn com.google.mediapipe.proto.**
 
+# 内置离线 TTS（sherpa-onnx）：native 通过 JNI 按类名/签名查回调，R8 裁剪桥接方法会触发
+# JNI NewFloatArray + pending NoSuchMethodError 直接 abort（2026-10-30 模拟器实证）
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-keep class kotlin.jvm.functions.Function1 { *; }
+-keepclassmembers class * implements kotlin.jvm.functions.Function1 {
+    public java.lang.Integer invoke(float[]);
+    public java.lang.Object invoke(java.lang.Object);
+}
+-dontwarn com.k2fsa.sherpa.onnx.**
+
+

@@ -284,3 +284,6 @@ git_log.txt
 /tts/
 desktop.ini
 
+
+# 内置离线 TTS：sherpa-onnx AAR（AD-22：不入库，按 scripts/fetch_sherpa_aar.py 下载 + sha256 校验）
+app/libs/*.aar

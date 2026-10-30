@@ -1,0 +1,371 @@
+package io.legado.app.help.readaloud.role
+
+import io.legado.app.constant.AppLog
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * 端侧离线归因（AD-13 / AD-15 / AD-17 / AD-21）：
+ * 切分（`ReadAloudRolePreprocessor` 的引号簇）→ cue 命中 → 别名/固定绑定 → NER 邻接 → 对话锁 → 轮转 → 未识别。
+ *
+ * 硬规则（AD-15）：
+ * - 置信 <0.50 **一律未识别**（不猜）
+ * - 未识别**不静默归旁白**（保留 dialogue/thought 类型，由播放期走模板兜底并在 UI 标红）
+ * - 同段连续对白无新 cue → 对话锁（继承上一句角色）
+ * - 结果按章缓存并经 [OfflineRoleCacheStore] 落库
+ */
+object OfflineRoleResolver {
+
+    data class RoleCharacter(
+        val id: Long,
+        val name: String,
+        val aliases: List<String> = emptyList(),
+        val gender: String = "",
+        val roleLevel: Int = 0
+    )
+
+    data class RoleHit(
+        val characterName: String,
+        val characterId: Long,
+        val confidence: Double,
+        val reason: String
+    )
+
+    data class Result(
+        val segments: List<OfflineRoleSegment>,
+        val narration: Int,
+        val recognized: Int,
+        val unknown: Int
+    )
+
+    private const val MIN_ACCEPT = 0.50
+    private const val CONF_ALIAS = 0.95
+    private const val CONF_CUE = 0.90
+    private const val CONF_LEARNED_CUE = 0.92
+    private const val CONF_NER = 0.78
+    private const val CONF_LOCK = 0.70
+    private const val CONF_TURN = 0.60
+    private const val OVERLAP_THRESHOLD = 0.5
+
+    private val cueVerbRegex = Regex(
+        "([\\u4e00-\\u9fa5]{1,4})(?:低声|沉声|冷声|轻声|大声|怒声|高声|柔声)?(?:说道|问道|答道|笑道|冷声道|沉声道|低声道|怒道|喝道|喊道|叫道|开口道|喃喃道|说|道|问|答|笑|喊|叫|喝|叹)"
+    )
+
+    private val memory = ConcurrentHashMap<String, List<OfflineRoleSegment>>()
+
+    private fun memoryKey(bookKey: String, chapterIndex: Int) = "$bookKey|$chapterIndex"
+
+    /** 解析整章（纯函数，便于 JVM 单测） */
+    fun resolve(
+        paragraphs: List<String>,
+        units: List<ReadAloudRoleUnit>,
+        characters: List<RoleCharacter>,
+        learnedCues: Map<String, String> = emptyMap()
+    ): Result {
+        if (units.isEmpty()) {
+            return Result(emptyList(), 0, 0, 0)
+        }
+        val nameMap = buildNameIndex(characters)
+        val knownNames = characters.flatMap { listOf(it.name) + it.aliases }.filter { it.length >= 2 }
+        val segments = ArrayList<OfflineRoleSegment>(units.size)
+        var narration = 0
+        var recognized = 0
+        var unknown = 0
+        var lastSpeaker: RoleCharacter? = null
+        var lastParagraph = -1
+        val rotation = ArrayDeque<RoleCharacter>()
+
+        units.sortedWith(compareBy({ it.firstParagraphIndex }, { it.firstStart })).forEach { unit ->
+            val range = unit.ranges.firstOrNull()
+            if (range == null) return@forEach
+            val paragraph = paragraphs.getOrNull(range.paragraphIndex).orEmpty()
+
+            if (unit.roleType == "narrator" || unit.kind == "narrator") {
+                narration++
+                segments.addAll(unit.ranges.map { r ->
+                    OfflineRoleSegment(
+                        paragraphIndex = r.paragraphIndex,
+                        start = r.start,
+                        end = r.end,
+                        roleType = "narrator",
+                        characterName = "",
+                        characterId = 0L,
+                        confidence = 1.0,
+                        reason = "narration"
+                    )
+                })
+                lastParagraph = range.paragraphIndex
+                return@forEach
+            }
+
+            val assignment = assign(
+                unit = unit,
+                paragraph = paragraph,
+                nameMap = nameMap,
+                knownNames = knownNames,
+                learnedCues = learnedCues,
+                lastSpeaker = lastSpeaker,
+                lastParagraph = lastParagraph,
+                rotation = rotation
+            )
+            if (assignment != null) {
+                recognized++
+                // 对话锁/轮转以 RoleCharacter 为状态载体（Assigned 仅承载本次结果）
+                nameMap[normalizeName(assignment.name)]?.let { character ->
+                    lastSpeaker = character
+                    if (character.name !in rotation.map { it.name }) {
+                        rotation.addLast(character)
+                        if (rotation.size > 3) rotation.removeFirst()
+                    }
+                }
+            } else {
+                unknown++
+            }
+            segments.addAll(unit.ranges.map { r ->
+                OfflineRoleSegment(
+                    paragraphIndex = r.paragraphIndex,
+                    start = r.start,
+                    end = r.end,
+                    roleType = unit.roleType.takeIf { it in setOf("narrator", "character", "thought", "other") }
+                        ?: "other",
+                    characterName = assignment?.name.orEmpty(),
+                    characterId = assignment?.id ?: 0L,
+                    confidence = assignment?.confidence ?: 0.0,
+                    reason = assignment?.reason ?: "unknown"
+                )
+            })
+            lastParagraph = range.paragraphIndex
+        }
+        return Result(segments, narration, recognized, unknown)
+    }
+
+    private data class Assigned(
+        val name: String,
+        val id: Long,
+        val reason: String,
+        val confidence: Double
+    )
+
+    private fun assign(
+        unit: ReadAloudRoleUnit,
+        paragraph: String,
+        nameMap: Map<String, RoleCharacter>,
+        knownNames: List<String>,
+        learnedCues: Map<String, String>,
+        lastSpeaker: RoleCharacter?,
+        lastParagraph: Int,
+        rotation: ArrayDeque<RoleCharacter>
+    ): Assigned? {
+        val range = unit.ranges.first()
+        val cueText = buildString {
+            append(unit.cueBefore)
+            append(' ')
+            append(unit.cueAfter)
+        }.trim()
+
+        // ① 显式 speakerHint（若上游提供）
+        matchName(unit.speakerHint, nameMap)?.let { return Assigned(it.name, it.id, "alias", CONF_ALIAS) }
+
+        // ② 学习到的 cue 模式（用户改段后自动命中）
+        if (cueText.isNotBlank()) {
+            learnedCues.entries.firstOrNull { (cue, _) ->
+                cue.isNotBlank() && cueText.contains(cue)
+            }?.let { (_, roleName) ->
+                matchName(roleName, nameMap)?.let {
+                    return Assigned(it.name, it.id, "learned-cue", CONF_LEARNED_CUE)
+                }
+            }
+        }
+
+        // ③ cue 命中：已知角色名直接出现在 cue 文本（最稳），再退回正则抽取
+        if (cueText.isNotBlank()) {
+            knownNames.sortedByDescending { it.length }.forEach { name ->
+                if (cueText.contains(name)) {
+                    matchName(name, nameMap)?.let {
+                        return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
+                    }
+                }
+            }
+        }
+        cueNames(cueText).forEach { candidate ->
+            matchName(candidate, nameMap)?.let {
+                return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
+            }
+        }
+
+        // ④ NER 邻接（引号簇 ±25 字内出现角色名）
+        val mentions = NerTextEngine.findMentions(paragraph, knownNames, detectUnknown = false)
+        val near = NerTextEngine.mentionsNear(paragraph, range.start, range.end, mentions)
+        near.firstOrNull()?.name?.let { name ->
+            matchName(name, nameMap)?.let { return Assigned(it.name, it.id, "ner", CONF_NER) }
+        }
+
+        // ⑤ 对话锁：同段连续对白且无新 cue → 继承上一句
+        val sameParagraph = range.paragraphIndex == lastParagraph
+        val hasExplicitCue = cueNames(cueText).isNotEmpty()
+        if (sameParagraph && !hasExplicitCue && lastSpeaker != null && unit.roleType == "character") {
+            return Assigned(lastSpeaker.name, lastSpeaker.id, "lock", CONF_LOCK)
+        }
+
+        // ⑥ 对话轮转（换段后的无名对白：在 ≤3 已知角色中取与上一句不同的一个）
+        if (unit.roleType == "character" || unit.roleType == "thought") {
+            val pronounGender = pronounGender(paragraph, range)
+            val candidates = rotation.filter { it.name != lastSpeaker?.name }
+            // 无历史角色且无性别线索 → 宁标未识别，不猜（AD-15）
+            if (candidates.isEmpty() && pronounGender.isBlank()) return null
+            val preferred = when {
+                pronounGender.isNotBlank() -> candidates.filter { genderOf(it) == pronounGender }
+                else -> candidates
+            }
+            // 代词已指明性别但候选里没有同性别角色 → 不猜（避免女声配男角）
+            if (pronounGender.isNotBlank() && preferred.isEmpty()) return null
+            val pick = preferred.firstOrNull() ?: candidates.firstOrNull()
+            if (pick != null && pick.name != lastSpeaker?.name) {
+                return Assigned(pick.name, pick.id, "turn-taking", CONF_TURN)
+            }
+        }
+        return null
+    }
+
+    /** cue 文本里抽人名（取最后一个命中，越靠近引号越可信） */
+    fun cueNames(cue: String): List<String> {
+        if (cue.isBlank()) return emptyList()
+        return cueVerbRegex.findAll(cue).mapNotNull { match ->
+            val raw = match.groupValues.getOrNull(1).orEmpty()
+            raw.takeIf { it.length in 2..4 && it !in PRONOUNS }
+        }.toList().reversed()
+    }
+
+    private val PRONOUNS = setOf("他", "她", "它", "我", "你", "您")
+
+    private fun pronounGender(paragraph: String, range: ReadAloudRoleRange): String {
+        val window = paragraph.substring(
+            max(0, range.start - 12).coerceAtMost(range.start),
+            min(paragraph.length, range.end + 12)
+        )
+        return when {
+            window.contains('她') -> "female"
+            window.contains('他') -> "male"
+            else -> ""
+        }
+    }
+
+    private fun genderOf(character: RoleCharacter): String {
+        val raw = character.gender
+        return when {
+            raw.contains("女") || raw.equals("female", true) -> "female"
+            raw.contains("男") || raw.equals("male", true) -> "male"
+            else -> ""
+        }
+    }
+
+    private fun matchName(value: String, nameMap: Map<String, RoleCharacter>): RoleCharacter? {
+        val key = normalizeName(value)
+        if (key.isBlank()) return null
+        return nameMap[key]
+    }
+
+    /** 构建归一化名索引：正名 + 书名号剥离 + 别名（显式循环，避免运算符优先级歧义） */
+    fun buildNameIndex(characters: List<RoleCharacter>): Map<String, RoleCharacter> {
+        val map = LinkedHashMap<String, RoleCharacter>()
+        characters.forEach { character ->
+            val names = ArrayList<String>(2 + character.aliases.size)
+            names.add(character.name)
+            names.add(character.name.trim('《', '》', '“', '”'))
+            names.addAll(character.aliases)
+            names.forEach { alias ->
+                val key = normalizeName(alias)
+                if (key.isNotBlank()) map.putIfAbsent(key, character)
+            }
+        }
+        return map
+    }
+
+    fun normalizeName(value: String): String = value.trim()
+        .replace(Regex("\\s+"), "")
+        .trim('《', '》', '“', '”', '"', '\'', '：', ':', '，', ',', '。', '.', '、')
+
+    /**
+     * 段 → 角色映射（C-11 / AD-21）：按**字符区间交集覆盖率 ≥0.5** 判定，不依赖起点相等。
+     */
+    fun lookup(
+        segments: List<OfflineRoleSegment>,
+        paragraphIndex: Int,
+        offset: Int,
+        length: Int,
+        minConfidence: Double = MIN_ACCEPT
+    ): RoleHit? {
+        if (length <= 0 || segments.isEmpty()) return null
+        val segEnd = offset + length
+        val candidates = segments.asSequence()
+            .filter { it.paragraphIndex == paragraphIndex && it.recognized && it.confidence >= minConfidence }
+            .mapNotNull { seg ->
+                val overlap = max(0, min(segEnd, seg.end) - max(offset, seg.start))
+                val ratio = overlap.toDouble() / length
+                if (ratio < OVERLAP_THRESHOLD) null else ratio to seg
+            }
+            .sortedByDescending { it.first }
+            .toList()
+        val best = candidates.firstOrNull() ?: return null
+        val adjusted = if (candidates.size > 1) (best.second.confidence - 0.1) else best.second.confidence
+        if (adjusted < minConfidence) return null
+        return RoleHit(
+            characterName = best.second.characterName,
+            characterId = best.second.characterId,
+            confidence = adjusted,
+            reason = best.second.reason
+        )
+    }
+
+    fun lookup(bookKey: String, chapterIndex: Int, paragraphIndex: Int, offset: Int, length: Int): RoleHit? {
+        val segments = memory[memoryKey(bookKey, chapterIndex)] ?: return null
+        return lookup(segments, paragraphIndex, offset, length)
+    }
+
+    fun cached(bookKey: String, chapterIndex: Int): List<OfflineRoleSegment>? =
+        memory[memoryKey(bookKey, chapterIndex)]
+
+    /**
+     * 章开始准备：内存优先 → 落库缓存 → 现算并落库。
+     * 零网络；失败不阻断播放（返回空表，播放期走模板兜底）。
+     */
+    suspend fun ensure(
+        bookKey: String,
+        chapterIndex: Int,
+        chapterTitle: String,
+        paragraphs: List<String>,
+        characters: List<RoleCharacter>,
+        aliasStore: BookAliasStore? = null,
+        forceRecompute: Boolean = false
+    ): List<OfflineRoleSegment> {
+        val key = memoryKey(bookKey, chapterIndex)
+        if (!forceRecompute) {
+            memory[key]?.let { if (it.isNotEmpty()) return it }
+            OfflineRoleCacheStore.read(bookKey, chapterIndex, paragraphs)?.let { cachedSegments ->
+                memory[key] = cachedSegments
+                return cachedSegments
+            }
+        }
+        return runCatching {
+            val units = ReadAloudRolePreprocessor.process(paragraphs, 0).units
+            val learned = aliasStore?.cuesFor(bookKey).orEmpty()
+            val result = resolve(paragraphs, units, characters, learned)
+            if (result.segments.isNotEmpty()) {
+                memory[key] = result.segments
+                OfflineRoleCacheStore.write(bookKey, chapterIndex, chapterTitle, paragraphs, result.segments)
+            }
+            result.segments
+        }.onFailure {
+            AppLog.put("离线归因失败（章 $chapterIndex）：${it.message}")
+        }.getOrDefault(emptyList())
+    }
+
+    fun clearMemory(bookKey: String) {
+        memory.keys.filter { it.startsWith("$bookKey|") }.forEach { memory.remove(it) }
+    }
+
+    fun resetMemory() {
+        memory.clear()
+    }
+}

@@ -9,6 +9,7 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadBook
 import io.legado.app.utils.getPrefBoolean
 import splitties.init.appCtx
@@ -389,6 +390,24 @@ object TtsPrebuildManager {
                         level = AppLog.Level.INFO
                     )
                     // 延后不计 done（P1-7 修复：防终态谎报整本完成）
+                    continue
+                }
+                // T3.2 内置离线引擎分支（review-final P0-3：必须早于 hasTargetFile 的 http 缓存判据，
+                // 且产物只进引擎缓存，不写 http 缓存命名空间）
+                if (task.httpTts == null && BuiltinTtsRuntime.isReady()) {
+                    val builtinRate = (AppConfig.ttsSpeechRate + 5) / 10f
+                    val paragraphUnits = unit.unitText.split('\n')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .map { BuiltinTtsRuntime.PrebuildUnit(it, task.voiceKey) }
+                    val prebuild = BuiltinTtsRuntime.prebuild(paragraphUnits, builtinRate)
+                    if (prebuild.failed == 0) done++ else failed++
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "prebuild 内置引擎 ch=${unit.chapterIndex} 段=${prebuild.total} 命中=${prebuild.hit} 新合成=${prebuild.synthesized} 失败=${prebuild.failed} unit=${done + failed}/${unitList.size}",
+                        level = AppLog.Level.INFO
+                    )
+                    updateProgress(task, gen, done + failed, unitList.size, failed)
                     continue
                 }
                 if (hasTargetFile(task, unit.fileName)) {

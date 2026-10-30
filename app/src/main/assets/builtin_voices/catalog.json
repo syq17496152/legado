@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "voices": [
+    {
+      "id": "b6_m_teen",
+      "displayName": "内置·男·少年",
+      "referenceFileName": "b6_m_teen.wav",
+      "referenceText": "这山间的晚风也太舒服了吧！别一直站着了，过来坐。我带了你喜欢的热茶，一直都在这儿陪着你，要不要和我说说心里的烦恼？",
+      "tags": [
+        "male",
+        "teen",
+        "narration"
+      ],
+      "gender": "male",
+      "age": "teen",
+      "numSteps": 12
+    },
+    {
+      "id": "b6_m_youth",
+      "displayName": "内置·男·青年",
+      "referenceFileName": "b6_m_youth.wav",
+      "referenceText": "这山间的晚风也太舒服了吧！别一直站着了，过来坐。我带了你喜欢的热茶，一直都在这儿陪着你，要不要和我说说心里的烦恼？",
+      "tags": [
+        "male",
+        "youth"
+      ],
+      "gender": "male",
+      "age": "youth",
+      "numSteps": 12
+    },
+    {
+      "id": "b6_m_aged",
+      "displayName": "内置·男·老年",
+      "referenceFileName": "b6_m_aged.wav",
+      "referenceText": "这片叶子，颜色真特别，难道是秋天来了吗？嗯，真美啊！轻轻地，把它收好。",
+      "tags": [
+        "male",
+        "aged"
+      ],
+      "gender": "male",
+      "age": "aged",
+      "numSteps": 8
+    },
+    {
+      "id": "b6_f_teen",
+      "displayName": "内置·女·少年",
+      "referenceFileName": "b6_f_teen.wav",
+      "referenceText": "这山间的晚风也太舒服了吧！别一直站着了，过来坐。我带了你喜欢的热茶，一直都在这儿陪着你，要不要和我说说心里的烦恼？",
+      "tags": [
+        "female",
+        "teen"
+      ],
+      "gender": "female",
+      "age": "teen",
+      "numSteps": 12
+    },
+    {
+      "id": "b6_f_youth",
+      "displayName": "内置·女·青年",
+      "referenceFileName": "b6_f_youth.wav",
+      "referenceText": "这山间的晚风也太舒服了吧！别一直站着了，过来坐。我带了你喜欢的热茶，一直都在这儿陪着你，要不要和我说说心里的烦恼？",
+      "tags": [
+        "female",
+        "youth",
+        "narration"
+      ],
+      "gender": "female",
+      "age": "youth",
+      "numSteps": 12
+    },
+    {
+      "id": "b6_f_aged",
+      "displayName": "内置·女·老年",
+      "referenceFileName": "b6_f_aged.wav",
+      "referenceText": "这片叶子，颜色真特别，难道是秋天来了吗？嗯，真美啊！轻轻地，把它收好。",
+      "tags": [
+        "female",
+        "aged"
+      ],
+      "gender": "female",
+      "age": "aged",
+      "numSteps": 8
+    }
+  ]
+}

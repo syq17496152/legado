@@ -750,6 +750,24 @@
         <service
             android:name=".service.CheckSourceService"
             android:foregroundServiceType="dataSync" />
+
+        <!-- 内置离线 TTS 引擎（AD-01）：注册为系统 TTS 引擎。
+             必须三件套：BIND_TEXT_TO_SERVICE 权限 + TTS_SERVICE intent + category DEFAULT（PoC P5 实证：缺类目查不到）
+             + meta-data 指向 @xml/tts_engine（系统设置页入口，PoC P5/P2.2 红队 P0-1） -->
+        <service
+            android:name=".service.BuiltinTtsService"
+            android:exported="true"
+            android:label="@string/builtin_tts_engine_label"
+            android:foregroundServiceType="mediaPlayback"
+            android:permission="android.permission.BIND_TEXT_TO_SERVICE">
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech.tts"
+                android:resource="@xml/tts_engine" />
+        </service>
         <service
             android:name=".service.CheckRssSourceService"
             android:foregroundServiceType="dataSync" />
@@ -890,6 +908,12 @@
             android:name=".ui.book.read.config.AiReadAloudUsageRecordActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false" />
+
+        <!-- 内置离线 TTS 管理页（@xml/tts_engine 的 settingsActivity 由**系统设置**跨应用拉起 ⇒ 必须 exported） -->
+        <activity
+            android:name=".ui.book.read.config.BuiltinTtsActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="true" />
         <!-- 高级标题管理 -->
         <activity
             android:name=".ui.config.AdvancedTitleManageActivity"

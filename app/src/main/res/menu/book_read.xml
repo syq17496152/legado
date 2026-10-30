@@ -29,6 +29,12 @@
             android:title="@string/tts_casting_prebuild_menu"
             app:showAsAction="never" />
 
+        <item
+            android:id="@+id/menu_builtin_tts"
+            android:icon="@drawable/ic_volume_up"
+            android:title="@string/builtin_tts_menu_entry"
+            app:showAsAction="never" />
+
     </group>
 
     <group android:id="@+id/menu_group_text">

@@ -13,6 +13,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.MediaHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.CastingProsody
 import io.legado.app.help.readaloud.casting.CastingTag
 import io.legado.app.help.readaloud.casting.CastingRuleSet
@@ -22,8 +23,11 @@ import io.legado.app.help.readaloud.casting.TtsMultiRoleDiagnostics
 import io.legado.app.help.readaloud.casting.TtsTagSplitter
 import io.legado.app.help.readaloud.casting.TtsVoiceRef
 import io.legado.app.help.readaloud.casting.UtteranceProgressSink
+import io.legado.app.help.readaloud.role.BookAliasStore
+import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.utils.LogUtils
@@ -377,6 +381,25 @@ class TTSReadAloudService : BaseReadAloudService() {
             paragraph.any { it == '“' || it == '”' || it == '"' || it == '「' || it == '」' || it == '『' || it == '』' }
         }
         TtsMultiRoleDiagnostics.reset(textChapter.chapter.index, chapterHasQuotes)
+        // AD-09 钩子①：章开始准备离线角色归因（缓存优先；失败不阻断播放）
+        val builtinActive = BuiltinTtsRuntime.isReady() &&
+                BuiltinTtsRuntime.isActiveEngine(this, ReadAloud.currentRoute.engineValue)
+        val chapterIndex = textChapter.chapter.index
+        if (builtinActive) {
+            runCatching {
+                val roleCharacters = CharacterVoiceAssignService.roleCharacters(bookKey)
+                if (roleCharacters.isNotEmpty()) {
+                    OfflineRoleResolver.ensure(
+                        bookKey = bookKey,
+                        chapterIndex = chapterIndex,
+                        chapterTitle = textChapter.chapter.title,
+                        paragraphs = contentList,
+                        characters = roleCharacters,
+                        aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+                    )
+                }
+            }.onFailure { AppLog.put("离线角色归因准备失败：${it.message}") }
+        }
         for (p in nowSpeak until contentList.size) {
             currentCoroutineContext().ensureActive()
             val rawParagraphStart = if (p == nowSpeak) paragraphStartPos else 0
@@ -398,7 +421,7 @@ class TTSReadAloudService : BaseReadAloudService() {
             }
             val segments = TtsTagSplitter.splitParagraph(p, paragraph, ruleSet.rules)
                 .filter { it.offsetInParagraph + it.length > paragraphStart }
-            for (segment in segments) {
+            for ((segIndex, segment) in segments.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 var text = paragraph.substring(
                     segment.offsetInParagraph,
@@ -419,7 +442,17 @@ class TTSReadAloudService : BaseReadAloudService() {
                     continue
                 }
                 val sourceRoute = runCatching {
-                    TtsCastingStore.resolveSourceForTag(bookKey, segment.tag, ruleSet)
+                    // C-10：离线命中角色 → 走既有六级链的 ai: 命名空间（①角色绑定 ②本书绑定）
+                    val roleHit = if (builtinActive) {
+                        OfflineRoleResolver.lookup(
+                            bookKey, chapterIndex, p,
+                            segment.offsetInParagraph, segment.length
+                        )
+                    } else null
+                    val resolveTag = roleHit?.let { CastingTag.AI_PREFIX + it.characterName } ?: segment.tag
+                    TtsCastingStore.resolveSourceForTag(
+                        bookKey, resolveTag, ruleSet, roleHit?.characterId ?: 0L
+                    )
                 }.getOrNull() ?: SpeechRoute(engineType = SpeechRoute.ENGINE_DEFAULT)
                 // 通道门禁（P1-15 门禁版）：模板声源指向 HTTP/脚本通道时本服务无法合成，
                 // 明示降级为引擎默认音（静默降级会表现为"角色不生效"，须留痕可排查）
@@ -466,6 +499,35 @@ class TTSReadAloudService : BaseReadAloudService() {
                         level = AppLog.Level.INFO
                     )
                     return
+                }
+                // AD-09 钩子②：下一段预取（内置引擎激活时；静默失败，不拖慢当前句）
+                if (builtinActive) {
+                    val nextSegment = segments.getOrNull(segIndex + 1)
+                    if (nextSegment != null) {
+                        val nextRaw = paragraph.substring(
+                            nextSegment.offsetInParagraph,
+                            nextSegment.offsetInParagraph + nextSegment.length
+                        )
+                        val nextSpeech = if (nextSegment.tag != CastingTag.NARRATION) {
+                            TtsTagSplitter.stripQuotesForSpeech(nextRaw)
+                        } else nextRaw
+                        if (nextSpeech.isNotBlank()) {
+                            val nextHit = OfflineRoleResolver.lookup(
+                                bookKey, chapterIndex, p,
+                                nextSegment.offsetInParagraph, nextSegment.length
+                            )
+                            val nextTag = nextHit?.let { CastingTag.AI_PREFIX + it.characterName }
+                                ?: nextSegment.tag
+                            val nextVoice = runCatching {
+                                TtsCastingStore.resolveSourceForTag(
+                                    bookKey, nextTag, ruleSet, nextHit?.characterId ?: 0L
+                                )
+                            }.getOrNull()?.toneID.orEmpty()
+                            BuiltinTtsRuntime.prefetchAsync(
+                                nextSpeech, nextVoice, (AppConfig.ttsSpeechRate + 5) / 10f
+                            )
+                        }
+                    }
                 }
                 readAloudNumber += text.length
                 // 翻页判定（对齐原 onStart/onRangeStart 语义）

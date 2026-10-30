@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 系统 TTS 引擎配置入口（PoC P5：Manifest meta-data 必须指向本文件） -->
+<tts-engine xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="io.legado.app.ui.book.read.config.BuiltinTtsActivity" />

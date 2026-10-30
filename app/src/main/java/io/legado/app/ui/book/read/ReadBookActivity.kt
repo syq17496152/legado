@@ -181,6 +181,7 @@ import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.scene.SceneBookmarkActivity
+import io.legado.app.ui.book.read.config.BuiltinTtsActivity
 import io.legado.app.ui.book.read.config.AiPurifyDialog
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.TtsPrebuildDialog
@@ -1041,6 +1042,7 @@ class ReadBookActivity : BaseReadBookActivity(),
 
             R.id.menu_download -> showDownloadDialog()
             R.id.menu_tts_prebuild -> showTtsPrebuildDialog()
+            R.id.menu_builtin_tts -> startActivity<BuiltinTtsActivity>()
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_add_scene_bookmark -> addSceneBookmarkFromReadMenu()
             R.id.menu_scene_bookmark_list -> openSceneBookmarkLibrary()

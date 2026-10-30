@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "profiles": [
+    {
+      "id": "fast",
+      "title": "极速单声档",
+      "engine": "vits",
+      "sizeBytes": 20718285,
+      "sampleRate": 22050,
+      "numThreads": 2,
+      "numSteps": 4,
+      "files": ["zh_CN-xiao_ya-medium.onnx", "tokens.txt", "lexicon.txt", "date.fst", "number.fst"],
+      "sha256": {
+        "zh_CN-xiao_ya-medium.onnx": "d4145488f47914614116e4f77338532d827cfccf5f5d7a58c15c5e54cc5434ba",
+        "tokens.txt": "e9e6d2838a2676749adbf0376c4cf3c3cd28eb27ed953dcc2adcab8db3c33ba7",
+        "lexicon.txt": "003e76f89fec389ec109b557f47cc315a1ac31a99091f0cc9d15949f9024416b"
+      },
+      "sources": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2",
+        "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2"
+      ],
+      "license": "模型页注明：数据集非商用（个人自用）",
+      "fallbackVoiceName": "极速·单人声"
+    },
+    {
+      "id": "clone",
+      "title": "高质量克隆档",
+      "engine": "zipvoice",
+      "sizeBytes": 190000000,
+      "sampleRate": 24000,
+      "numThreads": 4,
+      "numSteps": 4,
+      "files": [
+        "encoder.int8.onnx",
+        "decoder.int8.onnx",
+        "vocos_24khz.onnx",
+        "tokens.txt",
+        "lexicon.txt"
+      ],
+      "sha256": {
+        "encoder.int8.onnx": "f2de9a761a85e5ddd125dee6e05bad1c7ee92c11b83b4d775dab216a6aa41379",
+        "decoder.int8.onnx": "3cc2e08a96610d7ea1b227398e97cdbbe0414499741d3aec0b8113db2a2ab251",
+        "vocos_24khz.onnx": "bcb3b970e384161c4d634f0bb9e999ff1c471b34c9bc0b1049a5014065ed3cc0",
+        "tokens.txt": "ce98c1afc5f7a20c2484dffdd68a1fff0a4a2cc707328833750c4476c37cdbda",
+        "lexicon.txt": "c94b049d970e971acdc2a7e5e7b23ca594222a9d640e417c711f2ad1e7bb7d46"
+      },
+      "sources": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-zipvoice-distill-int8-zh-en-emilia.tar.bz2",
+        "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-zipvoice-distill-int8-zh-en-emilia.tar.bz2",
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/vocoder-models/vocos_24khz.onnx",
+        "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/vocoder-models/vocos_24khz.onnx"
+      ],
+      "license": "模型页注明（个人自用）",
+      "fallbackVoiceName": ""
+    }
+  ]
+}
