@@ -1,0 +1,22 @@
+# 第三方声明（Third-Party Notices）
+
+本仓库「内置离线多角色朗读」特性在实现过程中参考 / 改编了以下项目的设计与算法（按许可证要求保留声明）：
+
+## TalkifyTTS（MIT License）
+
+- Copyright (c) 2026 LonePheasantWarrior
+- 参考范围：系统 TTS 引擎服务壳（串行合成 + 合成期临时前台化 + PARTIAL_WAKE_LOCK）、Sherpa 引擎封装与
+  参考音频内存缓存、进程级共享引擎与空闲释放策略、文本分块器、内置音色目录结构（`id|显示名` 命名）。
+- 说明：本项目为**参考后重写**（包名/架构/依赖已按本仓规范适配），非逐文件拷贝。
+
+## sherpa-onnx
+
+- Apache License 2.0（k2-fsa）
+- 使用方式：以官方 Android AAR 引入（`app/libs/sherpa-onnx.aar`），提供 VITS / Matcha / ZipVoice 端侧推理。
+
+## CloneTTS / MultiTTS（行为级参考）
+
+- 仅通过反编译**观察行为与数据结构**，据此确定参数口径（非复制代码）：
+  切分与停顿四档（420/280/120/100 ms）、`fixed_roles.json` 特殊键与 `legado_rules` 目录约定、
+  声音池（tag→池）与角色缓存语义；MultiTTS 的 HanLP 词法/NER 候选仅作选型参考。
+- 未包含其任何源码文件，也未内嵌其音色资产（仅内置 6 条用户自有音色包筛选出的样音）。

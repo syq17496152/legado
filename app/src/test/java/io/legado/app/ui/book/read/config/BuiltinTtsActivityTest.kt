@@ -37,6 +37,24 @@ class BuiltinTtsActivityTest {
     }
 
     @Test
+    fun `一键开书文案必须回报分镜产出（IF-09 回归）`() {
+        // 有分镜：显示段数，用户能据此判断"识别真的跑了"
+        assertEquals(
+            "角色 2（新增 0）· 配声 0 · 已启用多角色 · 分镜 9 段",
+            BuiltinTtsUiSupport.multiRoleSummary(
+                characters = 2, discovered = 0, assigned = 0, activated = true, storyboardSegments = 9
+            )
+        )
+        // 无分镜：显式提示未生成，而不是静默成功
+        assertEquals(
+            "角色 2（新增 0）· 配声 0 · 已启用多角色 · 分镜未生成（可点“识别角色”重试）",
+            BuiltinTtsUiSupport.multiRoleSummary(
+                characters = 2, discovered = 0, assigned = 0, activated = true, storyboardSegments = 0
+            )
+        )
+    }
+
+    @Test
     fun `存储总览文案含三类与合计`() {
         assertEquals(
             "存储：模型 20 MB · 音色 1 KB · 缓存 1.5 GB · 合计 1.5 GB",

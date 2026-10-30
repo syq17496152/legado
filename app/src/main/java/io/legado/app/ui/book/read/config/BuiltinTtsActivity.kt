@@ -514,6 +514,19 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             discovered = OfflineCharacterDiscovery.ensureCharacters(bookKey, paragraphs)
             characters = CharacterVoiceAssignService.roleCharacters(bookKey)
         }
+        // 离线分镜（AD-13/T5.3）：一键开书必须同时产出「段→角色」，否则分镜页为空、多角色只能靠模板兜底
+        val storyboardSegments = runCatching {
+            OfflineRoleResolver.ensure(
+                bookKey = bookKey,
+                chapterIndex = chapter.chapter.index,
+                chapterTitle = chapter.chapter.title,
+                paragraphs = paragraphs,
+                characters = characters,
+                aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+            ).size
+        }.onFailure {
+            LogUtils.e("BuiltinTtsUi", "离线分镜失败：${it.stackTraceToString()}")
+        }.getOrDefault(0)
         val assigned = CharacterVoiceAssignService.assignAll(this, book)
         val activated = BuiltinCastingSetup.ensureAndActivate(assets)
         pageState.value = pageState.value.copy(
@@ -522,7 +535,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 characters = characters.size,
                 discovered = discovered,
                 assigned = assigned.assignments.size,
-                activated = activated
+                activated = activated,
+                storyboardSegments = storyboardSegments
             )
         )
         reload()

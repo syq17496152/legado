@@ -17,15 +17,21 @@ internal object BuiltinTtsUiSupport {
         else -> String.format(Locale.US, "%.1f GB", bytes.toDouble() / (1024 * 1024 * 1024))
     }
 
-    /** 一键开书结果文案（纯函数可单测）：四段信息缺一不可，便于用户/日志定位卡在哪一步 */
+    /** 一键开书结果文案（纯函数可单测）：角色/配声/模板/分镜 四段齐全，便于用户与日志定位卡点 */
     fun multiRoleSummary(
         characters: Int,
         discovered: Int,
         assigned: Int,
-        activated: Boolean
+        activated: Boolean,
+        storyboardSegments: Int = -1
     ): String {
         val template = if (activated) "已启用多角色" else "多角色模板启用失败"
-        return "角色 $characters（新增 $discovered）· 配声 $assigned · $template"
+        val storyboard = when {
+            storyboardSegments < 0 -> ""
+            storyboardSegments == 0 -> " · 分镜未生成（可点“识别角色”重试）"
+            else -> " · 分镜 $storyboardSegments 段"
+        }
+        return "角色 $characters（新增 $discovered）· 配声 $assigned · $template$storyboard"
     }
 
     /** 存储总览文案（T4.9，纯函数可单测）：模型 / 音色 / 缓存 / 合计 */
