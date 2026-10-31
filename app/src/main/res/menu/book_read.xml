@@ -4,6 +4,29 @@
     tools:context=".ui.main.MainActivity"
     tools:ignore="AlwaysShowAction">
 
+    <!-- 内置离线朗读相关入口（2026-11-01 真机铁证）：本地书同样需要「预合成/内置朗读/听书场景卡」，
+         放进 on_line 组会让本地书（book.isLocal=true）整组隐藏 ⇒ 这三个新功能对本地书不可达。
+         独立分组（无 groupId 可见性规则）⇒ upMenu 走 else 分支，始终可见。 -->
+    <group android:id="@+id/menu_group_tts_tools">
+        <item
+            android:id="@+id/menu_tts_prebuild"
+            android:icon="@drawable/ic_volume_up"
+            android:title="@string/tts_casting_prebuild_menu"
+            app:showAsAction="never" />
+
+        <item
+            android:id="@+id/menu_builtin_tts"
+            android:icon="@drawable/ic_volume_up"
+            android:title="@string/builtin_tts_menu_entry"
+            app:showAsAction="never" />
+
+        <item
+            android:id="@+id/menu_cast_scene"
+            android:icon="@drawable/ic_volume_up"
+            android:title="@string/cast_scene_menu_entry"
+            app:showAsAction="never" />
+    </group>
+
     <group android:id="@+id/menu_group_on_line">
         <item
             android:id="@+id/menu_change_source"
@@ -22,24 +45,6 @@
             android:icon="@drawable/ic_download_line"
             android:title="@string/offline_cache"
             app:showAsAction="always" />
-
-        <item
-            android:id="@+id/menu_tts_prebuild"
-            android:icon="@drawable/ic_volume_up"
-            android:title="@string/tts_casting_prebuild_menu"
-            app:showAsAction="never" />
-
-        <item
-            android:id="@+id/menu_builtin_tts"
-            android:icon="@drawable/ic_volume_up"
-            android:title="@string/builtin_tts_menu_entry"
-            app:showAsAction="never" />
-
-        <item
-            android:id="@+id/menu_cast_scene"
-            android:icon="@drawable/ic_volume_up"
-            android:title="@string/cast_scene_menu_entry"
-            app:showAsAction="never" />
 
     </group>
 

@@ -22,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 
 /**
@@ -33,6 +35,17 @@ internal object BuiltinNotificationText {
         val name = role.orEmpty().trim()
         return if (name.isBlank()) base else "$base · 正在朗读：$name"
     }
+}
+
+/**
+ * 合成串行器（T8.8 真机铁证 2026-11-01）：系统 TTS 框架在 QUEUE_ADD 场景会连续下发多段
+ * 合成请求（连续试听/对比试听都靠它）。引擎侧必须**排队**而非互相取消，
+ * 否则第二段会掐断第一段，表现为「只出声第一段」。
+ */
+internal class BuiltinSynthQueue {
+    private val mutex = Mutex()
+
+    suspend fun <T> serialized(block: suspend () -> T): T = mutex.withLock { block() }
 }
 
 /**
@@ -48,7 +61,12 @@ internal object BuiltinNotificationText {
 class BuiltinTtsService : TextToSpeechService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var synthJob: Job? = null
+
+    /** 同一时刻只允许一段合成（引擎非线程安全 + 框架 QUEUE_ADD 会并发下发） */
+    private val synthQueue = BuiltinSynthQueue()
+
+    /** 在途合成任务（onStop/onDestroy 需一次性取消全部，而非只取消最后一段） */
+    private val activeSynthJobs = java.util.concurrent.CopyOnWriteArrayList<Job>()
     private var wakeLock: PowerManager.WakeLock? = null
     private var inForeground = false
     private val idleExit = Runnable {
@@ -144,63 +162,90 @@ class BuiltinTtsService : TextToSpeechService() {
         enterForeground()
         updateNotificationRole(roleName)
         acquireWakeLock()
-        synthJob?.cancel()
-        synthJob = scope.launch {
-            val audio = BuiltinTtsRuntime.synthesizeToPcm(
-                text = text.take(MAX_TEXT_CHARS),
-                voiceName = voiceName,
-                rate = rate,
-                requestGeneration = generation
-            )
-            if (audio == null || audio.pcm.isEmpty()) {
-                val reason = BuiltinTtsRuntime.stats().lastError.ifBlank { "离线语音包未就绪" }
-                AppLog.put("内置TTS合成失败：$reason")
-                runCatching { callback.error(TextToSpeech.ERROR) }
-                scheduleIdleExit()
-                return@launch
+        // 合成串行化（T8.8 真机铁证 2026-11-01）：系统框架在 QUEUE_ADD 场景会连续下发多段请求，
+        // 原实现「新请求取消上一段 job」会掐断前一段（连续试听/对比试听只出声第一段）。
+        // 改为排队串行：前一段完成后才开始下一段，与框架播放队列顺序一致。
+        val job = scope.launch {
+            try {
+                synthQueue.serialized {
+                    synthesize(text, voiceName, rate, roleName, generation, callback)
+                }
+            } finally {
+                activeSynthJobs.remove(coroutineContext[Job])
             }
-            val started = runCatching {
-                callback.start(
-                    audio.sampleRate,
-                    android.media.AudioFormat.ENCODING_PCM_16BIT,
-                    CHANNEL_MONO
-                )
-            }.getOrDefault(TextToSpeech.ERROR)
-            if (started != TextToSpeech.SUCCESS) {
-                scheduleIdleExit()
-                return@launch
-            }
-            // 按 ~200ms 分块回调，让系统播放器边收边播（降低首字延迟）
-            val bytesPerChunk = BuiltinTtsSynthesisMath.chunkBytes(audio.sampleRate)
-            var offset = 0
-            while (offset < audio.pcm.size) {
-                val length = minOf(bytesPerChunk, audio.pcm.size - offset)
-                val result = runCatching { callback.audioAvailable(audio.pcm, offset, length) }
-                    .getOrDefault(TextToSpeech.ERROR)
-                if (result != TextToSpeech.SUCCESS) break
-                offset += length
-            }
-            runCatching { callback.done() }
-            AppLog.putDebugWithTag(
-                AppLog.TAG_TTS_TRACE,
-                "builtin 合成完成 sr=${audio.sampleRate} pcm=${audio.pcm.size} bytes",
-                level = AppLog.Level.INFO
-            )
-            scheduleIdleExit()
         }
+        activeSynthJobs.add(job)
+    }
+
+    /** 单段合成 + 分块回传（必须由 [synthQueue] 串行调用，引擎非线程安全） */
+    private suspend fun synthesize(
+        text: String,
+        voiceName: String,
+        rate: Float,
+        roleName: String,
+        generation: Long,
+        callback: SynthesisCallback
+    ) {
+        val audio = BuiltinTtsRuntime.synthesizeToPcm(
+            text = text.take(MAX_TEXT_CHARS),
+            voiceName = voiceName,
+            rate = rate,
+            requestGeneration = generation
+        )
+        if (audio == null || audio.pcm.isEmpty()) {
+            val reason = BuiltinTtsRuntime.stats().lastError.ifBlank { "离线语音包未就绪" }
+            AppLog.put("内置TTS合成失败：$reason")
+            runCatching { callback.error(TextToSpeech.ERROR) }
+            scheduleIdleExit()
+            return
+        }
+        val started = runCatching {
+            callback.start(
+                audio.sampleRate,
+                android.media.AudioFormat.ENCODING_PCM_16BIT,
+                CHANNEL_MONO
+            )
+        }.getOrDefault(TextToSpeech.ERROR)
+        if (started != TextToSpeech.SUCCESS) {
+            scheduleIdleExit()
+            return
+        }
+        // 按 ~200ms 分块回调，让系统播放器边收边播（降低首字延迟）
+        val bytesPerChunk = BuiltinTtsSynthesisMath.chunkBytes(audio.sampleRate)
+        var offset = 0
+        while (offset < audio.pcm.size) {
+            val length = minOf(bytesPerChunk, audio.pcm.size - offset)
+            val result = runCatching { callback.audioAvailable(audio.pcm, offset, length) }
+                .getOrDefault(TextToSpeech.ERROR)
+            if (result != TextToSpeech.SUCCESS) break
+            offset += length
+        }
+        runCatching { callback.done() }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "builtin 合成完成 sr=${audio.sampleRate} pcm=${audio.pcm.size} bytes",
+            level = AppLog.Level.INFO
+        )
+        scheduleIdleExit()
     }
 
     override fun onStop() {
-        synthJob?.cancel()
+        cancelAllSynthesis()
         BuiltinTtsRuntime.bumpGeneration()
         scheduleIdleExit()
     }
 
     override fun onDestroy() {
-        synthJob?.cancel()
+        cancelAllSynthesis()
         releaseWakeLock()
         exitForeground()
         super.onDestroy()
+    }
+
+    /** 一次性取消所有在途合成（stop/flush 与销毁路径都必须清空，否则排队任务会继续出声） */
+    private fun cancelAllSynthesis() {
+        activeSynthJobs.forEach { it.cancel() }
+        activeSynthJobs.clear()
     }
 
     private fun createNotificationChannel() {

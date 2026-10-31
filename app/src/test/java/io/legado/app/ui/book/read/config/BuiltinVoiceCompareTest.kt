@@ -55,4 +55,17 @@ class BuiltinVoiceCompareTest {
         // 空白被剔除
         assertEquals("这是张三的声音，听听喜欢哪一个。", BuiltinVoiceCompare.sampleTextFor(" 张三 "))
     }
+
+    @Test
+    fun `对比计划两段各自带不同音色名`() {
+        // T8.8 真机铁证：原实现只排两段文本、从不切音色 ⇒ 两段同声（对比无意义）
+        val plan = BuiltinVoiceCompare.plan(
+            listOf(voice("a", "内置·男·少年"), voice("b", "内置·女·青年"))
+        )
+        assertEquals(2, plan?.size)
+        assertEquals("这是少年的声音，听听喜欢哪一个。", plan?.get(0)?.first)
+        assertEquals("a|内置·男·少年", plan?.get(0)?.second)
+        assertEquals("这是青年的声音，听听喜欢哪一个。", plan?.get(1)?.first)
+        assertEquals("b|内置·女·青年", plan?.get(1)?.second)
+    }
 }
