@@ -60,6 +60,16 @@ object CastSceneState {
     fun badgeOf(index: Int): String = ('A' + index.coerceIn(0, 25)).toString()
 
     /**
+     * 使用提示（纯函数可单测）：首次进本页的人不用去翻文档，
+     * 也顺带把"开听后怎么回来改"说清楚（页面内容偏短，空区靠它填得有意义）。
+     */
+    fun usageTips(): List<String> = listOf(
+        "普通朗读：用当前引擎的默认音色，不逐段换声",
+        "沉浸多角色：先识别角色，再按角色逐段换声",
+        "开听后想换方式：回阅读页侧拉菜单再进本页"
+    )
+
+    /**
      * @param engineReady 内置引擎就绪（模型 READY + 有音色）
      * @param characterCount 本书已识别角色数
      * @param assignedCount 已配声角色数

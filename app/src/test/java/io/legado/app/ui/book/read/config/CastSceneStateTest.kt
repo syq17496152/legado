@@ -109,4 +109,14 @@ class CastSceneStateTest {
         assertEquals("A", CastSceneState.badgeOf(-3))
         assertEquals("Z", CastSceneState.badgeOf(30))
     }
+
+    @Test
+    fun `使用提示三条覆盖三种卡与回入口`() {
+        val tips = CastSceneState.usageTips()
+        assertEquals(3, tips.size)
+        // 每条都要对应一个真实卡/入口，避免提示文案与页面选项脱节
+        assertTrue(tips[0].contains("普通朗读"))
+        assertTrue(tips[1].contains("沉浸多角色"))
+        assertTrue(tips[2].contains("侧拉菜单"))
+    }
 }

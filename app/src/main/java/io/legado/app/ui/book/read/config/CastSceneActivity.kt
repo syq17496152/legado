@@ -298,7 +298,27 @@ private fun CastSceneScreen(
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            // 状态条：用一条中性说明条，不再做第二块卡片抢注意力
+            // 使用提示：把首次使用要知道的三条说完，页面不至于下半屏全空
+            AppCard {
+                SectionTitle("使用提示")
+                CastSceneState.usageTips().forEach { tip ->
+                    Row(
+                        modifier = Modifier.padding(top = 6.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        StatusDot(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                            size = 6
+                        )
+                        Text(
+                            text = tip,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
             if (busy) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
