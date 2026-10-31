@@ -374,6 +374,11 @@ private fun VoicesPanel(
                 BuiltinVoiceFilter.summary(state.voices.size, filtered.size),
                 style = MaterialTheme.typography.bodySmall
             )
+            // T6.5：明确音色包的资产边界（内置只读，不进导出包）
+            Text(
+                BuiltinTtsUiSupport.voiceExportHint(),
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         if (state.voices.isEmpty()) {
             Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_empty))

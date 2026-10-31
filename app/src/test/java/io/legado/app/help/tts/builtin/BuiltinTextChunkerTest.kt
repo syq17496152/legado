@@ -3,6 +3,7 @@ package io.legado.app.help.tts.builtin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * 切分与停顿（AD-19 / T8.3）：拼回等于原文、短块合并、引导语粘合、停顿四档。
@@ -54,5 +55,44 @@ class BuiltinTextChunkerTest {
     fun `最后一块无停顿`() {
         val chunks = BuiltinTextChunker.split("甲。乙。")
         assertEquals(0, chunks.last().pauseMs)
+    }
+
+    @Test
+    fun `自定义切分规则文件忽略注释空行与坏正则 T8-3`() {
+        val file = File.createTempFile("split_rules", ".txt")
+        try {
+            file.writeText(
+                listOf(
+                    "# 说明：每行一条正则",
+                    "",
+                    "，",                 // 有效：按逗号切
+                    "(",                  // 非法正则 → 跳过
+                    "a".repeat(300)       // 超长 → 跳过
+                ).joinToString("\n")
+            )
+            val rules = BuiltinTextChunker.loadRules(file)
+            assertEquals(1, rules.size)
+            val chunks = BuiltinTextChunker.split(
+                "第一段内容足够长的句子，第二段同样足够长的句子。",
+                rules
+            )
+            assertEquals(2, chunks.size)
+            // Regex.split 会吞掉分隔符本身：逗号不留在块里
+            assertEquals("第一段内容足够长的句子", chunks.first().text)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `切分规则文件不存在时回落默认规则`() {
+        assertTrue(BuiltinTextChunker.loadRules(null).isEmpty())
+        assertTrue(BuiltinTextChunker.loadRules(File("不存在/split_rules.txt")).isEmpty())
+        // 无自定义规则 ⇒ 走默认句末切分（两块都够长，不会被短块合并成一块）
+        val chunks = BuiltinTextChunker.split(
+            "第一句话已经足够长到不需要合并了。第二句话也同样足够长到不需要合并。",
+            BuiltinTextChunker.loadRules(null)
+        )
+        assertEquals(2, chunks.size)
     }
 }

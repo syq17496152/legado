@@ -97,6 +97,9 @@ class BuiltinTtsPaths(
     /** filesDir/tts/state/engine.json（激活档位/上次错误，非偏好备份范围） */
     val engineStateFile: File = File(filesRoot, "tts/state/engine.json")
 
+    /** filesDir/tts/split_rules.txt（可选：自定义切分正则，按行、`#` 注释；AD-19⑦） */
+    val splitRulesFile: File = File(filesRoot, "tts/split_rules.txt")
+
     /** filesDir/legado_rules/（与 CloneTTS 生态互通：fixed_roles.json / book/<key>.json） */
     val rulesRoot: File = File(filesRoot, "legado_rules")
 

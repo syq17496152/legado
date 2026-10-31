@@ -160,4 +160,11 @@ class BuiltinTtsActivityTest {
         // 超长截断
         assertEquals(60, BuiltinTtsUiSupport.storyboardSnippet("字".repeat(100), 0, 100).length)
     }
+
+    @Test
+    fun `音色包导出边界说明写明内置只读 T6-5`() {
+        val hint = BuiltinTtsUiSupport.voiceExportHint()
+        assertTrue(hint.contains("内置 6 个只读"))
+        assertTrue(hint.contains("不随包分发"))
+    }
 }

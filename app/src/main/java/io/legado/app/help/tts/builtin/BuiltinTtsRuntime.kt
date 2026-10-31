@@ -92,6 +92,8 @@ object BuiltinTtsRuntime {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val referenceCache = HashMap<String, BuiltinVoiceRef>()
     private var idleReleaseJob: Job? = null
+    /** 自定义切分规则缓存：(文件 lastModified, 规则)；文件改动后自动重载（AD-19⑦） */
+    private var splitRulesCache: Pair<Long, List<Regex>>? = null
 
     @Volatile
     private var realtimeBusy = false
@@ -295,7 +297,7 @@ object BuiltinTtsRuntime {
                     }
                     if (requestGeneration != currentGeneration()) return@withLock null
                     val engineInstance = ensureEngine(profile) ?: return@withLock null
-                    val chunks = BuiltinTextChunker.split(normalizedText)
+                    val chunks = BuiltinTextChunker.split(normalizedText, splitRules())
                     if (chunks.isEmpty()) return@withLock null
                     val pcmOut = ByteArrayOutputStream()
                     var audioSamples = 0
@@ -539,6 +541,15 @@ object BuiltinTtsRuntime {
         val voiceKey = if (profile.requiresReference) voice?.voiceName.orEmpty() else "single"
         val normalized = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
         return BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalized, voice?.gainMultiplier ?: 1.0f)
+    }
+
+    private fun splitRules(): List<Regex> {
+        val file = paths.splitRulesFile
+        val stamp = file.takeIf { it.isFile }?.lastModified() ?: 0L
+        splitRulesCache?.takeIf { it.first == stamp }?.let { return it.second }
+        val rules = BuiltinTextChunker.loadRules(file.takeIf { it.isFile })
+        splitRulesCache = stamp to rules
+        return rules
     }
 
     private fun recordRtf(costMs: Long, audioSamples: Int, sampleRate: Int) {

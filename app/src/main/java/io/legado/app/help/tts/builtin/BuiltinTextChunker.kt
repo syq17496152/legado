@@ -1,5 +1,7 @@
 package io.legado.app.help.tts.builtin
 
+import java.io.File
+
 /**
  * 切分与停顿（AD-19，参数取自 CloneTTS 反编译实测，非拍脑袋）：
  * - 切分点：换行 / 句末标点 / 非英数环境下的英文句点
@@ -18,6 +20,28 @@ object BuiltinTextChunker {
     const val MIN_CHUNK_CHARS = 10
     const val MAX_CHARS_WITHOUT_QUOTE = 50
     const val MAX_CHARS_WITH_QUOTE = 100
+
+    /** 自定义规则上限（防用户文件写爆：条数与单条长度都限，避免 ReDoS） */
+    const val MAX_RULES = 20
+    const val MAX_RULE_LENGTH = 200
+
+    /**
+     * 读取自定义切分规则（AD-19⑦，CloneTTS 同口径）：按行解析，空行与 `#` 开头的行忽略，
+     * 非法正则/超长正则跳过（不让一条坏规则拖垮整章朗读）。
+     */
+    fun loadRules(file: File?): List<Regex> {
+        if (file == null || !file.isFile) return emptyList()
+        return runCatching {
+            file.readLines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .take(MAX_RULES)
+                .mapNotNull { line ->
+                    line.takeIf { it.length <= MAX_RULE_LENGTH }
+                        ?.let { runCatching { Regex(it) }.getOrNull() }
+                }
+        }.getOrDefault(emptyList())
+    }
 
     data class Chunk(
         val text: String,
