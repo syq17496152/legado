@@ -23,7 +23,12 @@ object BuiltinTtsDiagnostics {
         val memoryMb: Long = Long.MAX_VALUE,
         val lastRtf: Float = 0f,
         val lastError: String = "",
-        val requiresReference: Boolean = false
+        val requiresReference: Boolean = false,
+        /** 用户显式选的档位（id/标题）；与当前生效档不同即视为"已回落" */
+        val preferredId: String = "",
+        val preferredTitle: String = "",
+        val activeId: String = "",
+        val activeTitle: String = ""
     )
 
     const val LOW_MEMORY_MB = 400L
@@ -75,6 +80,19 @@ object BuiltinTtsDiagnostics {
         }
         if (input.lastError.isNotBlank()) {
             findings.add(Finding(Level.WARN, "last_error", "最近错误：${input.lastError}"))
+        }
+        // 首选档不可用但仍有可用档 ⇒ 已静默回落，必须让用户看见（否则"音质突然变差"无法解释）
+        if (input.preferredId.isNotBlank() && input.preferredId != input.activeId) {
+            val preferred = input.preferredTitle.ifBlank { input.preferredId }
+            val fallback = input.activeTitle.ifBlank { input.activeId }.ifBlank { "无" }
+            findings.add(
+                Finding(
+                    Level.WARN,
+                    "fallback",
+                    "首选档「$preferred」不可用，已回落到「$fallback」",
+                    "修复或重新导入首选档后点「设为当前档」"
+                )
+            )
         }
         if (findings.isEmpty()) {
             findings.add(Finding(Level.INFO, "ok", "运行正常"))

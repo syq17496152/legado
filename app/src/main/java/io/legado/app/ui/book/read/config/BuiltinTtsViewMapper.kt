@@ -62,9 +62,11 @@ object BuiltinTtsViewMapper {
         abiSupported: Boolean,
         memoryMb: Long,
         lastRtf: Float,
-        lastError: String
+        lastError: String,
+        preferredId: String = ""
     ): String {
         val active = profiles.firstOrNull { it.active } ?: profiles.firstOrNull()
+        val preferred = profiles.firstOrNull { it.id == preferredId }
         val findings = BuiltinTtsDiagnostics.evaluate(
             BuiltinTtsDiagnostics.Input(
                 state = active?.state ?: BuiltinEngineState.NONE,
@@ -72,7 +74,11 @@ object BuiltinTtsViewMapper {
                 memoryMb = memoryMb,
                 lastRtf = lastRtf,
                 lastError = lastError,
-                requiresReference = active?.id == "clone"
+                requiresReference = active?.id == "clone",
+                preferredId = preferredId.takeIf { preferred != null }.orEmpty(),
+                preferredTitle = preferred?.title.orEmpty(),
+                activeId = active?.id.orEmpty(),
+                activeTitle = active?.title.orEmpty()
             )
         )
         return BuiltinTtsDiagnostics.render(findings)

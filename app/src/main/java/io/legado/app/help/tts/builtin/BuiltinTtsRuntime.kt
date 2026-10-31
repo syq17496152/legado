@@ -164,6 +164,9 @@ object BuiltinTtsRuntime {
         return modelManager.profiles()
     }
 
+    /** 用户显式设置的档位 id（可能已损坏/未就绪；空 = 未设置）。供降级矩阵报告"已回落"。 */
+    fun preferredProfileId(): String = if (initialized) readActiveProfileId() else ""
+
     /** 当前激活档：显式设置 > READY 的 clone > READY 的 fast */
     fun activeProfile(): BuiltinModelProfile? {
         check(initialized) { "BuiltinTtsRuntime 未初始化" }

@@ -62,4 +62,36 @@ class BuiltinTtsDiagnosticsTest {
         assertTrue(text.contains("RTF 1.50") || text.contains("RTF 1.5"))
         assertTrue(text.contains("合成失败"))
     }
+
+    @Test
+    fun `首选档不可用回落时给出警告`() {
+        val findings = BuiltinTtsDiagnostics.evaluate(
+            BuiltinTtsDiagnostics.Input(
+                state = BuiltinEngineState.READY,
+                preferredId = "clone",
+                preferredTitle = "高质克隆档",
+                activeId = "fast",
+                activeTitle = "极速单声档"
+            )
+        )
+        assertEquals(1, findings.size)
+        val fallback = findings.first { it.code == "fallback" }
+        assertEquals(BuiltinTtsDiagnostics.Level.WARN, fallback.level)
+        assertTrue(BuiltinTtsDiagnostics.render(findings).contains("已回落到「极速单声档」"))
+    }
+
+    @Test
+    fun `首选档即当前档时不报回落`() {
+        val findings = BuiltinTtsDiagnostics.evaluate(
+            BuiltinTtsDiagnostics.Input(
+                state = BuiltinEngineState.READY,
+                preferredId = "fast",
+                preferredTitle = "极速单声档",
+                activeId = "fast",
+                activeTitle = "极速单声档"
+            )
+        )
+        assertEquals(1, findings.size)
+        assertEquals("ok", findings.first().code)
+    }
 }

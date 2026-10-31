@@ -57,4 +57,20 @@ class BuiltinTtsViewMapperTest {
         )
         assertEquals("[正常] 运行正常", text)
     }
+
+    @Test
+    fun `首选档损坏时提示已回落`() {
+        val text = BuiltinTtsViewMapper.findings(
+            profiles = listOf(
+                ProfileRow("fast", "极速单声档", BuiltinEngineState.READY, true, 24000),
+                ProfileRow("clone", "高质克隆档", BuiltinEngineState.CORRUPT, false, 24000)
+            ),
+            abiSupported = true,
+            memoryMb = 2000,
+            lastRtf = 0f,
+            lastError = "",
+            preferredId = "clone"
+        )
+        assertTrue(text.contains("[警告] 首选档「高质克隆档」不可用，已回落到「极速单声档」"))
+    }
 }

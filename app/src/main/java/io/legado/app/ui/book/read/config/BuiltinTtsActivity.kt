@@ -764,7 +764,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 memoryMb = runCatching { BuiltinTtsRuntime.availableMemoryMb() }
                     .getOrDefault(Long.MAX_VALUE),
                 lastRtf = stats.lastRtf,
-                lastError = stats.lastError
+                lastError = stats.lastError,
+                preferredId = runCatching { BuiltinTtsRuntime.preferredProfileId() }.getOrDefault("")
             )
         )
         // 角色卡是挂起查询（DAO），异步补进状态（分镜改绑弹窗 + 角色配音页用）
