@@ -171,7 +171,8 @@ internal object BuiltinTtsUiSupport {
             // 名称已写"男/女"或"少年/青年/老年"时不再重复（避免"男 · 男"这类冗余）
             if (genderLabel.isNotBlank() && !voice.displayName.contains(genderLabel)) add(genderLabel)
             if (ageLabel.isNotBlank() && !voice.displayName.contains(ageLabel)) add(ageLabel)
-            if (voice.refText.isNotEmpty()) add("稿${voice.refText.length}字")
+            // 可读性优先：「稿57字」这种压缩写法在列表里容易被读成乱码，改成完整词
+            if (voice.refText.isNotEmpty()) add("逐字稿 ${voice.refText.length} 字")
         }.joinToString(" · ")
     }
 }

@@ -188,7 +188,7 @@ class BuiltinTtsActivityTest {
             gender = "male",
             age = "youth"
         )
-        assertEquals("导入 · 池:青年 · 稿1字", BuiltinTtsUiSupport.voiceMetaText(imported))
+        assertEquals("导入 · 池:青年 · 逐字稿 1 字", BuiltinTtsUiSupport.voiceMetaText(imported))
         val preset = io.legado.app.help.tts.builtin.BuiltinVoice(
             id = "b6_m_teen",
             name = "内置·男·少年",

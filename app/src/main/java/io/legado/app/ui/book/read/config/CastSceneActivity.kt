@@ -18,10 +18,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,7 +41,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.help.book.characterBookKey
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.bgm.ReadAloudBgmPlayer
 import io.legado.app.help.readaloud.casting.BuiltinCastingSetup
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.TtsCastingStore
@@ -50,6 +55,7 @@ import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.showDialogFragment
@@ -73,6 +79,9 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
     )
     private var busy by mutableStateOf(false)
     private var message by mutableStateOf("")
+    /** T8.4 配乐开关：真实状态来自用户偏好（与朗读服务读同一处） */
+    private var bgmEnabled by mutableStateOf(AppConfig.aiReadAloudBgmEnabled)
+    private var bgmTrackCount by mutableStateOf(0)
 
     override val binding: ViewBinding by lazy {
         val view = ComposeView(this).apply {
@@ -83,7 +92,13 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                         snapshot = snapshot,
                         busy = busy,
                         message = message,
+                        bgmEnabled = bgmEnabled,
+                        bgmTrackCount = bgmTrackCount,
                         onSelect = ::selectCard,
+                        onToggleBgm = ::toggleBgm,
+                        onOpenVoices = { startActivity<BuiltinTtsActivity>() },
+                        onOpenBgm = { startActivity<ReadAloudBgmManageActivity>() },
+                        onOpenTemplates = { showDialogFragment(TtsCastingManageFragment.newInstance()) },
                         onPrimary = ::primaryAction
                     )
                 }
@@ -110,7 +125,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         val storyboardSegments: Int,
         val activeTemplateId: String?,
         val customName: String,
-        val hasBook: Boolean
+        val hasBook: Boolean,
+        val bgmTrackCount: Int
     )
 
     private suspend fun reloadState() {
@@ -125,6 +141,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             customName = facts.customName,
             hasBook = facts.hasBook
         )
+        bgmEnabled = AppConfig.aiReadAloudBgmEnabled
+        bgmTrackCount = facts.bgmTrackCount
     }
 
     private suspend fun loadFacts(): Facts {
@@ -154,6 +172,12 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                 runCatching { appDb.ttsCastingTemplateDao.get(id)?.name }.getOrNull()
             }
         }.orEmpty()
+        // T8.4：可用配乐数量（决定开关能否打开 / 摘要文案）
+        val bgmTrackCount = withContext(Dispatchers.IO) {
+            runCatching {
+                appDb.readAloudBgmDao.enabledTracksByType(ReadAloudBgmTrack.TYPE_BGM).size
+            }.getOrDefault(0)
+        }
         return Facts(
             engineReady = engineReady,
             characterCount = characters.size,
@@ -161,8 +185,31 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             storyboardSegments = storyboard,
             activeTemplateId = activeId,
             customName = customName,
-            hasBook = book != null
+            hasBook = book != null,
+            bgmTrackCount = bgmTrackCount
         )
+    }
+
+    /**
+     * T8.4 配乐开关：无可用配乐时不写偏好、直接引导去配乐库添加；
+     * 正在朗读时立即生效（开=起播、关=停播），避免"改了要等下次播放"。
+     */
+    private fun toggleBgm(enabled: Boolean) {
+        if (enabled && !CastSceneState.canEnableBgm(bgmTrackCount)) {
+            toastOnUi("配乐库还没有已启用的配乐，先添加一首")
+            startActivity<ReadAloudBgmManageActivity>()
+            return
+        }
+        AppConfig.aiReadAloudBgmEnabled = enabled
+        bgmEnabled = enabled
+        message = if (enabled) "已开启配乐：朗读时与语音混音" else "已关闭配乐"
+        if (BaseReadAloudService.isRun) {
+            if (enabled) {
+                ReadAloudBgmPlayer.start(applicationContext)
+            } else {
+                ReadAloudBgmPlayer.stop()
+            }
+        }
     }
 
     /** 选卡：自定义 → 模板管理；其余 → 幂等导入内置模板并激活对应模板 */
@@ -259,7 +306,13 @@ private fun CastSceneScreen(
     snapshot: SceneSnapshot,
     busy: Boolean,
     message: String,
+    bgmEnabled: Boolean,
+    bgmTrackCount: Int,
     onSelect: (String) -> Unit,
+    onToggleBgm: (Boolean) -> Unit,
+    onOpenVoices: () -> Unit,
+    onOpenBgm: () -> Unit,
+    onOpenTemplates: () -> Unit,
     onPrimary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -298,6 +351,20 @@ private fun CastSceneScreen(
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
+            // 本章准备度：把"角色/配声/分镜"三个真实数字摆出来，省得开书后才发现问题
+            AppCard {
+                SectionTitle("本章准备")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SceneStat("${snapshot.characterCount}", "识别角色", Modifier.weight(1f))
+                    SceneStat("${snapshot.assignedCount}", "已配音色", Modifier.weight(1f))
+                    SceneStat("${snapshot.storyboardSegments}", "本章分镜", Modifier.weight(1f))
+                }
+            }
             // 使用提示：把首次使用要知道的三条说完，页面不至于下半屏全空
             AppCard {
                 SectionTitle("使用提示")
@@ -317,6 +384,42 @@ private fun CastSceneScreen(
                             modifier = Modifier.padding(start = 8.dp)
                         )
                     }
+                }
+            }
+            // T8.4 配乐开关：卡 C 联动 BGM（开关打开且库里有可用配乐，朗读时才会真的混音）
+            AppCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "配 BGM",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = CastSceneState.bgmSummary(bgmEnabled, bgmTrackCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Switch(checked = bgmEnabled, onCheckedChange = onToggleBgm)
+                }
+            }
+            // 快捷设置：三个高频入口并排成胶囊，单行占位（避免卡片被底部按钮裁切）
+            AppCard {
+                SectionTitle("快捷设置")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AssistChip(onClick = onOpenVoices, label = { Text("音色库") })
+                    AssistChip(onClick = onOpenBgm, label = { Text("配乐库") })
+                    AssistChip(onClick = onOpenTemplates, label = { Text("选角模板") })
                 }
             }
             if (busy) {
@@ -363,6 +466,31 @@ private fun CastSceneScreen(
                 Text(snapshot.primaryLabel, style = MaterialTheme.typography.titleSmall)
             }
         }
+    }
+}
+
+/** 统计小格：数字 + 标签（本章准备度用，纯展示不承载逻辑） */
+@Composable
+private fun SceneStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp)
+        )
     }
 }
 

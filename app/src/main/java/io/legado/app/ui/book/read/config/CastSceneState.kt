@@ -25,7 +25,11 @@ data class SceneSnapshot(
     val primaryLabel: String,
     val primaryEnabled: Boolean,
     val engineReady: Boolean,
-    val selectedCard: String
+    val selectedCard: String,
+    /** 本章准备度三数字（页面顶部统计卡用，缺省 0 便于既有调用方不受影响） */
+    val characterCount: Int = 0,
+    val assignedCount: Int = 0,
+    val storyboardSegments: Int = 0
 )
 
 object CastSceneState {
@@ -68,6 +72,19 @@ object CastSceneState {
         "沉浸多角色：先识别角色，再按角色逐段换声",
         "开听后想换方式：回阅读页侧拉菜单再进本页"
     )
+
+    /**
+     * 场景卡配乐开关摘要（纯函数可单测）：关=未开启；开但配乐库为空=提示去添加；
+     * 开且有配乐=给出可用数量。文案与真实播放条件（开关开 + 有已启用配乐）保持一致。
+     */
+    fun bgmSummary(enabled: Boolean, trackCount: Int): String = when {
+        !enabled -> "未开启 · 打开后朗读时播放配乐"
+        trackCount <= 0 -> "已开启 · 暂无配乐，点此去添加"
+        else -> "已开启 · 可用配乐 $trackCount 首（与朗读混音）"
+    }
+
+    /** 打开配乐开关的前置条件：配乐库至少一首已启用配乐（否则引导去添加，不写开关） */
+    fun canEnableBgm(trackCount: Int): Boolean = trackCount > 0
 
     /**
      * @param engineReady 内置引擎就绪（模型 READY + 有音色）
@@ -126,7 +143,10 @@ object CastSceneState {
             primaryLabel = primaryLabel,
             primaryEnabled = hasBook,
             engineReady = engineReady,
-            selectedCard = selected
+            selectedCard = selected,
+            characterCount = characterCount,
+            assignedCount = assignedCount,
+            storyboardSegments = storyboardSegments
         )
     }
 }

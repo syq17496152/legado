@@ -119,4 +119,18 @@ class CastSceneStateTest {
         assertTrue(tips[1].contains("沉浸多角色"))
         assertTrue(tips[2].contains("侧拉菜单"))
     }
+
+    @Test
+    fun `配乐开关摘要三态与开关前置条件`() {
+        // 关：说明打开后会播放（不承诺已有配乐）
+        assertEquals("未开启 · 打开后朗读时播放配乐", CastSceneState.bgmSummary(false, 0))
+        assertEquals("未开启 · 打开后朗读时播放配乐", CastSceneState.bgmSummary(false, 3))
+        // 开但没有配乐：明确提示去添加（与真实播放条件一致：无配乐=不出声）
+        assertEquals("已开启 · 暂无配乐，点此去添加", CastSceneState.bgmSummary(true, 0))
+        // 开且有配乐：给出可用数量，便于判断是否真的会响
+        assertEquals("已开启 · 可用配乐 3 首（与朗读混音）", CastSceneState.bgmSummary(true, 3))
+        // 前置条件：无已启用配乐时不允许打开开关（避免"开了却没声音"）
+        assertFalse(CastSceneState.canEnableBgm(0))
+        assertTrue(CastSceneState.canEnableBgm(1))
+    }
 }

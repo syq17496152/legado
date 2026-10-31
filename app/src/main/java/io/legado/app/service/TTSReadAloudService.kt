@@ -15,6 +15,7 @@ import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudRoleBadge
+import io.legado.app.help.readaloud.bgm.ReadAloudBgmPlayer
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.CastingProsody
 import io.legado.app.help.readaloud.casting.CastingTag
@@ -143,6 +144,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         removeWatchdog()
         clearTTS()
         ReadAloudRoleBadge.clear()
+        ReadAloudBgmPlayer.stop()
     }
 
     private fun currentEngineLabel(): String {
@@ -287,6 +289,8 @@ class TTSReadAloudService : BaseReadAloudService() {
         }
         super.play()
         MediaHelp.playSilentSound(this@TTSReadAloudService)
+        // T8.4：配乐开关打开时与朗读并行混音（关掉即无声；无可用配乐则自动跳过）
+        ReadAloudBgmPlayer.start(this)
         speakJob?.cancel()
         // 多人模式：逐段 onDone 驱动（AD-09 期1）；否则原整章预入队路径
         speakJob = execute {
@@ -621,6 +625,7 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     override fun playStop() {
         ReadAloudRoleBadge.clear()
+        ReadAloudBgmPlayer.stop()
         textToSpeech?.runCatching {
             stop()
         }
@@ -646,6 +651,7 @@ class TTSReadAloudService : BaseReadAloudService() {
      */
     override fun pauseReadAloud(abandonFocus: Boolean) {
         super.pauseReadAloud(abandonFocus)
+        ReadAloudBgmPlayer.pause()
         speakJob?.cancel()
         textToSpeech?.runCatching {
             stop()
