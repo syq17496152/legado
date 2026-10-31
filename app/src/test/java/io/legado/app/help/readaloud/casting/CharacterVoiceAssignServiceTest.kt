@@ -113,6 +113,24 @@ class CharacterVoiceAssignServiceTest {
     }
 
     @Test
+    fun `主角关键词优先挑音色 T8-13`() {
+        // 旁白先占用 narration 男声；剩下"男主"角色应先挑到匹配的男声，而不是让 roleLevel 更高的配角先拿
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(
+                character(1, "张三", BookCharacter.GENDER_MALE, BookCharacter.ROLE_MAIN),
+                character(2, "男主·陆沉", BookCharacter.GENDER_MALE)
+            ),
+            voices = voices
+        )
+        val byName = result.assignments.associateBy { it.characterName }
+        assertEquals(listOf("男主·陆沉", "张三"), result.assignments.map { it.characterName })
+        assertTrue(byName.getValue("男主·陆沉").voiceName.contains("男"))
+        assertFalse(byName.getValue("男主·陆沉").conflict)
+        // 撞音避让：配角不得复用主角刚拿到的音色
+        assertTrue(byName.getValue("张三").voiceName != byName.getValue("男主·陆沉").voiceName)
+    }
+
+    @Test
     fun `角色配音行是否已配声只看音色字段`() {
         assertTrue(CharacterVoiceAssignService.RoleVoiceRow(1, "张三", "male", 0, "a|男", "男").configured)
         assertTrue(CharacterVoiceAssignService.RoleVoiceRow(2, "李四", "male", 0, "", "旁白男").configured)

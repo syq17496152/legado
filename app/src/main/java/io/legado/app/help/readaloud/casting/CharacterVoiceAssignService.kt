@@ -51,8 +51,11 @@ object CharacterVoiceAssignService {
         val used = HashSet<String>()
         val assignments = mutableListOf<Assignment>()
         val narrator = pickNarrator(voices, narratorHint)?.also { used.add(it.voiceName) }
+        // 主角优先（T8.13）：名字/身份含"主角/男主/女主"的角色先挑音色，避免被配角先占走最佳匹配
         val ordered = characters.sortedWith(
-            compareByDescending<BookCharacter> { it.roleLevel }.thenBy { it.id }
+            compareByDescending<BookCharacter> { if (isLeadLike(it)) 1 else 0 }
+                .thenByDescending { it.roleLevel }
+                .thenBy { it.id }
         )
         ordered.forEach { character ->
             // ① 固定绑定优先（与 CloneTTS fixed_roles.json 同 schema，用户手改过就必须尊重）
@@ -250,6 +253,12 @@ object CharacterVoiceAssignService {
         }.getOrDefault(false)
     }
 
+    /** 名字/身份里的主角信号（T8.13）：用于给主角更高挑音优先级，不改变最终打分规则 */
+    private fun isLeadLike(character: BookCharacter): Boolean {
+        val text = character.name + character.identity
+        return LEAD_KEYWORDS.any { text.contains(it) }
+    }
+
     private fun pickNarrator(voices: List<BuiltinVoice>, hint: String): BuiltinVoice? {
         voices.firstOrNull { it.voiceName == hint || it.name == hint || it.id == hint }?.let { return it }
         return voices.firstOrNull { it.tags.contains("narration") }
@@ -294,4 +303,6 @@ object CharacterVoiceAssignService {
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) parts.add("内置")
         return parts.joinToString("·").ifBlank { "默认分配" }
     }
+
+    private val LEAD_KEYWORDS = listOf("主角", "男主", "女主")
 }
