@@ -32,7 +32,15 @@ object BuiltinTtsViewMapper {
                 ),
                 confidence = segment.confidence,
                 narrator = segment.roleType == "narrator",
-                recognized = segment.recognized
+                recognized = segment.recognized,
+                characterName = segment.characterName,
+                // 段级试听要念真实原文（展示片段被截断过，直接念会听不出上下文）
+                speechText = runCatching {
+                    paragraph.substring(
+                        segment.start.coerceIn(0, paragraph.length),
+                        segment.end.coerceIn(segment.start, paragraph.length)
+                    )
+                }.getOrDefault(paragraph)
             )
         }
     }

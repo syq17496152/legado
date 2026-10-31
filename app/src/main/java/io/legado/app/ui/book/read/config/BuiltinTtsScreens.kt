@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -90,7 +95,11 @@ data class StoryboardRow(
     val roleLabel: String,
     val confidence: Double,
     val narrator: Boolean,
-    val recognized: Boolean
+    val recognized: Boolean,
+    /** 角色名（段级试听据此解析该角色音色；旁白/未识别为空） */
+    val characterName: String = "",
+    /** 该段真实原文（试听念它，而不是被截断的展示片段） */
+    val speechText: String = ""
 )
 
 data class RolePickRow(val id: Long, val name: String, val gender: String, val roleLevel: Int)
@@ -113,6 +122,8 @@ sealed interface PageAction {
     data object ExportVoices : PageAction
     /** T8.5：导出本章音频（WAV，逐段按分镜换声） */
     data object ExportChapterAudio : PageAction
+    /** T5.5 段级试听：念该段真实文本（voiceName 由该段角色音色解析，空=引擎默认） */
+    data class PreviewSegment(val text: String, val voiceName: String) : PageAction
     data object AssignCasting : PageAction
     data object IdentifyRoles : PageAction
     data object EnableMultiRole : PageAction
@@ -401,6 +412,24 @@ private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageActio
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 2,
                                 modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        // T5.5 段级试听：按该段角色音色念该段真实文本（改绑后立刻能听差异）
+                        val previewVoice = BuiltinTtsUiSupport.segmentVoiceName(
+                            characterName = row.characterName,
+                            roleRows = state.roleRows,
+                            fallbackVoiceName = state.voices.firstOrNull()?.voiceName.orEmpty()
+                        )
+                        IconButton(
+                            onClick = {
+                                onAction(PageAction.PreviewSegment(row.speechText, previewVoice))
+                            }
+                        ) {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = "试听该段",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                         TextButton(onClick = { selected = row }) { Text("改角色") }

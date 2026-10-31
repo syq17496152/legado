@@ -1,5 +1,6 @@
 ﻿package io.legado.app.ui.book.read.config
 
+import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import java.util.Locale
@@ -145,6 +146,20 @@ internal object BuiltinTtsUiSupport {
         val percent = ((used * 100) / limit).coerceIn(0, 999)
         val base = "缓存 ${formatBytes(used)} / ${formatBytes(limit)}（$percent%）"
         return if (used > limit) "$base · 已超限，按最近最少使用清理" else base
+    }
+
+    /**
+     * 分镜段试听音色（T5.5，纯函数可单测）：角色名命中配音行 ⇒ 用该角色音色；
+     * 未命中（旁白/未识别/该角色未配声）⇒ 回落第一个可用音色（保证"点了就有声"）。
+     */
+    fun segmentVoiceName(
+        characterName: String,
+        roleRows: List<CharacterVoiceAssignService.RoleVoiceRow>,
+        fallbackVoiceName: String
+    ): String {
+        if (characterName.isBlank()) return fallbackVoiceName
+        val matched = roleRows.firstOrNull { it.name == characterName }?.voiceName.orEmpty()
+        return matched.ifBlank { fallbackVoiceName }
     }
 
     /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别/年龄（中文，名称已含则不重复）+ 逐字稿长度 */

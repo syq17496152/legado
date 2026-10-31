@@ -270,8 +270,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     }
 
     override fun onDestroy() {
-        runCatching { recordController.cancel() }
-        runCatching { previewTts?.stop(); previewTts?.shutdown() }
+        runCatching { recordController.cancel(); previewTts?.stop(); previewTts?.shutdown(); BuiltinSegmentPreview.shutdown() }
         previewTts = null
         super.onDestroy()
     }
@@ -365,6 +364,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     reload()
                 }
                 is PageAction.PreviewVoice -> previewVoice(action.voiceName)
+                is PageAction.PreviewSegment -> BuiltinSegmentPreview.speak(this, action.text, action.voiceName)
                 PageAction.PreviewAllVoices -> previewAllVoices()
                 is PageAction.UpdateRecordText ->
                     pageState.value = pageState.value.copy(recordText = action.text)
