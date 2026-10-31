@@ -244,14 +244,22 @@ if "!APK_FOUND!"=="1" (
 if "!APK_FOUND!"=="1" (
     set "PY_EXE=%PROJECT_DIR%\ai_tests\venv\Scripts\python.exe"
     if exist "!PY_EXE!" (
+        set "MANIFEST_COUNT=0"
+        set "MANIFEST_SKIP=0"
         for %%f in ("%DIST_DIR%\*.apk") do (
-            "!PY_EXE!" "%PROJECT_DIR%\ai_tests\scripts\delivery_evidence.py" --write-manifest --apk "%%f" --variant "%BUILD_TYPE%"
-            if errorlevel 1 (
-                echo   [WARN] delivery manifest FAILED: %%~nxf
+            if exist "%%~f.build.json" (
+                set /a MANIFEST_SKIP+=1
             ) else (
-                echo   [MANIFEST] %%~nxf.build.json
+                "!PY_EXE!" "%PROJECT_DIR%\ai_tests\scripts\delivery_evidence.py" --write-manifest --apk "%%f" --variant "%BUILD_TYPE%"
+                if errorlevel 1 (
+                    echo   [WARN] delivery manifest FAILED: %%~nxf
+                ) else (
+                    set /a MANIFEST_COUNT+=1
+                    echo   [MANIFEST] %%~nxf.build.json
+                )
             )
         )
+        echo   [MANIFEST] new=!MANIFEST_COUNT! skipped=!MANIFEST_SKIP! ^(sidecar exists^)
     ) else (
         echo   [WARN] ai_tests venv python not found, delivery manifest skipped
     )

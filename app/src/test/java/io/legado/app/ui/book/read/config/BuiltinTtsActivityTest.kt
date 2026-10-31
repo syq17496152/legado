@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.help.tts.builtin.BuiltinEngineState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -199,5 +200,54 @@ class BuiltinTtsActivityTest {
             readOnly = true
         )
         assertTrue(BuiltinTtsUiSupport.voiceMetaText(preset).startsWith("内置"))
+    }
+
+    // ===== 第三轮视觉重做（卡片化/状态胶囊）新增纯文案口径 =====
+
+    @Test
+    fun `语音包档位标题按 id 区分两档`() {
+        assertEquals("极速单声档", BuiltinTtsUiSupport.profileTitle("fast"))
+        // 非 fast 一律按高质量克隆档（导入的 ZipVoice/vocos 都落这一档）
+        assertEquals("高质量克隆档", BuiltinTtsUiSupport.profileTitle("clone"))
+        assertEquals("高质量克隆档", BuiltinTtsUiSupport.profileTitle("unknown"))
+    }
+
+    @Test
+    fun `语音包状态胶囊为短标签且区分五态`() {
+        assertEquals("已就绪", BuiltinTtsUiSupport.profileStateText(BuiltinEngineState.READY))
+        assertEquals("下载中", BuiltinTtsUiSupport.profileStateText(BuiltinEngineState.DOWNLOADING))
+        assertEquals("已损坏", BuiltinTtsUiSupport.profileStateText(BuiltinEngineState.CORRUPT))
+        assertEquals("内存不足", BuiltinTtsUiSupport.profileStateText(BuiltinEngineState.LOW_MEM))
+        assertEquals("未下载", BuiltinTtsUiSupport.profileStateText(BuiltinEngineState.NONE))
+    }
+
+    @Test
+    fun `语音包副文案含采样率且标明是否当前档`() {
+        assertEquals("24000 Hz · 朗读走这一档", BuiltinTtsUiSupport.profileSubtitle(24000, active = true))
+        assertEquals("22050 Hz · 可切换为当前档", BuiltinTtsUiSupport.profileSubtitle(22050, active = false))
+        // 未取到采样率时不显示 "0 Hz" 这类噪声
+        assertEquals("可切换为当前档", BuiltinTtsUiSupport.profileSubtitle(0, active = false))
+    }
+
+    @Test
+    fun `就绪胶囊两态文案`() {
+        assertEquals("离线就绪", BuiltinTtsUiSupport.readyPill(true))
+        assertEquals("语音包未就绪", BuiltinTtsUiSupport.readyPill(false))
+    }
+
+    @Test
+    fun `音色头像首字与空白兜底`() {
+        assertEquals("张", BuiltinTtsUiSupport.voiceInitial("张三"))
+        // 首尾空格不影响取字
+        assertEquals("内", BuiltinTtsUiSupport.voiceInitial("  内置·男·青年"))
+        assertEquals("?", BuiltinTtsUiSupport.voiceInitial("   "))
+        assertEquals("?", BuiltinTtsUiSupport.voiceInitial(""))
+    }
+
+    @Test
+    fun `RTF 未测过显示破折号`() {
+        assertEquals("—", BuiltinTtsUiSupport.rtfText(0f))
+        assertEquals("1.22", BuiltinTtsUiSupport.rtfText(1.22f))
+        assertEquals("5.68", BuiltinTtsUiSupport.rtfText(5.682f))
     }
 }

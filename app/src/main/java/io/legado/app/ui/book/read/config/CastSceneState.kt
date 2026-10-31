@@ -56,6 +56,9 @@ object CastSceneState {
         else -> CARD_CUSTOM
     }
 
+    /** 卡序号 → 视觉圆标（A/B/C/D，纯函数可单测）：窄屏两列网格靠它快速指认 */
+    fun badgeOf(index: Int): String = ('A' + index.coerceIn(0, 25)).toString()
+
     /**
      * @param engineReady 内置引擎就绪（模型 READY + 有音色）
      * @param characterCount 本书已识别角色数

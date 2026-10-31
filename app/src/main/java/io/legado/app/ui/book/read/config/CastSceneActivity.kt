@@ -1,13 +1,12 @@
 package io.legado.app.ui.book.read.config
 
 import android.view.View
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,11 +14,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,9 +29,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
@@ -260,89 +262,136 @@ private fun CastSceneScreen(
     onSelect: (String) -> Unit,
     onPrimary: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("听书场景卡", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Text("选一种演播方式，一次点开就能听", style = MaterialTheme.typography.bodySmall)
-        snapshot.cards.forEach { card ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelect(card.id) },
-                border = if (card.selected) {
-                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                } else {
-                    BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
-                },
-                colors = if (card.selected) {
-                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                } else {
-                    CardDefaults.cardColors()
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ScreenHeader(
+                title = "听书场景卡",
+                subtitle = "选一种演播方式，一次点开就能听",
+                trailing = {
+                    StatusPill(
+                        text = if (snapshot.engineReady) "离线就绪" else "未就绪",
+                        tone = if (snapshot.engineReady) StatusTone.POSITIVE else StatusTone.WARNING
+                    )
                 }
-            ) {
+            )
+            // 两列网格：四卡一屏可见，窄屏也不用来回滚动找选项
+            snapshot.cards.chunked(2).forEach { pair ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            ('A' + snapshot.cards.indexOf(card)).toString(),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
+                    pair.forEach { card ->
+                        SceneCard(
+                            card = card,
+                            badge = CastSceneState.badgeOf(snapshot.cards.indexOf(card)),
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSelect(card.id) }
                         )
                     }
-                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text(card.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(card.subtitle, style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (card.recommended) {
-                        Text(
-                            "推荐",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    if (card.selected) {
-                        Text(
-                            "已选",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
+            // 状态条：用一条中性说明条，不再做第二块卡片抢注意力
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusDot(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), size = 7)
+                Text(
+                    text = snapshot.statusLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            if (busy) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            if (message.isNotBlank()) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(Modifier.height(8.dp))
         }
-        Text(snapshot.statusLine, style = MaterialTheme.typography.bodySmall)
-        if (busy) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        // 主按钮固定底部：选卡与开听是两个动作，按钮不能随着卡片滚出屏幕
+        Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {
+            Button(
+                onClick = onPrimary,
+                enabled = snapshot.primaryEnabled && !busy,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(snapshot.primaryLabel, style = MaterialTheme.typography.titleSmall)
+            }
         }
-        Button(
-            onClick = onPrimary,
-            enabled = snapshot.primaryEnabled && !busy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-        ) {
-            Text(snapshot.primaryLabel)
+    }
+}
+
+/** 单张场景卡：A/B/C/D 圆标 + 标题 + 两行副文案；选中显示对勾，推荐显示胶囊 */
+@Composable
+private fun SceneCard(
+    card: SceneCardRow,
+    badge: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    AppCard(modifier = modifier, selected = card.selected, onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            when {
+                card.selected -> Icon(
+                    Icons.Filled.Check,
+                    contentDescription = "已选",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                card.recommended -> StatusPill("推荐", StatusTone.POSITIVE)
+            }
         }
-        if (message.isNotBlank()) {
-            Text(message, style = MaterialTheme.typography.bodySmall)
-        }
+        Text(
+            text = card.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+        Text(
+            text = card.subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            minLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
     }
 }

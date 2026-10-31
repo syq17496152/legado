@@ -1,5 +1,6 @@
 ﻿package io.legado.app.ui.book.read.config
 
+import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import java.util.Locale
 
@@ -89,6 +90,38 @@ internal object BuiltinTtsUiSupport {
 
     /** 管理页副标题（纯函数可单测）：一眼说明这套引擎的定位 */
     fun engineSubtitle(): String = "离线 · 断网可用 · 多角色逐段换声"
+
+    /** 档位标题（纯函数可单测）：fast/clone 两档的产品化叫法 */
+    fun profileTitle(profileId: String): String =
+        if (profileId == "fast") "极速单声档" else "高质量克隆档"
+
+    /** 档位状态短标签（纯函数可单测）：给状态胶囊用，不堆 Hz/体积等技术细节 */
+    fun profileStateText(state: BuiltinEngineState): String = when (state) {
+        BuiltinEngineState.READY -> "已就绪"
+        BuiltinEngineState.DOWNLOADING -> "下载中"
+        BuiltinEngineState.CORRUPT -> "已损坏"
+        BuiltinEngineState.LOW_MEM -> "内存不足"
+        BuiltinEngineState.NONE -> "未下载"
+    }
+
+    /** 档位副文案（纯函数可单测）：采样率 + 当前是否走这一档 */
+    fun profileSubtitle(sampleRate: Int, active: Boolean): String {
+        val rate = if (sampleRate > 0) "$sampleRate Hz · " else ""
+        return rate + if (active) "朗读走这一档" else "可切换为当前档"
+    }
+
+    /** 首页就绪胶囊（纯函数可单测）：语音包齐备与否一眼可见 */
+    fun readyPill(ready: Boolean): String = if (ready) "离线就绪" else "语音包未就绪"
+
+    /** 音色头像首字（纯函数可单测）：空白名回落 "?"，避免空圆 */
+    fun voiceInitial(name: String): String {
+        val trimmed = name.trim()
+        return if (trimmed.isEmpty()) "?" else trimmed.substring(0, 1)
+    }
+
+    /** RTF 展示（纯函数可单测）：未测过显示破折号，不显示 0.00 误导 */
+    fun rtfText(rtf: Float): String =
+        if (rtf <= 0f) "—" else String.format(Locale.US, "%.2f", rtf)
 
     /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别/年龄（中文，名称已含则不重复）+ 逐字稿长度 */
     fun voiceMetaText(voice: BuiltinVoice): String {

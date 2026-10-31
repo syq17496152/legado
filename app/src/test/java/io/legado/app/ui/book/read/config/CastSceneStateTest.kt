@@ -97,4 +97,16 @@ class CastSceneStateTest {
         assertEquals("请先打开一本书", snapshot.primaryLabel)
         assertTrue(snapshot.statusLine.contains("请先打开一本书"))
     }
+
+    @Test
+    fun `卡圆标按序号 ABCD 且越界安全`() {
+        // 两列网格用 A/B/C/D 指认四卡（第三轮视觉重做）
+        assertEquals("A", CastSceneState.badgeOf(0))
+        assertEquals("B", CastSceneState.badgeOf(1))
+        assertEquals("C", CastSceneState.badgeOf(2))
+        assertEquals("D", CastSceneState.badgeOf(3))
+        // 越界不抛异常（夹紧到 0..25）
+        assertEquals("A", CastSceneState.badgeOf(-3))
+        assertEquals("Z", CastSceneState.badgeOf(30))
+    }
 }
