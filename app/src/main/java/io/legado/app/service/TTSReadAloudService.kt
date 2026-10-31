@@ -421,6 +421,8 @@ class TTSReadAloudService : BaseReadAloudService() {
         // AD-09 钩子①：章开始准备离线角色归因（缓存优先；失败不阻断播放）
         val builtinActive = BuiltinTtsRuntime.isReady() &&
                 BuiltinTtsRuntime.isActiveEngine(this, ReadAloud.currentRoute.engineValue)
+        // T3.1/T3.3 量化埋点：新一轮朗读重置段间隔计时与首段预热标记
+        ReadAloudTrace.reset()
         val chapterIndex = textChapter.chapter.index
         if (builtinActive) {
             runCatching {
@@ -535,17 +537,33 @@ class TTSReadAloudService : BaseReadAloudService() {
                     voiceMiss = voiceRef == null || voiceRef.voiceId.isBlank()
                 )
                 // TtsTrace 真机联调：逐段合成证据（分段来源 tag/声源/文本长度）
-                AppLog.putDebugWithTag(
-                    AppLog.TAG_TTS_TRACE,
-                    "multiRole 段 p=$p off=${segment.offsetInParagraph} len=${segment.length} tag=${segment.tag} 声源=${sourceRoute.engineType}:${sourceRoute.engineValue}:${voiceRef?.displayName ?: "-"} prosody=${ruleProsody.rate}/${ruleProsody.pitch}/${ruleProsody.volume} utteranceId=$utteranceId",
-                    level = AppLog.Level.INFO
+                ReadAloudTrace.segment(
+                    p = p,
+                    offset = segment.offsetInParagraph,
+                    length = segment.length,
+                    tag = segment.tag.toString(),
+                    sourceRoute = sourceRoute,
+                    voiceDisplayName = voiceRef?.displayName,
+                    prosody = ruleProsody,
+                    utteranceId = utteranceId
                 )
+                // T3.1：起播前预热首段（首段没有"上一段"可预取）；命中缓存后首段起播不再等合成
+                if (ReadAloudTrace.needsWarm(builtinActive)) {
+                    runCatching {
+                        BuiltinTtsRuntime.prefetch(
+                            speechText, voiceRef?.voiceId.orEmpty(), (AppConfig.ttsSpeechRate + 5) / 10f
+                        )
+                    }
+                    ReadAloudTrace.markWarmed()
+                }
+                val gapStart = ReadAloudTrace.begin()
                 val completed = source.utterance(
                     speechText,
                     voiceRef,
                     ruleProsody,
                     utteranceId
                 )
+                ReadAloudTrace.end(gapStart, utteranceId)
                 if (!completed) {
                     // onStop（pause/stop/seek 已接管状态），静默退出循环
                     AppLog.putDebugWithTag(
@@ -556,36 +574,17 @@ class TTSReadAloudService : BaseReadAloudService() {
                     return
                 }
                 // AD-09 钩子②：下一段预取（内置引擎激活时；静默失败，不拖慢当前句）
-                if (builtinActive) {
-                    val nextSegment = segments.getOrNull(segIndex + 1)
-                    if (nextSegment != null) {
-                        val nextRaw = paragraph.substring(
-                            nextSegment.offsetInParagraph,
-                            nextSegment.offsetInParagraph + nextSegment.length
-                        )
-                        val nextSpeech = if (nextSegment.tag != CastingTag.NARRATION) {
-                            TtsTagSplitter.stripQuotesForSpeech(nextRaw)
-                        } else nextRaw
-                        if (nextSpeech.isNotBlank()) {
-                            val nextHit = OfflineRoleResolver.lookup(
-                                roleBookKey, chapterIndex, p,
-                                nextSegment.offsetInParagraph, nextSegment.length
-                            )
-                            val nextTag = nextHit?.let { CastingTag.AI_PREFIX + it.characterName }
-                                ?: nextSegment.tag
-                            val nextVoice = runCatching {
-                                TtsCastingStore.resolveSourceForTag(
-                                    roleBookKey, nextTag, ruleSet, nextHit?.characterId ?: 0L
-                                )
-                            }.getOrNull()?.toneID.orEmpty()
-                                // 与主循环同一兜底口径：无 toneID 的段预取也必须用旁白/首音，否则缓存必然不命中
-                                .ifBlank { fallbackVoiceRef?.voiceId.orEmpty() }
-                            BuiltinTtsRuntime.prefetchAsync(
-                                nextSpeech, nextVoice, (AppConfig.ttsSpeechRate + 5) / 10f
-                            )
-                        }
-                    }
-                }
+                ReadAloudPrefetch.prefetchNext(
+                    builtinActive = builtinActive,
+                    paragraph = paragraph,
+                    segments = segments,
+                    segIndex = segIndex,
+                    roleBookKey = roleBookKey,
+                    chapterIndex = chapterIndex,
+                    paragraphIndex = p,
+                    ruleSet = ruleSet,
+                    fallbackVoiceRef = fallbackVoiceRef
+                )
                 readAloudNumber += text.length
                 // 翻页判定（对齐原 onStart/onRangeStart 语义）
                 textChapter?.let {
