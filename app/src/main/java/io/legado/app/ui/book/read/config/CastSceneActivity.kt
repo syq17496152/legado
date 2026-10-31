@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -258,8 +259,8 @@ private fun CastSceneScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("听书场景卡", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Text("选一种演播方式，一次点开就能听", style = MaterialTheme.typography.bodySmall)
@@ -282,15 +283,28 @@ private fun CastSceneScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(card.title, fontWeight = FontWeight.SemiBold)
+                        Text(card.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(card.subtitle, style = MaterialTheme.typography.bodySmall)
                     }
                     if (card.recommended) {
-                        Text("推荐", color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            "推荐",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (card.selected) {
+                        Text(
+                            "已选",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
                     }
                 }
             }
@@ -302,7 +316,9 @@ private fun CastSceneScreen(
         Button(
             onClick = onPrimary,
             enabled = snapshot.primaryEnabled && !busy,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
         ) {
             Text(snapshot.primaryLabel)
         }

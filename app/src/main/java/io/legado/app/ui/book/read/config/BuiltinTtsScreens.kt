@@ -1,5 +1,6 @@
 ﻿package io.legado.app.ui.book.read.config
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -147,15 +148,24 @@ internal fun BuiltinTtsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp)
     ) {
+        Spacer(Modifier.height(16.dp))
         Text(
             text = androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = BuiltinTtsUiSupport.engineSubtitle(),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             PageTab.entries.forEach { item ->
                 FilterChip(
                     selected = tab == item,
@@ -170,7 +180,12 @@ internal fun BuiltinTtsScreen(
         }
         if (state.message.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(state.message, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = state.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
         }
         Spacer(Modifier.height(12.dp))
         when (tab) {
@@ -189,28 +204,53 @@ private fun EnginePanel(
     onPickModel: (String) -> Unit,
     onAction: (PageAction) -> Unit
 ) {
-    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+    Column(
+        modifier = Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("语音包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         state.profiles.forEach { profile ->
-            Card(modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = (if (profile.id == "fast") "极速单声档" else "高质量克隆档") +
-                                (if (profile.active) " · 当前" else ""),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = when (profile.state) {
-                            BuiltinEngineState.READY -> "已就绪（${profile.sampleRate}Hz）"
-                            BuiltinEngineState.CORRUPT -> "已损坏（请重新下载/导入）"
-                            BuiltinEngineState.DOWNLOADING -> "下载中"
-                            BuiltinEngineState.LOW_MEM -> "内存不足"
-                            BuiltinEngineState.NONE -> "未下载"
-                        },
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(6.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = if (profile.id == "fast") "极速单声档" else "高质量克隆档",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = when (profile.state) {
+                                    BuiltinEngineState.READY -> "已就绪 · ${profile.sampleRate}Hz"
+                                    BuiltinEngineState.CORRUPT -> "已损坏，请重新下载或导入"
+                                    BuiltinEngineState.DOWNLOADING -> "下载中"
+                                    BuiltinEngineState.LOW_MEM -> "内存不足"
+                                    BuiltinEngineState.NONE -> "未下载"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = when (profile.state) {
+                                    BuiltinEngineState.CORRUPT, BuiltinEngineState.LOW_MEM ->
+                                        MaterialTheme.colorScheme.error
+                                    BuiltinEngineState.READY -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+                        if (profile.active) {
+                            Text(
+                                "当前",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (profile.state != BuiltinEngineState.READY) {
                             Button(onClick = { onAction(PageAction.DownloadModel(profile.id)) }) {
@@ -219,10 +259,14 @@ private fun EnginePanel(
                             OutlinedButton(onClick = { onPickModel(profile.id) }) {
                                 Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_import))
                             }
-                        } else {
+                        } else if (!profile.active) {
                             OutlinedButton(onClick = { onAction(PageAction.ActivateProfile(profile.id)) }) {
                                 Text("设为当前档")
                             }
+                            TextButton(onClick = { onAction(PageAction.DeleteModel(profile.id)) }) {
+                                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_delete))
+                            }
+                        } else {
                             TextButton(onClick = { onAction(PageAction.DeleteModel(profile.id)) }) {
                                 Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_delete))
                             }
@@ -231,39 +275,72 @@ private fun EnginePanel(
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onAction(PageAction.ActivateEngine) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_activate_engine))
-            }
-            OutlinedButton(onClick = { onAction(PageAction.SelfCheck) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_self_check))
-            }
-            TextButton(onClick = { onAction(PageAction.DiscoverImport) }) {
-                Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_discover))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("系统朗读引擎", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "设为系统引擎后，阅读页与原「跟随系统」入口都会用离线音色",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { onAction(PageAction.ActivateEngine) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_activate_engine))
+                    }
+                    OutlinedButton(onClick = { onAction(PageAction.SelfCheck) }) {
+                        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_self_check))
+                    }
+                }
+                TextButton(
+                    onClick = { onAction(PageAction.DiscoverImport) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                ) {
+                    Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_discover))
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Text("音色 ${state.stats.voiceCount} · 缓存 ${formatBytes(state.stats.cacheBytes)} · RTF ${"%.2f".format(state.stats.lastRtf)}")
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("运行状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("音色 ${state.stats.voiceCount} · 缓存 ${formatBytes(state.stats.cacheBytes)} · RTF ${"%.2f".format(state.stats.lastRtf)}")
         if (state.storageText.isNotBlank()) {
             Text(state.storageText, style = MaterialTheme.typography.bodySmall)
         }
-        Text("最近错误：${state.stats.lastError}")
+        Text("最近错误：${state.stats.lastError}", style = MaterialTheme.typography.bodySmall)
         if (state.findingsText.isNotBlank()) {
             // 降级矩阵结论（T3.5）：错误/警告/正常 + 可操作动作
-            Text("诊断：", fontWeight = FontWeight.SemiBold)
+            Text("诊断", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text(state.findingsText, style = MaterialTheme.typography.bodySmall)
         }
-        TextButton(onClick = { onAction(PageAction.ClearCache) }) {
-            Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_clear_cache))
+                TextButton(
+                    onClick = { onAction(PageAction.ClearCache) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                ) {
+                    Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_clear_cache))
+                }
+            }
         }
         if (state.importDir.isNotBlank()) {
-            Text(
-                text = androidx.compose.ui.platform.LocalContext.current
-                    .getString(R.string.builtin_tts_import_dir_hint, state.importDir),
-                style = MaterialTheme.typography.bodySmall
-            )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("模型导入目录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(state.importDir, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "把语音包压缩包放进该目录后，点上方「扫描导入目录」即可",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -278,8 +355,11 @@ private fun VoicesPanel(
     var gender by remember { mutableStateOf(BuiltinVoiceFilter.Gender.ALL) }
     var untaggedOnly by remember { mutableStateOf(false) }
     var poolId by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Button(onClick = onPickVoiceZip) {
                 Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_import_zip))
             }
@@ -392,11 +472,11 @@ private fun VoicesPanel(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(10.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(voice.displayName, fontWeight = FontWeight.SemiBold)
+                            Text(voice.displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             val badge = when (voice.origin) {
                                 BuiltinVoice.ORIGIN_PRESET -> "内置"
                                 BuiltinVoice.ORIGIN_SELF -> "自录"
@@ -429,10 +509,12 @@ private fun VoicesPanel(
 @Composable
 private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
     var selected by remember { mutableStateOf<CharacterVoiceAssignService.RoleVoiceRow?>(null) }
-    Column(Modifier.fillMaxSize()) {
-        Text(state.roleSummary)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(state.roleSummary, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Button(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
                 Text("识别当前章角色")
             }
@@ -453,7 +535,7 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(10.dp),
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
@@ -517,23 +599,26 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
 
 @Composable
 private fun WizardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(
+        modifier = Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         // 首次启用一键卡（T4.1）：模型就绪后一次点击完成「切引擎 + 多角色 + 自检」
         Button(onClick = { onAction(PageAction.QuickEnable) }, modifier = Modifier.fillMaxWidth()) {
             Text("一键启用（引擎 + 多角色 + 自检）")
         }
         Spacer(Modifier.height(8.dp))
-        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step1))
+        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step1), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         TextButton(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
             Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_run))
         }
         Spacer(Modifier.height(6.dp))
-        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step2))
+        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step2), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         TextButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
             Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_run))
         }
         Spacer(Modifier.height(6.dp))
-        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step3))
+        Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_wizard_step3), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Text("回到阅读页点「听书」即可；未识别段会用模板对白音色（并在分镜里标红）。")
         Spacer(Modifier.height(8.dp))
         // 一键开书（T5.3）：角色发现 + 配声 + 激活多角色模板，缺任一步都会退化成单声
@@ -548,7 +633,7 @@ private fun WizardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Un
 @Composable
 private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
     var selected by remember { mutableStateOf<StoryboardRow?>(null) }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(state.storyboardHint, style = MaterialTheme.typography.bodySmall)
         if (state.storyboard.isEmpty()) return@Column
         Spacer(Modifier.height(6.dp))
@@ -565,11 +650,11 @@ private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageActio
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(10.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("P${row.paragraphIndex + 1} · ${row.roleLabel}", fontWeight = FontWeight.SemiBold)
+                            Text("P${row.paragraphIndex + 1} · ${row.roleLabel}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             Text(row.text, style = MaterialTheme.typography.bodySmall)
                         }
                         TextButton(onClick = { selected = row }) { Text("改角色") }

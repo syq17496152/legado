@@ -167,4 +167,11 @@ class BuiltinTtsActivityTest {
         assertTrue(hint.contains("内置 6 个只读"))
         assertTrue(hint.contains("不随包分发"))
     }
+
+    @Test
+    fun `管理页副标题点明离线与多角色`() {
+        val subtitle = BuiltinTtsUiSupport.engineSubtitle()
+        assertTrue(subtitle.contains("离线"))
+        assertTrue(subtitle.contains("多角色"))
+    }
 }

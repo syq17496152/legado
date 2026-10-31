@@ -86,4 +86,7 @@ internal object BuiltinTtsUiSupport {
 
     /** 音色包导出边界说明（T6.5，纯函数可单测）：内置只读、不随包分发 */
     fun voiceExportHint(): String = "音色包仅含你自建/导入的音色；内置 6 个只读，不随包分发"
+
+    /** 管理页副标题（纯函数可单测）：一眼说明这套引擎的定位 */
+    fun engineSubtitle(): String = "离线 · 断网可用 · 多角色逐段换声"
 }
