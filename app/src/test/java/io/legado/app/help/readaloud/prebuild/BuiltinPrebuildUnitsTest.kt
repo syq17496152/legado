@@ -39,4 +39,35 @@ class BuiltinPrebuildUnitsTest {
         assertEquals("旁白", BuiltinPrebuildUnits.voiceFor("", "旁白"))
         assertEquals("", BuiltinPrebuildUnits.voiceFor("", ""))
     }
+
+    @Test
+    fun `预合成发起门 内置引擎不要求网络与 HTTP 通道`() {
+        // 内置引擎激活 + 无 http + 无网络 ⇒ 允许（离线预合成）
+        assertEquals(
+            TtsPrebuildManager.PrebuildGate.OK,
+            TtsPrebuildManager.prebuildGate(
+                builtinReady = true, hasHttpTts = false, networkAvailable = false
+            )
+        )
+        // http 通道必须有网络
+        assertEquals(
+            TtsPrebuildManager.PrebuildGate.NO_NETWORK,
+            TtsPrebuildManager.prebuildGate(
+                builtinReady = false, hasHttpTts = true, networkAvailable = false
+            )
+        )
+        assertEquals(
+            TtsPrebuildManager.PrebuildGate.OK,
+            TtsPrebuildManager.prebuildGate(
+                builtinReady = false, hasHttpTts = true, networkAvailable = true
+            )
+        )
+        // 既非内置也无 http ⇒ 需先选可用引擎
+        assertEquals(
+            TtsPrebuildManager.PrebuildGate.NEED_ENGINE,
+            TtsPrebuildManager.prebuildGate(
+                builtinReady = false, hasHttpTts = false, networkAvailable = true
+            )
+        )
+    }
 }

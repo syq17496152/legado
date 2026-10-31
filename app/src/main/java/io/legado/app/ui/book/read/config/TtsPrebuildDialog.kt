@@ -33,6 +33,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.prebuild.TtsPrebuildManager
 import io.legado.app.help.readaloud.speech.SpeechRoute
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.TtsPrebuildService
@@ -218,10 +219,6 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
             context?.toastOnUi("无当前书籍")
             return
         }
-        if (!isNetworkAvailable()) {
-            context?.toastOnUi(R.string.tts_casting_prebuild_no_net)
-            return
-        }
         val start = startInput.toIntOrNull()?.minus(1)
         val end = endInput.toIntOrNull()?.minus(1)
         if (start == null || end == null) {
@@ -244,11 +241,22 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
         submitting = true
         val appContext = requireContext().applicationContext
         val route = ReadAloud.currentRoute
+        // T3.2/T3.3：内置离线引擎可离线预合成（不要求 HTTP 通道/网络）；仅 httpTts 路径才校验网络
+        val builtinReady = BuiltinTtsRuntime.isReady() &&
+            BuiltinTtsRuntime.isActiveEngine(appContext, route.engineValue)
         val httpTts = route.engineValue.toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
-        if (httpTts == null) {
-            context?.toastOnUi(R.string.tts_casting_prebuild_gate_system)
-            submitting = false
-            return
+        when (TtsPrebuildManager.prebuildGate(builtinReady, httpTts != null, isNetworkAvailable())) {
+            TtsPrebuildManager.PrebuildGate.NO_NETWORK -> {
+                context?.toastOnUi(R.string.tts_casting_prebuild_no_net)
+                submitting = false
+                return
+            }
+            TtsPrebuildManager.PrebuildGate.NEED_ENGINE -> {
+                context?.toastOnUi(R.string.tts_casting_prebuild_gate_system)
+                submitting = false
+                return
+            }
+            TtsPrebuildManager.PrebuildGate.OK -> Unit
         }
         lifecycleScope.launch(Dispatchers.IO) {
             val reject = TtsPrebuildManager.enqueue(

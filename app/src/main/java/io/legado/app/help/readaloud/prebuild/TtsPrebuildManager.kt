@@ -158,7 +158,8 @@ object TtsPrebuildManager {
         book: Book,
         start: Int,
         end: Int,
-        httpTts: HttpTTS
+        /** null = 内置离线引擎（无 HTTP 通道）；非空 = 走 httpTts 合成 */
+        httpTts: HttpTTS?
     ): String? {
         val endC = end.coerceAtMost(start + MAX_BATCH_CHAPTERS - 1)
         if (end - start + 1 > MAX_BATCH_CHAPTERS) {
@@ -189,7 +190,7 @@ object TtsPrebuildManager {
             // TtsTrace 真机联调：预合成入队（参数快照证据；synchronized 内捕获快照值）
             AppLog.putDebugWithTag(
                 AppLog.TAG_TTS_TRACE,
-                "prebuild 入队 book=${book.name.takeLast(16)} ch=$start..$endC engineKey=${httpTts.id} voiceKey=${task.voiceKey.takeLast(12)} rate=${task.speechRate}",
+                "prebuild 入队 book=${book.name.takeLast(16)} ch=$start..$endC engineKey=${httpTts?.id ?: "builtin"} voiceKey=${task.voiceKey.takeLast(12)} rate=${task.speechRate}",
                 level = AppLog.Level.INFO
             )
         }
@@ -205,6 +206,24 @@ object TtsPrebuildManager {
                 .toneID
         }.getOrDefault("")
     }
+
+    /**
+     * 预合成发起门（纯函数可单测）：内置引擎激活时**不需要** HTTP 通道与网络；
+     * 只有 httpTts 路径才校验网络。此前 Dialog 一律要求 httpTts 非空 ⇒ 内置引擎用户
+     * 永远点不出预合成（T3.2/T3.3 分支不可达，2026-10-31 定位）。
+     */
+    internal fun prebuildGate(
+        builtinReady: Boolean,
+        hasHttpTts: Boolean,
+        networkAvailable: Boolean
+    ): PrebuildGate = when {
+        hasHttpTts -> if (networkAvailable) PrebuildGate.OK else PrebuildGate.NO_NETWORK
+        builtinReady -> PrebuildGate.OK
+        else -> PrebuildGate.NEED_ENGINE
+    }
+
+    /** 预合成发起门结果 */
+    internal enum class PrebuildGate { OK, NO_NETWORK, NEED_ENGINE }
 
     /** 按书取消（缓存清理/删书联动）：置 cancelFlag，worker 感知后落终态 */
     fun cancelByBook(bookKey: String) {
