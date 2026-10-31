@@ -50,6 +50,22 @@ class OfflineRoleResolverTest {
     }
 
     @Test
+    fun `已学 cue 在后续章自动命中（T7-5 分片）`() {
+        // 场景：上一章把"淡淡道"教给李四（BookAliasStore.learnCue）；本章同模式 cue 应直接命中李四
+        val paragraphs = listOf("她淡淡道：“随你。”")
+        val learned = mapOf("淡淡道" to "李四")
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 3, 9, cueBefore = "她淡淡道：")),
+            characters,
+            learned
+        )
+        assertEquals(1, result.segments.size)
+        assertEquals("李四", result.segments[0].characterName)
+        assertEquals(2L, result.segments[0].characterId)
+    }
+
+    @Test
     fun `张山不等于张三 未识别不猜`() {
         val paragraphs = listOf("张山说：“好。”")
         val result = OfflineRoleResolver.resolve(
