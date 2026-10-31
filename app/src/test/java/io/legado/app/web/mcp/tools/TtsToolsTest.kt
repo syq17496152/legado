@@ -43,12 +43,12 @@ class TtsToolsTest {
         DomainDeclarationAssert.assertMetadataConsistent(
             tools, MCP_DOMAIN_TTS,
             "tts_", "http_tts_", "audio_", "audiobook_", "speaker_group", "read_aloud_bgm_",
-            "builtin_tts_", "builtin_voice_", "builtin_assign_"
+            "builtin_tts_", "builtin_voice_", "builtin_assign_", "tts_prebuild_"
         )
         tools.forEach { tool ->
             assertNotNull("域文件声明的工具须被目录聚合：${tool.name}", McpToolCatalog.find(tool.name))
         }
-        assertEquals("TTS 域须 20 个工具（17 + 内置离线 3）", 20, tools.size)
+        assertEquals("TTS 域须 21 个工具（17 + 内置离线 3 + 预合成 1）", 21, tools.size)
     }
 
     @Test

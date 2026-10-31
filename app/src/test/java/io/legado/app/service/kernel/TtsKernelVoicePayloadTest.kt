@@ -43,4 +43,14 @@ class TtsKernelVoicePayloadTest {
         // 不相关关键词不命中（避免"全部命中"式假过滤）
         assertEquals(false, TtsKernel.builtinVoiceMatches(voice, "female"))
     }
+
+    @Test
+    fun `预合成章节区间按 1 基校验并转 0 基`() {
+        // 1..3 章（含）⇒ 内部 0..2
+        assertEquals(0 to 2, TtsKernel.prebuildRange(1, 3))
+        assertEquals(4 to 4, TtsKernel.prebuildRange(5, 5))
+        // 非法区间必须显式抛错（防 0 基/倒序静默入队）
+        runCatching { TtsKernel.prebuildRange(0, 1) }.let { assertTrue(it.isFailure) }
+        runCatching { TtsKernel.prebuildRange(3, 1) }.let { assertTrue(it.isFailure) }
+    }
 }

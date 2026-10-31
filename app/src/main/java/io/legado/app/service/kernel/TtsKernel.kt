@@ -14,7 +14,9 @@ import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
 import io.legado.app.help.source.SourceRecycleBinHelp
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
+import io.legado.app.help.readaloud.prebuild.TtsPrebuildManager
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
+import io.legado.app.model.ReadAloud
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
@@ -167,6 +169,40 @@ object TtsKernel {
             "displayName" to voice.displayName,
             "note" to "重开朗读生效"
         )
+    }
+
+    /**
+     * `tts_prebuild_chapters`：按章入队预合成（T3.2/T3.3 的可调用入口）。
+     * 内置引擎离线可用（入队后产物只进引擎缓存）；httpTTS 通道才依赖网络。
+     */
+    suspend fun prebuildChapters(
+        bookUrl: String,
+        startChapter: Int,
+        endChapter: Int
+    ): Map<String, Any?> = withContext(IO) {
+        require(bookUrl.isNotBlank()) { "bookUrl 不能为空" }
+        val (start, end) = prebuildRange(startChapter, endChapter)
+        val book = appDb.bookDao.getBook(bookUrl)
+            ?: throw NoSuchElementException("书不存在：$bookUrl")
+        val httpTts = ReadAloud.currentRoute.engineValue.toLongOrNull()
+            ?.let { appDb.httpTTSDao.get(it) }
+        val reject = TtsPrebuildManager.enqueue(appCtx, book, start, end, httpTts)
+        if (reject != null) throw IllegalStateException(reject)
+        mapOf(
+            "bookUrl" to bookUrl,
+            "startChapter" to startChapter,
+            "endChapter" to endChapter,
+            "channel" to if (httpTts == null) "builtin" else "http:${httpTts.id}",
+            "note" to "已入队；后台服务执行，进度见通知与 TtsTrace 的 prebuild 日志"
+        )
+    }
+
+    /** 章节区间归一（纯函数可单测）：入参 1 基校验 → 内部 0 基 Pair(start, end) */
+    internal fun prebuildRange(startChapter: Int, endChapter: Int): Pair<Int, Int> {
+        require(startChapter >= 1 && endChapter >= startChapter) {
+            "章节号非法：需 1 基且 endChapter >= startChapter"
+        }
+        return (startChapter - 1) to (endChapter - 1)
     }
 
     /** `http_tts_save`：新增 / 覆盖 HTTP TTS（`id` 相同即覆盖，DAO 为 REPLACE 语义）。 */

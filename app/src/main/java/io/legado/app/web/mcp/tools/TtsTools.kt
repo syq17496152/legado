@@ -444,6 +444,34 @@ object TtsTools {
                 voiceName = args.str("voiceName").orEmpty()
             )
         },
+
+        McpTool(
+            name = "tts_prebuild_chapters",
+            title = "批量预合成",
+            description = "按章批量预合成朗读音频（章节号从 1 开始）。内置离线引擎**不需要网络**，" +
+                "httpTTS 通道才需要联网；入队后由前台服务后台执行（进度见通知/TtsTrace 日志）。" +
+                "返回 bookUrl/入队章区间/实际通道。**写操作**。",
+            domain = MCP_DOMAIN_TTS,
+            level = TokenManager.Level.MANAGE,
+            inputSchema = McpJsonSchema.of(
+                required = mapOf(
+                    "bookUrl" to McpJsonSchema.TYPE_STRING,
+                    "startChapter" to TYPE_INTEGER,
+                    "endChapter" to TYPE_INTEGER
+                ),
+                descriptions = mapOf(
+                    "bookUrl" to "书籍唯一地址（取 bookshelf_list 的 bookUrl）",
+                    "startChapter" to "起始章序号（1 基）",
+                    "endChapter" to "结束章序号（1 基，含；单批上限 200 章）"
+                )
+            ),
+        ) { args ->
+            TtsKernel.prebuildChapters(
+                bookUrl = args.str("bookUrl").orEmpty(),
+                startChapter = args.requireInt("startChapter"),
+                endChapter = args.requireInt("endChapter")
+            )
+        },
     )
 
     /** 与 REST 门面同口径：对象或 JSON 字符串均可。 */

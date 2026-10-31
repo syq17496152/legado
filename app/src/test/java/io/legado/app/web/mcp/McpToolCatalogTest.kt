@@ -107,10 +107,11 @@ class McpToolCatalogTest {
         // **2026-10-22（ng-js-source-port）**：书源域新增 4 个 JS 源工具（validate/save/export/debug，
         // 见 JsSourceTools）⇒ 222 / 236。
         // **2026-10-26（ai-source-debug-loop AD-11）**：新增 `task_result`（长任务轮询）⇒ 223 / 237。
-        // **2026-10-31（builtin-offline-tts T8.9）**：语音域新增 3 个内置引擎工具
-        // （`builtin_tts_status` / `builtin_voice_list` / `builtin_assign_voice`，2 只读 + 1 MANAGE）⇒ 226 / 240。
-        val expected = if (BuildConfig.BUILD_DEBUG) 240 else 226
-        assertEquals("工具总数须与已落地域一致（release 226 / debug 240）", expected, McpToolCatalog.all().size)
+        // **2026-10-31（builtin-offline-tts T8.9/T3.2）**：语音域新增 4 个内置引擎工具
+        // （`builtin_tts_status` / `builtin_voice_list` / `builtin_assign_voices` / `tts_prebuild_chapters`，
+        // 2 只读 + 2 MANAGE）⇒ 227 / 241。
+        val expected = if (BuildConfig.BUILD_DEBUG) 241 else 227
+        assertEquals("工具总数须与已落地域一致（release 227 / debug 241）", expected, McpToolCatalog.all().size)
     }
 
     @Test
