@@ -114,20 +114,26 @@ object TtsKernel {
         val filtered = if (keyword.isBlank()) all else all.filter { builtinVoiceMatches(it, keyword) }
         mapOf(
             "total" to filtered.size,
-            "voices" to filtered.map { voice ->
-                mapOf(
-                    "id" to voice.id,
-                    "name" to voice.displayName,
-                    "origin" to voice.origin,
-                    "gender" to voice.gender,
-                    "age" to voice.age,
-                    "groupId" to voice.groupId,
-                    "tags" to voice.tags,
-                    "readOnly" to voice.readOnly
-                )
-            }
+            "voices" to filtered.map { voice -> builtinVoicePayload(voice) }
         )
     }
+
+    /**
+     * 单个音色的对外字段（纯函数，供 `builtin_voice_list` 与单测共用）。
+     * `voiceName` 是 `id|显示名` 复合键（`builtin_assign_voices` 可直接回传），
+     * 缺了它客户端只能靠 `id` 猜，契约不闭环（2026-10-31 实调发现）。
+     */
+    internal fun builtinVoicePayload(voice: BuiltinVoice): Map<String, Any?> = mapOf(
+        "id" to voice.id,
+        "voiceName" to voice.voiceName,
+        "name" to voice.displayName,
+        "origin" to voice.origin,
+        "gender" to voice.gender,
+        "age" to voice.age,
+        "groupId" to voice.groupId,
+        "tags" to voice.tags,
+        "readOnly" to voice.readOnly
+    )
 
     /** 内置音色过滤判定（纯函数，供 `builtin_voice_list` 与单测共用） */
     internal fun builtinVoiceMatches(voice: BuiltinVoice, keyword: String): Boolean {

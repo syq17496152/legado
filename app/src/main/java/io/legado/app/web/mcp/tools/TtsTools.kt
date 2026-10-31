@@ -434,7 +434,7 @@ object TtsTools {
                 descriptions = mapOf(
                     "bookKey" to "书籍角色键（work:作者/书名，取阅读域返回值）",
                     "characterId" to "角色卡 id（取阅读域 character_list 返回值）",
-                    "voiceName" to "音色名（id|显示名，取 builtin_voice_list 的 name 字段）"
+                    "voiceName" to "音色名（优先取 builtin_voice_list 的 voiceName 字段（id|显示名）；也可直接传 id）"
                 ),
             ),
         ) { args ->

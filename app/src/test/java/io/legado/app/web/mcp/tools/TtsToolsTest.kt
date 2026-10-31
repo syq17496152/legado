@@ -61,6 +61,12 @@ class TtsToolsTest {
         val assign = tools.single { it.name == "builtin_assign_voices" }
         assertEquals(TokenManager.Level.MANAGE, assign.level)
         assertEquals(3, assign.inputSchema.getAsJsonArray("required").size())
+        // T8.9 实调修复：参数说明必须指向 builtin_voice_list 的 voiceName（复合键），否则客户端拿不到可回传值
+        val desc = assign.inputSchema
+            .getAsJsonObject("properties")
+            .getAsJsonObject("voiceName")
+            .get("description").asString
+        org.junit.Assert.assertTrue("assign 参数说明须指向 voiceName 字段：$desc", desc.contains("voiceName"))
     }
 
     @Test
