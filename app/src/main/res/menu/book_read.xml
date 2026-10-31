@@ -35,6 +35,12 @@
             android:title="@string/builtin_tts_menu_entry"
             app:showAsAction="never" />
 
+        <item
+            android:id="@+id/menu_cast_scene"
+            android:icon="@drawable/ic_volume_up"
+            android:title="@string/cast_scene_menu_entry"
+            app:showAsAction="never" />
+
     </group>
 
     <group android:id="@+id/menu_group_text">

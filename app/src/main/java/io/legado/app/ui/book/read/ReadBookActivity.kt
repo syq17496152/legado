@@ -190,6 +190,7 @@ import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.scene.SceneBookmarkActivity
 import io.legado.app.ui.book.read.config.BuiltinTtsActivity
+import io.legado.app.ui.book.read.config.CastSceneActivity
 import io.legado.app.ui.book.read.config.AiPurifyDialog
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.TtsPrebuildDialog
@@ -1092,6 +1093,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_download -> showDownloadDialog()
             R.id.menu_tts_prebuild -> showTtsPrebuildDialog()
             R.id.menu_builtin_tts -> startActivity<BuiltinTtsActivity>()
+            // T5.1：听书场景卡（四卡选演播方式 + 一键开始）
+            R.id.menu_cast_scene -> startActivity<CastSceneActivity>()
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_add_scene_bookmark -> addSceneBookmarkFromReadMenu()
             R.id.menu_scene_bookmark_list -> openSceneBookmarkLibrary()

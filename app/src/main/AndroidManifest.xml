@@ -914,6 +914,11 @@
             android:name=".ui.book.read.config.BuiltinTtsActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="true" />
+        <!-- 听书场景卡（T5.1）：阅读页菜单入口，仅应用内部拉起 -->
+        <activity
+            android:name=".ui.book.read.config.CastSceneActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
         <!-- 高级标题管理 -->
         <activity
             android:name=".ui.config.AdvancedTitleManageActivity"

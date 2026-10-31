@@ -2963,6 +2963,7 @@ bookUrl：%7$s
     <!-- 内置离线 TTS（builtin-offline-tts） -->
     <string name="builtin_tts_engine_label">阅读·离线语音引擎</string>
     <string name="builtin_tts_menu_entry">离线多角色引擎</string>
+    <string name="cast_scene_menu_entry">听书场景卡</string>
     <string name="builtin_tts_channel_name">离线语音合成</string>
     <string name="builtin_tts_foreground_text">正在离线合成语音…</string>
     <string name="builtin_tts_title">离线多角色朗读</string>
