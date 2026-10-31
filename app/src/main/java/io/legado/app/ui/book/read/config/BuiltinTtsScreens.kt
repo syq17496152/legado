@@ -75,7 +75,9 @@ data class BuiltinTtsPageState(
     val storyboardHint: String = "",
     /** 角色配音页（T5.4）：角色→音色 行 + 撞音音色集合 */
     val roleRows: List<CharacterVoiceAssignService.RoleVoiceRow> = emptyList(),
-    val conflictVoices: Set<String> = emptySet()
+    val conflictVoices: Set<String> = emptySet(),
+    /** 降级矩阵结论（T3.5）：错误/警告/正常 逐条文案 */
+    val findingsText: String = ""
 )
 
 /** 分镜一行：段落片段 + 当前角色判定（未识别不静默归旁白） */
@@ -247,6 +249,11 @@ private fun EnginePanel(
             Text(state.storageText, style = MaterialTheme.typography.bodySmall)
         }
         Text("最近错误：${state.stats.lastError}")
+        if (state.findingsText.isNotBlank()) {
+            // 降级矩阵结论（T3.5）：错误/警告/正常 + 可操作动作
+            Text("诊断：", fontWeight = FontWeight.SemiBold)
+            Text(state.findingsText, style = MaterialTheme.typography.bodySmall)
+        }
         TextButton(onClick = { onAction(PageAction.ClearCache) }) {
             Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_clear_cache))
         }

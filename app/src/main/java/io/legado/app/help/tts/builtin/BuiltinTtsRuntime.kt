@@ -485,6 +485,14 @@ object BuiltinTtsRuntime {
         return instance
     }
 
+    /** 可用内存（MB）：供降级矩阵判定（T3.5，克隆档加载约需 400MB） */
+    fun availableMemoryMb(): Long = runCatching {
+        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val info = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        info.availMem / (1024L * 1024L)
+    }.getOrDefault(Long.MAX_VALUE)
+
     private fun hasEnoughMemory(): Boolean {
         return runCatching {
             val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

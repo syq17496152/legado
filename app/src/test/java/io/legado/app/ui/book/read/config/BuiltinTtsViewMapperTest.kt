@@ -1,10 +1,13 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.help.tts.builtin.BuiltinEngineState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * 管理页视图映射（T5.5）：无书/无章节时的提示文案（不依赖 Android 运行态）。
+ * T3.5：诊断结论渲染（引擎态/内存/RTF → 可操作文案）。
  */
 class BuiltinTtsViewMapperTest {
 
@@ -17,5 +20,41 @@ class BuiltinTtsViewMapperTest {
     @Test
     fun `无书时分镜为空`() {
         assertEquals(0, BuiltinTtsViewMapper.storyboard(null).size)
+    }
+
+    @Test
+    fun `模型缺失时诊断为错误并带处置`() {
+        val text = BuiltinTtsViewMapper.findings(
+            profiles = listOf(ProfileRow("fast", "极速单声", BuiltinEngineState.NONE, true, 24000)),
+            abiSupported = true,
+            memoryMb = 2000,
+            lastRtf = 0f,
+            lastError = ""
+        )
+        assertEquals("[错误] 未下载离线语音包 → 在引擎页下载或导入语音包", text)
+    }
+
+    @Test
+    fun `克隆档内存偏紧给警告`() {
+        val text = BuiltinTtsViewMapper.findings(
+            profiles = listOf(ProfileRow("clone", "高质克隆", BuiltinEngineState.READY, true, 24000)),
+            abiSupported = true,
+            memoryMb = 200,
+            lastRtf = 0f,
+            lastError = ""
+        )
+        assertTrue(text.startsWith("[警告] 可用内存 200MB"))
+    }
+
+    @Test
+    fun `就绪且速度正常显示运行正常`() {
+        val text = BuiltinTtsViewMapper.findings(
+            profiles = listOf(ProfileRow("fast", "极速单声", BuiltinEngineState.READY, true, 24000)),
+            abiSupported = true,
+            memoryMb = 2000,
+            lastRtf = 0.6f,
+            lastError = ""
+        )
+        assertEquals("[正常] 运行正常", text)
     }
 }

@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.read.config
 
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
+import io.legado.app.help.tts.builtin.BuiltinEngineState
+import io.legado.app.help.tts.builtin.BuiltinTtsDiagnostics
 import io.legado.app.model.ReadBook
 
 /**
@@ -52,5 +54,27 @@ object BuiltinTtsViewMapper {
         }
         val recognized = segments.count { it.recognized }
         return "本章 ${segments.size} 段，命中角色 $recognized 段"
+    }
+
+    /** 降级矩阵结论（T3.5）：引擎态/ABI/内存/RTF/最近错误 → 可操作文案 */
+    fun findings(
+        profiles: List<ProfileRow>,
+        abiSupported: Boolean,
+        memoryMb: Long,
+        lastRtf: Float,
+        lastError: String
+    ): String {
+        val active = profiles.firstOrNull { it.active } ?: profiles.firstOrNull()
+        val findings = BuiltinTtsDiagnostics.evaluate(
+            BuiltinTtsDiagnostics.Input(
+                state = active?.state ?: BuiltinEngineState.NONE,
+                abiSupported = abiSupported,
+                memoryMb = memoryMb,
+                lastRtf = lastRtf,
+                lastError = lastError,
+                requiresReference = active?.id == "clone"
+            )
+        )
+        return BuiltinTtsDiagnostics.render(findings)
     }
 }

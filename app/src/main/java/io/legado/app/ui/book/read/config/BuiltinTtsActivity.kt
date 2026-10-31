@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
@@ -57,7 +58,6 @@ import io.legado.app.help.readaloud.role.BookAliasStore
 import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleCacheStore
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
-import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinModelProfile
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.help.tts.builtin.BuiltinVoice
@@ -713,6 +713,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         private const val CUE_WINDOW = 24
         /** 批量试听一次最多几个（T8.8，避免一次播太久） */
         private const val PREVIEW_BATCH_SIZE = 5
+        /** 端侧推理可通过的 ABI（降级矩阵用，T3.5） */
+        private val SUPPORTED_ABIS = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
     }
 
     private fun reload() {
@@ -754,7 +756,16 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             ),
             storyboard = BuiltinTtsViewMapper.storyboard(bookKey),
             pickCharacters = emptyList(),
-            storyboardHint = BuiltinTtsViewMapper.storyboardHint(bookKey)
+            storyboardHint = BuiltinTtsViewMapper.storyboardHint(bookKey),
+            // 降级矩阵（T3.5）：引擎态/ABI/内存/RTF/最近错误 → 可操作结论（渲染逻辑在 ViewMapper）
+            findingsText = BuiltinTtsViewMapper.findings(
+                profiles = profiles,
+                abiSupported = Build.SUPPORTED_ABIS.any { it in SUPPORTED_ABIS },
+                memoryMb = runCatching { BuiltinTtsRuntime.availableMemoryMb() }
+                    .getOrDefault(Long.MAX_VALUE),
+                lastRtf = stats.lastRtf,
+                lastError = stats.lastError
+            )
         )
         // 角色卡是挂起查询（DAO），异步补进状态（分镜改绑弹窗 + 角色配音页用）
         if (bookKey != null) {
