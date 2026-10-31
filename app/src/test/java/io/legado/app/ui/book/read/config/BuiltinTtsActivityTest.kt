@@ -250,4 +250,17 @@ class BuiltinTtsActivityTest {
         assertEquals("1.22", BuiltinTtsUiSupport.rtfText(1.22f))
         assertEquals("5.68", BuiltinTtsUiSupport.rtfText(5.682f))
     }
+
+    @Test
+    fun `音色标题去掉来源前缀避免内置音色全叫内置`() {
+        // 6 个内置音色原名都以"内置·"开头，标题去掉后靠"男·少年"这类后缀区分
+        assertEquals("男·少年", BuiltinTtsUiSupport.voiceTitle("内置·男·少年"))
+        assertEquals("张三音色", BuiltinTtsUiSupport.voiceTitle("导入·张三音色"))
+        assertEquals("我的录音", BuiltinTtsUiSupport.voiceTitle("自录·我的录音"))
+        // 无前缀 / 只有前缀本身时保持原样，不产出空标题
+        assertEquals("张三音色", BuiltinTtsUiSupport.voiceTitle("张三音色"))
+        assertEquals("内置", BuiltinTtsUiSupport.voiceTitle("内置"))
+        // 头像取"去前缀后的首字"，所以内置音色能一眼看出男女老少
+        assertEquals("男", BuiltinTtsUiSupport.voiceInitial(BuiltinTtsUiSupport.voiceTitle("内置·男·少年")))
+    }
 }

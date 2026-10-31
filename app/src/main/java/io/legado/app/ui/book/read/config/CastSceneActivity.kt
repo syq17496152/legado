@@ -299,6 +299,16 @@ private fun CastSceneScreen(
                 }
             }
             // 状态条：用一条中性说明条，不再做第二块卡片抢注意力
+            if (busy) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        // 底部区：状态说明 + 主按钮一起固定在底部，避免中间出现大块空白
+        Column(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -315,9 +325,6 @@ private fun CastSceneScreen(
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
-            if (busy) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
             if (message.isNotBlank()) {
                 Text(
                     text = message,
@@ -325,10 +332,6 @@ private fun CastSceneScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            Spacer(Modifier.height(8.dp))
-        }
-        // 主按钮固定底部：选卡与开听是两个动作，按钮不能随着卡片滚出屏幕
-        Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {
             Button(
                 onClick = onPrimary,
                 enabled = snapshot.primaryEnabled && !busy,
@@ -357,14 +360,24 @@ private fun SceneCard(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    .background(
+                        if (card.selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = badge,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = if (card.selected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
                 )
             }
             Spacer(Modifier.weight(1f))

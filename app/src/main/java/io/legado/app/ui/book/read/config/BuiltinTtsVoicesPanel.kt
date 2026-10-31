@@ -209,10 +209,10 @@ internal fun VoicesPanel(
                     onClick = { editing = voice }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        VoiceAvatar(voice.displayName)
+                        VoiceAvatar(BuiltinTtsUiSupport.voiceTitle(voice.displayName))
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Text(
-                                text = voice.displayName,
+                                text = BuiltinTtsUiSupport.voiceTitle(voice.displayName),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1

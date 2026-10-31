@@ -119,6 +119,18 @@ internal object BuiltinTtsUiSupport {
         return if (trimmed.isEmpty()) "?" else trimmed.substring(0, 1)
     }
 
+    /**
+     * 音色显示名（纯函数可单测）：去掉"内置·/自录·/导入·"来源前缀。
+     * 来源已在副文案徽章里说过一次，标题再重复会让 6 个内置音色看起来一样（视觉重做第三轮）。
+     */
+    fun voiceTitle(name: String): String {
+        val trimmed = name.trim()
+        val prefixes = listOf("内置·", "自录·", "导入·")
+        val hit = prefixes.firstOrNull { trimmed.startsWith(it) }
+        val stripped = if (hit != null) trimmed.removePrefix(hit).trim() else trimmed
+        return stripped.ifEmpty { trimmed }
+    }
+
     /** RTF 展示（纯函数可单测）：未测过显示破折号，不显示 0.00 误导 */
     fun rtfText(rtf: Float): String =
         if (rtf <= 0f) "—" else String.format(Locale.US, "%.2f", rtf)
