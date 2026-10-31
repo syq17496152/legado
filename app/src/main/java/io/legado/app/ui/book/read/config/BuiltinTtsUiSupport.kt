@@ -135,6 +135,10 @@ internal object BuiltinTtsUiSupport {
     fun rtfText(rtf: Float): String =
         if (rtf <= 0f) "—" else String.format(Locale.US, "%.2f", rtf)
 
+    /** 导出本章音频的可用性（T8.5，纯函数可单测）：没开书或没分镜就没东西可导 */
+    fun canExportChapter(hasBook: Boolean, storyboardSegments: Int): Boolean =
+        hasBook && storyboardSegments > 0
+
     /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别/年龄（中文，名称已含则不重复）+ 逐字稿长度 */
     fun voiceMetaText(voice: BuiltinVoice): String {
         val badge = when (voice.origin) {

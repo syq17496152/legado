@@ -109,6 +109,8 @@ sealed interface PageAction {
     data object StartRecord : PageAction
     data object StopRecord : PageAction
     data object ExportVoices : PageAction
+    /** T8.5：导出本章音频（WAV，逐段按分镜换声） */
+    data object ExportChapterAudio : PageAction
     data object AssignCasting : PageAction
     data object IdentifyRoles : PageAction
     data object EnableMultiRole : PageAction
@@ -353,6 +355,18 @@ private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageActio
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        // T8.5：按当前分镜与配声导出整章 WAV（已朗读/预合成过的段落命中缓存，几乎即时）
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { onAction(PageAction.ExportChapterAudio) },
+                enabled = BuiltinTtsUiSupport.canExportChapter(state.hasBook, state.storyboard.size)
+            ) {
+                Text("导出本章音频")
+            }
+        }
         if (state.storyboard.isEmpty()) return@Column
         LazyColumn(Modifier.fillMaxSize()) {
             items(

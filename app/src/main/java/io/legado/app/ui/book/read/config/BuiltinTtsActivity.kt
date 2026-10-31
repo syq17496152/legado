@@ -175,21 +175,22 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     private val exportVoices = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri == null) return@registerForActivityResult
-        lifecycleScope.launch(Dispatchers.IO) {
+        lifecycleScope.launch {
             pageState.value = pageState.value.copy(busy = true, message = "导出中…")
-            val target = File(cacheDir, "voice-export.zip")
-            val report = BuiltinVoiceExporter(BuiltinTtsRuntime.voiceStore()).export(target)
-            val ok = runCatching {
-                contentResolver.openOutputStream(uri)?.use { out ->
-                    target.inputStream().use { input -> input.copyTo(out) }
-                }
-                true
-            }.getOrDefault(false)
-            runCatching { target.delete() }
-            pageState.value = pageState.value.copy(
-                busy = false,
-                message = if (ok && report.exported > 0) report.message else "导出失败（无音色或写入被拒绝）"
-            )
+            val message = BuiltinAudioExportOps.exportVoicePack(this@BuiltinTtsActivity, uri, cacheDir)
+            pageState.value = pageState.value.copy(busy = false, message = message)
+        }
+    }
+
+    /** T8.5：导出本章音频（WAV，逐段合成命中原缓存） */
+    private val exportChapterAudio = registerForActivityResult(ActivityResultContracts.CreateDocument("audio/x-wav")) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            pageState.value = pageState.value.copy(busy = true, message = "导出音频…")
+            val message = BuiltinAudioExportOps.exportChapterAudio(this@BuiltinTtsActivity, uri) { progress ->
+                pageState.value = pageState.value.copy(message = progress)
+            }
+            pageState.value = pageState.value.copy(busy = false, message = message)
         }
     }
 
@@ -370,6 +371,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 PageAction.StartRecord -> startRecord()
                 PageAction.StopRecord -> stopRecord()
                 PageAction.ExportVoices -> exportVoices.launch("legado-voices.zip")
+                PageAction.ExportChapterAudio -> exportChapterAudio.launch(BuiltinAudioExportOps.chapterFileName())
                 PageAction.AssignCasting -> assignCasting()
                 PageAction.IdentifyRoles -> identifyRoles()
                 PageAction.EnableMultiRole -> enableMultiRole()

@@ -263,4 +263,14 @@ class BuiltinTtsActivityTest {
         // 头像取"去前缀后的首字"，所以内置音色能一眼看出男女老少
         assertEquals("男", BuiltinTtsUiSupport.voiceInitial(BuiltinTtsUiSupport.voiceTitle("内置·男·少年")))
     }
+
+    @Test
+    fun `导出本章音频需要已开书且有分镜 T8-5`() {
+        assertTrue(BuiltinTtsUiSupport.canExportChapter(hasBook = true, storyboardSegments = 13))
+        // 未开书 / 无分镜都不能导（按钮置灰，避免点了没反应）
+        assertEquals(false, BuiltinTtsUiSupport.canExportChapter(hasBook = false, storyboardSegments = 13))
+        assertEquals(false, BuiltinTtsUiSupport.canExportChapter(hasBook = true, storyboardSegments = 0))
+        // 未开书时 SAF 默认名也必须可给（不能崩在空书名上）
+        assertEquals("book-chapter.wav", BuiltinAudioExportOps.chapterFileName())
+    }
 }
