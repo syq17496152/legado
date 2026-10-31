@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.utils.toastOnUi
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
 
@@ -95,6 +96,15 @@ internal fun VoicesPanel(
                 onClick = { onAction(PageAction.PreviewAllVoices) },
                 contentPadding = PaddingValues(horizontal = 10.dp)
             ) { Text("连续试听") }
+            // T8.8 对比试听：前两个音色同一示范句各念一段（≈4s/段），便于直接听差异
+            TextButton(
+                onClick = {
+                    if (!BuiltinVoiceCompare.compare(context, state.voices)) {
+                        context.toastOnUi("至少需要 2 个音色才能对比试听")
+                    }
+                },
+                contentPadding = PaddingValues(horizontal = 10.dp)
+            ) { Text("对比试听") }
             TextButton(
                 onClick = { onAction(PageAction.CancelTag) },
                 contentPadding = PaddingValues(horizontal = 10.dp),
