@@ -89,6 +89,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     private val pageState = mutableStateOf(BuiltinTtsPageState())
 
+    /** 打标中断标记（T6.3）：UI 点「取消打标」置真，tagAll 每次循环检查后提前收尾 */
+    @Volatile
+    private var tagCancelRequested = false
+
     /** 自录音色控制器（T2.4）：录音/加工/入库细节不在 Activity 内（也避免文件超行数门禁） */
     private val recordController: BuiltinVoiceRecordController by lazy {
         BuiltinVoiceRecordController(
@@ -236,44 +240,16 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     /** 联调用：从外置导入目录按文件名导入音色包（不经过 SAF，便于 adb push 后自动验证） */
     private suspend fun importVoicesFromImportDir(fileName: String) {
-        val file = File(BuiltinTtsRuntime.paths().importDir, fileName)
-        if (!file.isFile) {
-            pageState.value = pageState.value.copy(message = "导入目录内没有 $fileName")
-            return
-        }
         pageState.value = pageState.value.copy(busy = true, message = "导入音色包中…")
-        val report = runCatching {
-            ClonettsVoiceImporter(BuiltinTtsRuntime.voiceStore()).importZip(file)
-        }.onFailure {
-            LogUtils.e("BuiltinTtsUi", "音色包导入失败：${it.stackTraceToString()}")
-        }.getOrNull()
-        runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
-        pageState.value = pageState.value.copy(
-            busy = false,
-            message = report?.message ?: "音色包导入失败"
-        )
+        val message = BuiltinAssetOps.importVoiceZip(fileName)
+        pageState.value = pageState.value.copy(busy = false, message = message)
         reload()
     }
 
     /** 扫描外置导入目录并逐项导入（返回结果文案） */
     private suspend fun runDiscoverImport(): String {
         pageState.value = pageState.value.copy(busy = true, message = "扫描中…")
-        val found = BuiltinTtsRuntime.modelManager().discoverImports()
-        var imported = 0
-        found.forEach { file ->
-            val profileId = guessProfile(file.name)
-            val ok = if (file.isDirectory) {
-                BuiltinTtsRuntime.modelManager().importFromDirectory(profileId, file)
-            } else {
-                runCatching {
-                    file.inputStream().use { input ->
-                        BuiltinTtsRuntime.modelManager().importArchive(profileId, input, file.name)
-                    }
-                }.getOrDefault(false)
-            }
-            if (ok) imported++
-        }
-        val message = "发现 ${found.size} 项，导入成功 $imported"
+        val message = BuiltinAssetOps.discoverModels()
         pageState.value = pageState.value.copy(busy = false, message = message)
         return message
     }
@@ -340,11 +316,16 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     pageState.value = pageState.value.copy(message = "合成缓存已清理")
                 }
                 PageAction.AutoTag -> {
+                    tagCancelRequested = false
                     pageState.value = pageState.value.copy(busy = true, message = "打标中…")
-                    // T6.3：页内可见进度（已打标的音色自动跳过 ⇒ 可断点续）
-                    val result = VoiceAutoTagger.tagAll(BuiltinTtsRuntime.voiceStore()) { done, total ->
-                        pageState.value = pageState.value.copy(message = "打标中 $done/$total")
-                    }
+                    // T6.3：页内可见进度（已打标的音色自动跳过 ⇒ 可断点续）；可随时取消
+                    val result = VoiceAutoTagger.tagAll(
+                        store = BuiltinTtsRuntime.voiceStore(),
+                        onProgress = { done, total ->
+                            pageState.value = pageState.value.copy(message = "打标中 $done/$total")
+                        },
+                        shouldAbort = { tagCancelRequested }
+                    )
                     // T8.16：打标后按 tag 自动聚合声音池（幂等）
                     val pooled = runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
                         .getOrDefault(0)
@@ -360,8 +341,27 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     )
                 }
                 is PageAction.DeleteVoice -> {
-                    BuiltinTtsRuntime.deleteVoice(action.voiceId)
-                    pageState.value = pageState.value.copy(message = "音色已删除")
+                    pageState.value = pageState.value.copy(
+                        message = BuiltinVoiceOps.deleteVoice(
+                            action.voiceId,
+                            ReadBook.book?.characterBookKey()
+                        )
+                    )
+                    reload()
+                }
+                // T6.3：置中断标记（已打标项保留，下次续跑）
+                PageAction.CancelTag -> {
+                    tagCancelRequested = true
+                    pageState.value = pageState.value.copy(message = "正在取消打标（已完成部分会保留）…")
+                }
+                // T6.4：只改索引标签，不动音频与绑定键（改名后绑定会回落，文案已提示）
+                is PageAction.SaveVoiceMeta -> {
+                    pageState.value = pageState.value.copy(
+                        message = BuiltinVoiceOps.saveMeta(
+                            action.voiceId, action.name, action.gender, action.age
+                        )
+                    )
+                    reload()
                 }
                 is PageAction.PreviewVoice -> previewVoice(action.voiceName)
                 PageAction.PreviewAllVoices -> previewAllVoices()

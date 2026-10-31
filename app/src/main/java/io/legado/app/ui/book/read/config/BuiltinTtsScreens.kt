@@ -1,5 +1,7 @@
 ﻿package io.legado.app.ui.book.read.config
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,14 @@ import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
 import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
+
+/**
+ * 细分隔边框：浅色主题下卡片也能看出"分组"，不用重阴影（页面不发灰）。
+ * 取色只借用 onSurface + 低透明度，不引入新的面 token。
+ */
+@Composable
+private fun subtleBorder(): BorderStroke =
+    BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
 
 data class ProfileRow(
     val id: String,
@@ -126,6 +136,15 @@ sealed interface PageAction {
     data class AssignVoice(val characterId: Long, val voiceName: String) : PageAction
     data object Reload : PageAction
     data class EditCharacter(val characterId: Long) : PageAction
+    /** T6.3：取消打标（已完成部分保留，下次续跑） */
+    data object CancelTag : PageAction
+    /** T6.4：编辑音色标签（名称/性别/年龄） */
+    data class SaveVoiceMeta(
+        val voiceId: String,
+        val name: String,
+        val gender: String,
+        val age: String
+    ) : PageAction
 }
 
 private enum class PageTab(val labelRes: Int) {
@@ -210,7 +229,7 @@ private fun EnginePanel(
     ) {
         Text("语音包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         state.profiles.forEach { profile ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = subtleBorder()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -275,7 +294,7 @@ private fun EnginePanel(
                 }
             }
         }
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = subtleBorder()) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -304,7 +323,7 @@ private fun EnginePanel(
                 }
             }
         }
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = subtleBorder()) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -329,7 +348,7 @@ private fun EnginePanel(
             }
         }
         if (state.importDir.isNotBlank()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = subtleBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("模型导入目录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(state.importDir, style = MaterialTheme.typography.bodySmall)
@@ -355,6 +374,8 @@ private fun VoicesPanel(
     var gender by remember { mutableStateOf(BuiltinVoiceFilter.Gender.ALL) }
     var untaggedOnly by remember { mutableStateOf(false) }
     var poolId by remember { mutableStateOf("") }
+    // T6.4：点音色行打开标签编辑（名称/性别/年龄），只影响索引不改音频
+    var editing by remember { mutableStateOf<BuiltinVoice?>(null) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -365,6 +386,9 @@ private fun VoicesPanel(
             }
             OutlinedButton(onClick = { onAction(PageAction.AutoTag) }) {
                 Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_voice_auto_tag))
+            }
+            TextButton(onClick = { onAction(PageAction.CancelTag) }) {
+                Text("取消打标")
             }
             OutlinedButton(onClick = { onAction(PageAction.ExportVoices) }) {
                 Text("导出音色包")
@@ -466,9 +490,10 @@ private fun VoicesPanel(
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(filtered, key = { it.id }) { voice ->
-                Card(modifier = Modifier
+                Card(border = subtleBorder(), modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 3.dp)) {
+                    .padding(vertical = 3.dp)
+                    .clickable { editing = voice }) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -477,18 +502,7 @@ private fun VoicesPanel(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(voice.displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            val badge = when (voice.origin) {
-                                BuiltinVoice.ORIGIN_PRESET -> "内置"
-                                BuiltinVoice.ORIGIN_SELF -> "自录"
-                                else -> "导入"
-                            }
-                            val meta = buildList {
-                                add(badge)
-                                if (voice.groupId.isNotBlank()) add("池:${voice.groupId}")
-                                if (voice.gender.isNotBlank()) add(if (voice.gender == "male") "男" else "女")
-                                if (voice.age.isNotBlank()) add(voice.age)
-                                if (voice.refText.length > 0) add("稿${voice.refText.length}字")
-                            }.joinToString(" · ")
+                            val meta = BuiltinTtsUiSupport.voiceMetaText(voice)
                             Text(meta, style = MaterialTheme.typography.bodySmall)
                         }
                         TextButton(onClick = { onAction(PageAction.PreviewVoice(voice.voiceName)) }) {
@@ -503,7 +517,68 @@ private fun VoicesPanel(
                 }
             }
         }
+        editing?.let { voice ->
+            VoiceMetaDialog(
+                voice = voice,
+                onDismiss = { editing = null },
+                onSave = { name, genderText, ageText ->
+                    onAction(PageAction.SaveVoiceMeta(voice.id, name, genderText, ageText))
+                    editing = null
+                }
+            )
+        }
     }
+}
+
+/**
+ * 音色标签编辑（T6.4）：名称/性别/年龄只改索引，不动音频；性别用 chips 避免手打英文。
+ */
+@Composable
+private fun VoiceMetaDialog(
+    voice: BuiltinVoice,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit
+) {
+    var name by remember { mutableStateOf(voice.displayName) }
+    var gender by remember { mutableStateOf(voice.gender) }
+    var age by remember { mutableStateOf(voice.age) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑音色标签") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("音色名称") },
+                    singleLine = true
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("" to "未定", "male" to "男", "female" to "女").forEach { (value, label) ->
+                        FilterChip(
+                            selected = gender == value,
+                            onClick = { gender = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("" to "未定", "teen" to "少年", "youth" to "青年", "aged" to "老年")
+                        .forEach { (value, label) ->
+                            FilterChip(
+                                selected = age == value,
+                                onClick = { age = value },
+                                label = { Text(label) }
+                            )
+                        }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name.trim(), gender, age) }) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }
 
 @Composable
@@ -528,6 +603,7 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
             LazyColumn(Modifier.weight(1f)) {
                 items(state.roleRows, key = { it.characterId }) { row ->
                     Card(
+                        border = subtleBorder(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
@@ -643,6 +719,7 @@ private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageActio
                 key = { "${it.paragraphIndex}:${it.start}:${it.end}" }
             ) { row ->
                 Card(
+                    border = subtleBorder(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 3.dp)

@@ -174,4 +174,30 @@ class BuiltinTtsActivityTest {
         assertTrue(subtitle.contains("离线"))
         assertTrue(subtitle.contains("多角色"))
     }
+
+    @Test
+    fun `音色行副文案含来源池性别年龄 T6-4`() {
+        val imported = io.legado.app.help.tts.builtin.BuiltinVoice(
+            id = "v1",
+            name = "男青年",
+            refAudio = "v1/prompt.wav",
+            refText = "稿",
+            origin = io.legado.app.help.tts.builtin.BuiltinVoice.ORIGIN_ZIP,
+            groupId = "青年",
+            gender = "male",
+            age = "youth"
+        )
+        assertEquals("导入 · 池:青年 · 男 · youth · 稿1字", BuiltinTtsUiSupport.voiceMetaText(imported))
+        val preset = io.legado.app.help.tts.builtin.BuiltinVoice(
+            id = "b6_m_teen",
+            name = "内置·男·少年",
+            refAudio = "b6_m_teen/prompt.wav",
+            refText = "稿",
+            origin = io.legado.app.help.tts.builtin.BuiltinVoice.ORIGIN_PRESET,
+            gender = "male",
+            age = "teen",
+            readOnly = true
+        )
+        assertTrue(BuiltinTtsUiSupport.voiceMetaText(preset).startsWith("内置"))
+    }
 }

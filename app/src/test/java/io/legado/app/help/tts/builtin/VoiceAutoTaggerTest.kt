@@ -73,4 +73,39 @@ class VoiceAutoTaggerTest {
         assertEquals("youth", VoiceAutoTagger.inferAge("青年女声"))
         assertEquals("", VoiceAutoTagger.inferAge("旁白"))
     }
+
+    @Test
+    fun `取消打标保留已完成项并可续跑 T6-3`() {
+        val store = BuiltinVoiceStore(temp.newFolder("abort-store"))
+        store.addVoice(
+            name = "第一个",
+            pcmWavBytes = sineWav(120f),
+            refText = "稿",
+            tags = emptyList(),
+            origin = BuiltinVoice.ORIGIN_ZIP,
+            profileId = "clone",
+            id = "v1"
+        )
+        store.addVoice(
+            name = "第二个",
+            pcmWavBytes = sineWav(230f),
+            refText = "稿",
+            tags = emptyList(),
+            origin = BuiltinVoice.ORIGIN_ZIP,
+            profileId = "clone",
+            id = "v2"
+        )
+        // 第 1 次检查放行（处理第 1 个），第 2 次检查要求中断
+        var checks = 0
+        val aborted = kotlinx.coroutines.runBlocking {
+            VoiceAutoTagger.tagAll(store, shouldAbort = { checks++ > 0 })
+        }
+        assertEquals(1, aborted.processed)
+        assertEquals("male", store.findById("v1")?.gender)
+        assertEquals("", store.findById("v2")?.gender.orEmpty())
+        // 续跑：只处理剩余（断点续）
+        val rest = kotlinx.coroutines.runBlocking { VoiceAutoTagger.tagAll(store) }
+        assertEquals(1, rest.processed)
+        assertEquals("female", store.findById("v2")?.gender)
+    }
 }

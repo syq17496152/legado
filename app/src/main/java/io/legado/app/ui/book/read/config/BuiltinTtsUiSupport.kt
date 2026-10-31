@@ -89,4 +89,20 @@ internal object BuiltinTtsUiSupport {
 
     /** 管理页副标题（纯函数可单测）：一眼说明这套引擎的定位 */
     fun engineSubtitle(): String = "离线 · 断网可用 · 多角色逐段换声"
+
+    /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别 + 年龄 + 逐字稿长度 */
+    fun voiceMetaText(voice: BuiltinVoice): String {
+        val badge = when (voice.origin) {
+            BuiltinVoice.ORIGIN_PRESET -> "内置"
+            BuiltinVoice.ORIGIN_SELF -> "自录"
+            else -> "导入"
+        }
+        return buildList {
+            add(badge)
+            if (voice.groupId.isNotBlank()) add("池:${voice.groupId}")
+            if (voice.gender.isNotBlank()) add(if (voice.gender == "male") "男" else "女")
+            if (voice.age.isNotBlank()) add(voice.age)
+            if (voice.refText.isNotEmpty()) add("稿${voice.refText.length}字")
+        }.joinToString(" · ")
+    }
 }

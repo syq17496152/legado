@@ -18,14 +18,18 @@ object VoiceAutoTagger {
 
     suspend fun tagAll(
         store: BuiltinVoiceStore,
-        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
+        shouldAbort: () -> Boolean = { false }
     ): Result = withContext(Dispatchers.IO) {
         val voices = store.list().filter { it.gender.isBlank() }
         if (voices.isEmpty()) return@withContext Result()
         var male = 0
         var female = 0
         var unknown = 0
+        var processed = 0
         voices.forEachIndexed { index, voice ->
+            // T6.3：可中断——已完成的音色已落库，下次从剩余继续（天然断点续）
+            if (shouldAbort()) return@withContext Result(processed, male, female, unknown)
             val file = store.audioFile(voice)
             val f0 = runCatching {
                 val audio = PcmAudioUtils.readWav(file)
@@ -49,9 +53,10 @@ object VoiceAutoTagger {
                 "female" -> female++
                 else -> unknown++
             }
+            processed = index + 1
             onProgress(index + 1, voices.size)
         }
-        Result(voices.size, male, female, unknown)
+        Result(processed, male, female, unknown)
     }
 
     fun inferAge(name: String): String = when {

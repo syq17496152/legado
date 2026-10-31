@@ -272,7 +272,7 @@ private fun CastSceneScreen(
                 border = if (card.selected) {
                     BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                 } else {
-                    null
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
                 },
                 colors = if (card.selected) {
                     CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
