@@ -6,8 +6,10 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.readaloud.role.BookAliasStore
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadBook
@@ -396,11 +398,28 @@ object TtsPrebuildManager {
                 // 且产物只进引擎缓存，不写 http 缓存命名空间）
                 if (task.httpTts == null && BuiltinTtsRuntime.isReady()) {
                     val builtinRate = (AppConfig.ttsSpeechRate + 5) / 10f
-                    val paragraphUnits = unit.unitText.split('\n')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .map { BuiltinTtsRuntime.PrebuildUnit(it, task.voiceKey) }
-                    val prebuild = BuiltinTtsRuntime.prebuild(paragraphUnits, builtinRate)
+                    // T3.3：多角色模板激活时按"段 + 角色音色"构造单元，否则缓存键与播放侧对不上
+                    val roleBookKey = task.book.characterBookKey()
+                    val ruleSet = runCatching {
+                        TtsCastingStore.resolveActiveRuleSet(roleBookKey)
+                    }.getOrNull()
+                    val fallbackVoice = task.voiceKey.ifBlank {
+                        BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+                            .narratorVoice(roleBookKey).orEmpty()
+                            .ifBlank { BuiltinTtsRuntime.voices().firstOrNull()?.voiceName.orEmpty() }
+                    }
+                    val units = if (ruleSet != null && ruleSet.rules.isNotEmpty()) {
+                        BuiltinPrebuildUnits.multiRoleUnits(
+                            unitText = unit.unitText,
+                            bookKey = roleBookKey,
+                            chapterIndex = unit.chapterIndex,
+                            ruleSet = ruleSet,
+                            fallbackVoiceName = fallbackVoice
+                        )
+                    } else {
+                        BuiltinPrebuildUnits.singleVoiceUnits(unit.unitText, task.voiceKey)
+                    }
+                    val prebuild = BuiltinTtsRuntime.prebuild(units, builtinRate)
                     if (prebuild.failed == 0) done++ else failed++
                     AppLog.putDebugWithTag(
                         AppLog.TAG_TTS_TRACE,
