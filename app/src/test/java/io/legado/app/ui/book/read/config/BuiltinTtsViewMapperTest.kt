@@ -59,6 +59,30 @@ class BuiltinTtsViewMapperTest {
     }
 
     @Test
+    fun `连续合成十分钟渲染温控提示 九分钟不渲染`() {
+        val profiles = listOf(ProfileRow("fast", "极速单声", BuiltinEngineState.READY, true, 24000))
+        val nine = BuiltinTtsViewMapper.findings(
+            profiles = profiles,
+            abiSupported = true,
+            memoryMb = 2000,
+            lastRtf = 0.6f,
+            lastError = "",
+            continuousMinutes = 9
+        )
+        assertEquals("[正常] 运行正常", nine)
+        val ten = BuiltinTtsViewMapper.findings(
+            profiles = profiles,
+            abiSupported = true,
+            memoryMb = 2000,
+            lastRtf = 0.6f,
+            lastError = "",
+            continuousMinutes = 10
+        )
+        assertTrue("十分钟必须出现温控提示：$ten", ten.contains("发热降频"))
+        assertTrue("必须给出可操作处置：$ten", ten.contains("暂停"))
+    }
+
+    @Test
     fun `首选档损坏时提示已回落`() {
         val text = BuiltinTtsViewMapper.findings(
             profiles = listOf(

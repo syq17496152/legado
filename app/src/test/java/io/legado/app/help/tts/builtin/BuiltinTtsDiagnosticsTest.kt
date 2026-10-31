@@ -10,6 +10,28 @@ import org.junit.Test
 class BuiltinTtsDiagnosticsTest {
 
     @Test
+    fun `连续合成十分钟触发温控提示 九分钟不触发`() {
+        // 纯函数：起点 0（未开始）/时钟回拨 ⇒ 0 分钟；正常差值按分钟取整
+        assertEquals(0, BuiltinTtsDiagnostics.continuousMinutes(0L, 1_000_000L))
+        assertEquals(0, BuiltinTtsDiagnostics.continuousMinutes(2_000L, 1_000L))
+        assertEquals(9, BuiltinTtsDiagnostics.continuousMinutes(1_000L, 1_000L + 9 * 60_000L))
+        assertEquals(10, BuiltinTtsDiagnostics.continuousMinutes(1_000L, 1_000L + 10 * 60_000L))
+        // 9 分钟：不给温控提示（只有"正常"一条）
+        val nine = BuiltinTtsDiagnostics.evaluate(
+            BuiltinTtsDiagnostics.Input(state = BuiltinEngineState.READY, continuousMinutes = 9)
+        )
+        assertEquals(1, nine.size)
+        // 10 分钟：给 WARN thermal，并在文案里带上分钟数
+        val ten = BuiltinTtsDiagnostics.evaluate(
+            BuiltinTtsDiagnostics.Input(state = BuiltinEngineState.READY, continuousMinutes = 10)
+        )
+        val thermal = ten.firstOrNull { it.code == "thermal" }
+        assertEquals(BuiltinTtsDiagnostics.Level.WARN, thermal?.level)
+        assertTrue("温控文案须带分钟数：${thermal?.message}", thermal?.message?.contains("10 分钟") == true)
+        assertTrue("温控须给可操作建议", thermal?.action?.contains("暂停") == true)
+    }
+
+    @Test
     fun `正常档位只给一条正常结论`() {
         val findings = BuiltinTtsDiagnostics.evaluate(
             BuiltinTtsDiagnostics.Input(state = BuiltinEngineState.READY, lastRtf = 0.8f)

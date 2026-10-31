@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read.config
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinTtsDiagnostics
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadBook
 
 /**
@@ -71,7 +72,9 @@ object BuiltinTtsViewMapper {
         memoryMb: Long,
         lastRtf: Float,
         lastError: String,
-        preferredId: String = ""
+        preferredId: String = "",
+        // T8.12：连续合成分钟数（null = 读运行时窗口；显式传入便于单测）
+        continuousMinutes: Int? = null
     ): String {
         val active = profiles.firstOrNull { it.active } ?: profiles.firstOrNull()
         val preferred = profiles.firstOrNull { it.id == preferredId }
@@ -86,7 +89,11 @@ object BuiltinTtsViewMapper {
                 preferredId = preferredId.takeIf { preferred != null }.orEmpty(),
                 preferredTitle = preferred?.title.orEmpty(),
                 activeId = active?.id.orEmpty(),
-                activeTitle = active?.title.orEmpty()
+                activeTitle = active?.title.orEmpty(),
+                // T8.12：连续合成 ≥10 分钟给出温控降档提示（读运行时窗口，读不到按 0 处理）
+                continuousMinutes = continuousMinutes ?: runCatching {
+                    BuiltinTtsRuntime.continuousSynthesisMinutes()
+                }.getOrDefault(0)
             )
         )
         return BuiltinTtsDiagnostics.render(findings)

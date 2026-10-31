@@ -39,7 +39,17 @@ import io.legado.app.help.player.PlaybackErrorAction
 import io.legado.app.help.player.PlaybackErrorPolicy
 import io.legado.app.help.player.PlaybackErrorSession
 import io.legado.app.help.readaloud.TtsCacheSweep
+import io.legado.app.help.readaloud.casting.CastingRuleSet
+import io.legado.app.help.readaloud.casting.CastingSegment
+import io.legado.app.help.readaloud.casting.CastingTag
+import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.readaloud.casting.TtsTagSplitter
+import io.legado.app.help.readaloud.http.HttpSegmentEnqueuer
+import io.legado.app.help.readaloud.http.HttpSegmentVoicePlan
+import io.legado.app.help.readaloud.http.HttpTtsStreamFetcher
 import io.legado.app.help.readaloud.prebuild.TtsCacheKeys
+import io.legado.app.help.readaloud.role.OfflineRoleResolver
+import io.legado.app.help.book.characterBookKey
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -100,10 +110,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var speechRate: Int = AppConfig.speechRatePlay + 5
     private var downloadTask: Coroutine<*>? = null
     private var playIndexJob: Job? = null
-    private var downloadErrorNo: Int = 0
 
-    /** F5/2.14：静音替代提示去重（服务会话级，一次朗读会话至多提示一次） */
-    private var silentFallbackToasted: Boolean = false
+    /** F5/2.14：T8.6 HTTP 取流（重试记账 / 静音替代提示都收敛在取流器内） */
+    private val streamFetcher by lazy { HttpTtsStreamFetcher(this) }
+    /** T8.6：当前章生效的多角色规则集（null = 单声路径，行为与改造前完全一致） */
+    private var activeRuleSet: CastingRuleSet? = null
     /**
      * W2 / REQ-13：朗读错误自愈记账（上限 3 次 + 冷却 60s）。
      * 取代原 `playErrorNo` 硬编码阈值 5：判据来源统一到 [PlaybackErrorPolicy]（与视频/听书同表）。
@@ -195,10 +206,14 @@ class HttpReadAloudService : BaseReadAloudService(),
         exoPlayer.clearMediaItems()
         downloadTask?.cancel()
         resetCurrentHttpTts()
+        streamFetcher.resetSession()
         downloadTask = execute {
             downloadTaskActiveLock.withLock {
                 ensureActive()
                 val httpTts = resolveCurrentHttpTts()
+                activeRuleSet = runCatching {
+                    TtsCastingStore.resolveActiveRuleSet(ReadBook.book?.bookUrl.orEmpty())
+                }.getOrNull()
                 playDownloadQueue(httpTts)
             }
         }.onError {
@@ -208,6 +223,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     /** 按段下载队列装配（downloadAndPlayAudios/流式 type=2 降级共用；execute 块（CoroutineScope）内调用） */
     private suspend fun CoroutineScope.playDownloadQueue(httpTts: HttpTTS) {
+        val enqueuer = segmentEnqueuer(httpTts)
         for (index in contentList.indices) {
             ensureActive()
             if (index < nowSpeak) continue
@@ -215,9 +231,16 @@ class HttpReadAloudService : BaseReadAloudService(),
             if (paragraphStartPos > 0 && index == nowSpeak) {
                 text = text.substring(sentenceAlignedStart(text, paragraphStartPos))
             }
+            val ruleSet = activeRuleSet
+            val segments = ruleSet?.let {
+                TtsTagSplitter.splitParagraph(index, text, it.rules)
+            }.orEmpty()
             val fileName = md5SpeakFileName(text)
             val speakText = text.replace(AppPattern.notReadAloudRegex, "")
-            if (speakText.isEmpty()) {
+            if (segments.isNotEmpty()) {
+                enqueuer.enqueue(index, text, segments, ruleSet!!)
+                addParagraphPause(index)
+            } else if (speakText.isEmpty()) {
                 AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$text")
                 createSilentSound(fileName)
             } else if (!hasSpeakFile(fileName)) {
@@ -240,23 +263,46 @@ class HttpReadAloudService : BaseReadAloudService(),
                     return
                 }
             }
-            val file = getSpeakFileAsMd5(fileName)
-            val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
-            launch(Main) {
-                exoPlayer.addMediaItem(mediaItem)
-            }
-            // 段落间停顿: 在非末段后插入静音项 (R7.1)
-            val pauseMs = AppConfig.ttsParagraphPauseMs
-            if (pauseMs > 0 && index < contentList.lastIndex) {
-                val pauseItem = MediaItem.fromUri(
-                    Uri.fromFile(createParagraphPauseFile(pauseMs))
-                )
-                launch(Main) {
-                    exoPlayer.addMediaItem(pauseItem)
-                }
-            }
+            if (segments.isEmpty()) enqueueParagraphMedia(fileName, index)
         }
         preDownloadAudios(httpTts)
+    }
+
+    /** 整段媒体入队（单声路径）+ 段落间静音（多角色路径只调 [addParagraphPause]） */
+    private fun CoroutineScope.enqueueParagraphMedia(fileName: String, index: Int) {
+        launch(Main) { exoPlayer.addMediaItem(MediaItem.fromUri(Uri.fromFile(getSpeakFileAsMd5(fileName)))) }
+        addParagraphPause(index)
+    }
+
+    /** 段落间停顿：在非末段后插入静音项 (R7.1) */
+    private fun CoroutineScope.addParagraphPause(index: Int) {
+        val pauseMs = AppConfig.ttsParagraphPauseMs
+        if (pauseMs > 0 && index < contentList.lastIndex) {
+            val pauseItem = MediaItem.fromUri(Uri.fromFile(createParagraphPauseFile(pauseMs)))
+            launch(Main) { exoPlayer.addMediaItem(pauseItem) }
+        }
+    }
+
+    /** T8.6 段级换声入队器：宿主只提供 取流 / 文件读写 / 入队 三个能力，切段与归因在 HttpSegmentEnqueuer */
+    private fun segmentEnqueuer(httpTts: HttpTTS): HttpSegmentEnqueuer {
+        val chapterIndex = textChapter?.chapter?.index ?: -1
+        return HttpSegmentEnqueuer(
+            bookKey = ReadBook.book?.bookUrl.orEmpty(),
+            roleBookKey = ReadBook.book?.characterBookKey().orEmpty(),
+            chapterIndex = chapterIndex,
+            hooks = object : HttpSegmentEnqueuer.Hooks {
+                override fun fileNameOf(text: String, voiceId: String) = md5SpeakFileName(text, voiceId = voiceId)
+                override fun hasFile(fileName: String) = hasSpeakFile(fileName)
+                override fun writeFile(fileName: String, stream: InputStream) { createSpeakFile(fileName, stream) }
+                override fun writeSilent(fileName: String) { createSilentSound(fileName) }
+                override suspend fun fetch(text: String, toneID: String) =
+                    getEngineSpeakStream(httpTts, text, toneID)
+                override fun addMedia(fileName: String) {
+                    val uri = Uri.fromFile(getSpeakFileAsMd5(fileName))
+                    lifecycleScope.launch(Main) { exoPlayer.addMediaItem(MediaItem.fromUri(uri)) }
+                }
+            }
+        )
     }
 
     private suspend fun preDownloadAudios(httpTts: HttpTTS) {
@@ -415,12 +461,17 @@ class HttpReadAloudService : BaseReadAloudService(),
     /**
      * 引擎合成统一入口（§3.5/AD-04）：type=2 走脚本引擎（TtsScriptEngineClient），type=1 走 URL 模板
      */
-    private suspend fun getEngineSpeakStream(httpTts: HttpTTS, speakText: String): InputStream? {
+    private suspend fun getEngineSpeakStream(
+        httpTts: HttpTTS,
+        speakText: String,
+        toneID: String = ""
+    ): InputStream? {
         if (httpTts.type == 2) {
             val request = io.legado.app.help.readaloud.script.TtsScriptEngineClient.synthesize(
                 httpTts,
                 speakText,
-                ReadAloud.currentRoute.toneID.ifBlank { null },
+                // T8.6：段级音色优先；空则沿用全局路由音色（原行为）
+                toneID.ifBlank { ReadAloud.currentRoute.toneID }.ifBlank { null },
                 // P1-14 修复：全局语速送达脚本引擎（倍率=speechRate/10，与系统引擎同口径，默认 1.0；
                 // 旧实现恒传 null → JS 端 rate||1 回退，全局语速滑杆对脚本引擎无效）
                 speechRate / 10f,
@@ -444,122 +495,29 @@ class HttpReadAloudService : BaseReadAloudService(),
             )
             return analyzeUrl.getResponseAwait().body.byteStream()
         }
-        return getSpeakStream(httpTts, speakText)
+        return getSpeakStream(httpTts, speakText, toneID)
     }
 
+    /** 取流（T8.6：toneID 透传给 URL 模板 {{currentToneID}} / 脚本引擎；重试与静默替代见 HttpTtsStreamFetcher） */
     private suspend fun getSpeakStream(
         httpTts: HttpTTS,
-        speakText: String
-    ): InputStream? {
-        while (true) {
-            try {
-                val analyzeUrl = AnalyzeUrl(
-                    httpTts.url,
-                    speakText = speakText,
-                    speakSpeed = speechRate,
-                    source = httpTts,
-                    readTimeout = 300 * 1000L,
-                    coroutineContext = currentCoroutineContext()
-                )
-                val checkJs = httpTts.loginCheckJs
-                val response = kotlin.runCatching {
-                    analyzeUrl.getResponseAwait().let {
-                        currentCoroutineContext().ensureActive()
-                        if (!checkJs.isNullOrBlank()) {
-                            analyzeUrl.evalJS(checkJs, it) as Response
-                        } else {
-                            it
-                        }
-                    }
-                }.getOrElse { throwable ->
-                    currentCoroutineContext().ensureActive()
-                    if (!checkJs.isNullOrBlank()) {
-                        val errResponse = analyzeUrl.getErrResponse(throwable)
-                        try {
-                            (analyzeUrl.evalJS(checkJs, errResponse) as Response).also {
-                                if (it.code == 500) {
-                                    throw throwable
-                                }
-                            }
-                        } catch (_: Throwable) {
-                            throw throwable
-                        }
-                    } else {
-                        throw throwable
-                    }
-                }
-                response.headers["Content-Type"]?.let { contentType ->
-                    val contentType = contentType.substringBefore(";")
-                    val ct = httpTts.contentType
-                    if (contentType == "application/json" || contentType.startsWith("text/")) {
-                        throw NoStackTraceException(response.body.string())
-                    } else if (ct?.isNotBlank() == true) {
-                        if (!contentType.matches(ct.toRegex())) {
-                            throw NoStackTraceException(
-                                "TTS服务器返回错误：" + response.body.string()
-                            )
-                        }
-                    }
-                }
-                currentCoroutineContext().ensureActive()
-                response.body.byteStream().let { stream ->
-                    downloadErrorNo = 0
-                    // F5/2.14：下载成功重置静音提示去重（新会话再次失败时可再提示）
-                    silentFallbackToasted = false
-                    return stream
-                }
-            } catch (e: Exception) {
-                when (e) {
-                    is CancellationException -> throw e
-                    is ScriptException, is WrappedException -> {
-                        AppLog.put("js错误\n${e.localizedMessage}", e, true)
-                        e.printOnDebug()
-                        throw e
-                    }
+        speakText: String,
+        toneID: String = ""
+    ): InputStream? = streamFetcher.fetch(httpTts, speakText, speechRate, toneID)
 
-                    is SocketTimeoutException, is ConnectException -> {
-                        downloadErrorNo++
-                        if (downloadErrorNo > 5) {
-                            val msg = "tts超时或连接错误超过5次\n${e.localizedMessage}"
-                            AppLog.put(msg, e, true)
-                            throw e
-                        }
-                    }
-
-                    else -> {
-                        downloadErrorNo++
-                        val msg = "tts下载错误\n${e.localizedMessage}"
-                        AppLog.put(msg, e)
-                        e.printOnDebug()
-                        if (downloadErrorNo > 5) {
-                            val msg1 = "TTS服务器连续5次错误，已暂停阅读。"
-                            AppLog.put(msg1, e, true)
-                            throw e
-                        } else {
-                            AppLog.put("TTS下载音频出错，使用无声音频代替。\n朗读文本：$speakText")
-                            // F5/2.14：静默替代不再无感——每次服务会话仅提示一次（防逐句刷 toast），
-                            // 告知用户当前段落以静音代替，正向修复日志实锤的 11 次"静默吞错误"
-                            if (!silentFallbackToasted) {
-                                silentFallbackToasted = true
-                                toastOnUi("TTS 音频下载出错，本段将以静音代替（详情见日志）")
-                            }
-                            break
-                        }
-                    }
-                }
-            }
-        }
-        return null
-    }
-
-    private fun md5SpeakFileName(content: String, textChapter: TextChapter? = this.textChapter): String {
+    private fun md5SpeakFileName(
+        content: String,
+        textChapter: TextChapter? = this.textChapter,
+        // T8.6：段级换声时缓存键必须带段级音色（同文本不同角色不串音）
+        voiceId: String = ReadAloud.currentRoute.toneID
+    ): String {
         // 键单源收敛修复（§3.7.1 契约 1/2/8，任务 2.10）：播放端改走 TtsCacheKeys 单源，
         // 与批量端同函数（修复缺陷：播放端残留旧 v1 内联键，导致预合成产物播放端命中不了）
         // E5/方向①：改走键因子三件套门面（engineKey/speedKey/voiceKey 字符串化收进单源）
         val fileName = TtsCacheKeys.speakFileName(
             engineId = currentHttpTts?.id,
             speechRate = speechRate,
-            voiceId = ReadAloud.currentRoute.toneID,
+            voiceId = voiceId,
             chapterIndex = textChapter?.chapter?.index ?: -1,
             // textChapter.title 已是 displayTitle 口径（ReadBook.kt:1331 getDisplayTitle 同源解析），
             // 与批量端 resolveChapterTitle 一致，禁改回 chapter.title 原始值（键失配）
@@ -770,6 +728,11 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
         // 段落停顿静音项不推进段落指针 (R7.1)
         if (mediaItem?.localConfiguration?.uri?.lastPathSegment?.startsWith("pause_") == true) {
+            return
+        }
+        // T8.6 段级换声：同段内非末段（l0）只更新时间轴，段落指针等末段（l1）再推进
+        if (HttpSegmentVoicePlan.isNonLastSegment(mediaItem?.localConfiguration?.uri?.lastPathSegment)) {
+            upPlayPos()
             return
         }
         updateNextPos()

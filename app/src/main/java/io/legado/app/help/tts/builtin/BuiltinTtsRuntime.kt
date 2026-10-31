@@ -111,6 +111,10 @@ object BuiltinTtsRuntime {
     private var cacheMisses = 0L
     private var seeded = false
 
+    /** T8.12：连续合成起点（0 = 未开始；空闲释放后归零），供温控提示计算 */
+    @Volatile
+    private var continuousSynthesisStartMs = 0L
+
     fun init(context: Context) {
         if (initialized) return
         synchronized(initLock) {
@@ -269,6 +273,8 @@ object BuiltinTtsRuntime {
         check(initialized) { "BuiltinTtsRuntime 未初始化" }
         if (text.isBlank()) return null
         ensureSeeded()
+        // T8.12：记录连续合成起点（空闲释放时归零），用于 10 分钟温控提示
+        if (continuousSynthesisStartMs <= 0L) continuousSynthesisStartMs = System.currentTimeMillis()
         val profile = activeProfile() ?: run {
             lastError = "未下载离线语音包"
             return null
@@ -567,8 +573,14 @@ object BuiltinTtsRuntime {
         idleReleaseJob = scope.launch {
             delay(IDLE_RELEASE_MS)
             releaseEngine()
+            // 引擎释放 = 连续合成窗口结束（下次合成重新计时）
+            continuousSynthesisStartMs = 0L
         }
     }
+
+    /** T8.12：连续合成分钟数（0 = 未开始或已空闲释放） */
+    fun continuousSynthesisMinutes(nowMs: Long = System.currentTimeMillis()): Int =
+        BuiltinTtsDiagnostics.continuousMinutes(continuousSynthesisStartMs, nowMs)
 
     private fun readActiveProfileId(): String {
         return runCatching {

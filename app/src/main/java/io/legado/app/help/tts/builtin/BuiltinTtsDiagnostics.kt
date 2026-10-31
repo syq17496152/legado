@@ -28,11 +28,23 @@ object BuiltinTtsDiagnostics {
         val preferredId: String = "",
         val preferredTitle: String = "",
         val activeId: String = "",
-        val activeTitle: String = ""
+        val activeTitle: String = "",
+        /** T8.12：连续合成已持续多少分钟（0 = 未开始/已空闲释放） */
+        val continuousMinutes: Int = 0
     )
 
     const val LOW_MEMORY_MB = 400L
     const val RTF_WARN = 1.2f
+    const val THERMAL_WARN_MINUTES = 10
+
+    /**
+     * 纯函数（JVM 可测）：连续合成分钟数。
+     * 起点 0（未开始）或时钟回拨（now <= start）一律返回 0，避免出现负数/异常大值。
+     */
+    fun continuousMinutes(startMs: Long, nowMs: Long): Int {
+        if (startMs <= 0L || nowMs <= startMs) return 0
+        return ((nowMs - startMs) / 60_000L).toInt()
+    }
 
     fun evaluate(input: Input): List<Finding> {
         val findings = mutableListOf<Finding>()
@@ -75,6 +87,17 @@ object BuiltinTtsDiagnostics {
                     "rtf_high",
                     "合成速度偏慢（RTF ${"%.2f".format(input.lastRtf)}，>1.0 表示慢于播放）",
                     "改用极速档，或开启预合成后连播"
+                )
+            )
+        }
+        // T8.12 温控提示：连续合成 10 分钟以上，设备发热降频会让朗读忽快忽慢
+        if (input.continuousMinutes >= THERMAL_WARN_MINUTES) {
+            findings.add(
+                Finding(
+                    Level.WARN,
+                    "thermal",
+                    "已连续合成 ${input.continuousMinutes} 分钟，设备可能发热降频",
+                    "暂停几分钟，或改用预合成后连播"
                 )
             )
         }
