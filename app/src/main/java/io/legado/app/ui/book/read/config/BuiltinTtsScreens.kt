@@ -270,7 +270,10 @@ private fun EnginePanel(
                             )
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                    ) {
                         if (profile.state != BuiltinEngineState.READY) {
                             Button(onClick = { onAction(PageAction.DownloadModel(profile.id)) }) {
                                 Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.builtin_tts_model_download))
@@ -359,7 +362,6 @@ private fun EnginePanel(
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -405,7 +407,7 @@ private fun VoicesPanel(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("照着这句话读（参考文本）") },
             enabled = !state.recording,
-            maxLines = 3
+            maxLines = 2
         )
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -440,7 +442,7 @@ private fun VoicesPanel(
             val poolNames = BuiltinTtsUiSupport.visiblePoolNames(state.voices)
             if (poolNames.isNotEmpty()) {
                 // 声音池筛选（T8.16）：池名来自 tag 自动聚合
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
                         selected = poolId.isBlank(),
                         onClick = { poolId = "" },
@@ -455,7 +457,7 @@ private fun VoicesPanel(
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(
                     BuiltinVoiceFilter.Gender.ALL to "全部",
                     BuiltinVoiceFilter.Gender.MALE to "男",
@@ -553,7 +555,7 @@ private fun VoiceMetaDialog(
                     label = { Text("音色名称") },
                     singleLine = true
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("" to "未定", "male" to "男", "female" to "女").forEach { (value, label) ->
                         FilterChip(
                             selected = gender == value,
@@ -562,7 +564,7 @@ private fun VoiceMetaDialog(
                         )
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("" to "未定", "teen" to "少年", "youth" to "青年", "aged" to "老年")
                         .forEach { (value, label) ->
                             FilterChip(

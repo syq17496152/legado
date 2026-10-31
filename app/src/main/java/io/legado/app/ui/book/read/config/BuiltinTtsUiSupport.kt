@@ -90,18 +90,30 @@ internal object BuiltinTtsUiSupport {
     /** 管理页副标题（纯函数可单测）：一眼说明这套引擎的定位 */
     fun engineSubtitle(): String = "离线 · 断网可用 · 多角色逐段换声"
 
-    /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别 + 年龄 + 逐字稿长度 */
+    /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别/年龄（中文，名称已含则不重复）+ 逐字稿长度 */
     fun voiceMetaText(voice: BuiltinVoice): String {
         val badge = when (voice.origin) {
             BuiltinVoice.ORIGIN_PRESET -> "内置"
             BuiltinVoice.ORIGIN_SELF -> "自录"
             else -> "导入"
         }
+        val genderLabel = when (voice.gender) {
+            "male" -> "男"
+            "female" -> "女"
+            else -> ""
+        }
+        val ageLabel = when (voice.age) {
+            "teen" -> "少年"
+            "youth" -> "青年"
+            "aged" -> "老年"
+            else -> ""
+        }
         return buildList {
             add(badge)
             if (voice.groupId.isNotBlank()) add("池:${voice.groupId}")
-            if (voice.gender.isNotBlank()) add(if (voice.gender == "male") "男" else "女")
-            if (voice.age.isNotBlank()) add(voice.age)
+            // 名称已写"男/女"或"少年/青年/老年"时不再重复（避免"男 · 男"这类冗余）
+            if (genderLabel.isNotBlank() && !voice.displayName.contains(genderLabel)) add(genderLabel)
+            if (ageLabel.isNotBlank() && !voice.displayName.contains(ageLabel)) add(ageLabel)
             if (voice.refText.isNotEmpty()) add("稿${voice.refText.length}字")
         }.joinToString(" · ")
     }

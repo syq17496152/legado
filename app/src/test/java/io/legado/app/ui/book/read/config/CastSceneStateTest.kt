@@ -18,7 +18,8 @@ class CastSceneStateTest {
         assertEquals(null, CastSceneState.templateOf(CastSceneState.CARD_CUSTOM))
         assertEquals(CastSceneState.CARD_MONO, CastSceneState.cardOf("builtin_mono"))
         assertEquals(CastSceneState.CARD_CUSTOM, CastSceneState.cardOf("my_custom_template"))
-        assertEquals(CastSceneState.CARD_CUSTOM, CastSceneState.cardOf(null))
+        // 未设置模板 = 默认单声，应落在「普通朗读」而不是「自定义」
+        assertEquals(CastSceneState.CARD_MONO, CastSceneState.cardOf(null))
     }
 
     @Test

@@ -47,8 +47,9 @@ object CastSceneState {
         else -> null
     }
 
-    /** 当前激活模板 → 选中的卡（未命中任何内置模板即"自定义"） */
+    /** 当前激活模板 → 选中的卡（未设置模板=默认单声 ⇒ 普通朗读；其它模板=自定义） */
     fun cardOf(templateId: String?): String = when (templateId) {
+        null -> CARD_MONO
         TEMPLATE_MONO -> CARD_MONO
         TEMPLATE_DUAL -> CARD_DUAL
         TEMPLATE_MULTI -> CARD_MULTI
