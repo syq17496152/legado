@@ -39,6 +39,16 @@ class BuiltinTtsCacheTest {
     }
 
     @Test
+    fun `缓存水位上限可取 默认 2GB T3-4`() {
+        // 管理页需要显示「用量 / 上限」：默认上限与构造参数都必须能读出来
+        val cache = BuiltinTtsCache(temp.newFolder("cache"))
+        assertEquals(BuiltinTtsCache.DEFAULT_MAX_DISK_BYTES, cache.diskLimitBytes())
+        val custom = BuiltinTtsCache(temp.newFolder("cache2"), maxDiskBytes = 64L * 1024 * 1024)
+        assertEquals(64L * 1024 * 1024, custom.diskLimitBytes())
+        assertTrue(custom.diskLimitBytes() < BuiltinTtsCache.DEFAULT_MAX_DISK_BYTES)
+    }
+
+    @Test
     fun `写盘后可读回且采样率自描述`() {
         val cache = BuiltinTtsCache(temp.newFolder("cache"))
         val pcm = PcmAudioUtils.floatToPcm16(floatArrayOf(0.1f, -0.2f, 0.3f))

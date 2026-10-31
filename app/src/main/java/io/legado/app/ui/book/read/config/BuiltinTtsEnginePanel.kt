@@ -222,6 +222,14 @@ private fun StatusCard(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
                 modifier = Modifier.padding(top = 10.dp)
             )
         }
+        if (state.cacheWatermark.isNotBlank()) {
+            // T3.4：缓存水位（用量/上限/百分比），超限提示按 LRU 清理
+            Text(
+                text = state.cacheWatermark,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Text(
             text = "最近错误：${state.stats.lastError}",
             style = MaterialTheme.typography.bodySmall,

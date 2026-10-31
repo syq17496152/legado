@@ -750,6 +750,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 voiceBytes = storage.voiceBytes,
                 cacheBytes = storage.cacheBytes
             ),
+            cacheWatermark = BuiltinTtsUiSupport.cacheWatermarkText(
+                used = storage.cacheBytes,
+                limit = runCatching { BuiltinTtsRuntime.cache().diskLimitBytes() }.getOrDefault(0L)
+            ),
             importDir = BuiltinTtsRuntime.paths().importDir.absolutePath,
             hasBook = bookKey != null,
             roleSummary = BuiltinTtsViewMapper.roleSummary(

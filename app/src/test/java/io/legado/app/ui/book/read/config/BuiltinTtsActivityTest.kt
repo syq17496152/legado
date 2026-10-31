@@ -273,4 +273,20 @@ class BuiltinTtsActivityTest {
         // 未开书时 SAF 默认名也必须可给（不能崩在空书名上）
         assertEquals("book-chapter.wav", BuiltinAudioExportOps.chapterFileName())
     }
+
+    @Test
+    fun `缓存水位显示用量上限与百分比 T3-4`() {
+        // 正常水位：用量/上限/百分比（GB 统一保留一位小数）
+        assertEquals(
+            "缓存 20 MB / 1.0 GB（1%）",
+            BuiltinTtsUiSupport.cacheWatermarkText(20L * 1024 * 1024, 1024L * 1024 * 1024)
+        )
+        // 超限：显式提示按 LRU 清理（不是静默丢文件）
+        assertEquals(
+            "缓存 1.5 GB / 1.0 GB（150%） · 已超限，按最近最少使用清理",
+            BuiltinTtsUiSupport.cacheWatermarkText(1536L * 1024 * 1024, 1024L * 1024 * 1024)
+        )
+        // 上限未知（引擎未初始化）时只显示用量，不显示 0%
+        assertEquals("缓存 512 B", BuiltinTtsUiSupport.cacheWatermarkText(512, 0))
+    }
 }

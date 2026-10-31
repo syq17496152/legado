@@ -57,6 +57,9 @@ class BuiltinTtsCache(
         const val DEFAULT_MAX_MEMORY_BYTES = 32L * 1024 * 1024
     }
 
+    /** 磁盘水位上限（T3.4：管理页显示「用量 / 上限」；超限时按 LRU 淘汰） */
+    fun diskLimitBytes(): Long = maxDiskBytes
+
     private val memory = LinkedHashMap<String, CachedAudio>(16, 0.75f, true)
     private var memoryBytes = 0L
 

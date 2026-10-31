@@ -76,7 +76,9 @@ data class BuiltinTtsPageState(
     val roleRows: List<CharacterVoiceAssignService.RoleVoiceRow> = emptyList(),
     val conflictVoices: Set<String> = emptySet(),
     /** 降级矩阵结论（T3.5）：错误/警告/正常 逐条文案 */
-    val findingsText: String = ""
+    val findingsText: String = "",
+    /** 缓存水位（T3.4）：用量 / 上限 / 百分比 */
+    val cacheWatermark: String = ""
 )
 
 /** 分镜一行：段落片段 + 当前角色判定（未识别不静默归旁白） */

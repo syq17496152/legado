@@ -139,6 +139,14 @@ internal object BuiltinTtsUiSupport {
     fun canExportChapter(hasBook: Boolean, storyboardSegments: Int): Boolean =
         hasBook && storyboardSegments > 0
 
+    /** 缓存水位文案（T3.4，纯函数可单测）：用量/上限/百分比；超限提示会按 LRU 清理 */
+    fun cacheWatermarkText(used: Long, limit: Long): String {
+        if (limit <= 0) return "缓存 ${formatBytes(used)}"
+        val percent = ((used * 100) / limit).coerceIn(0, 999)
+        val base = "缓存 ${formatBytes(used)} / ${formatBytes(limit)}（$percent%）"
+        return if (used > limit) "$base · 已超限，按最近最少使用清理" else base
+    }
+
     /** 音色行副文案（T6.4，纯函数可单测）：来源徽章 + 池 + 性别/年龄（中文，名称已含则不重复）+ 逐字稿长度 */
     fun voiceMetaText(voice: BuiltinVoice): String {
         val badge = when (voice.origin) {
