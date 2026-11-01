@@ -5,11 +5,12 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * IF-14-G 回归：预合成门禁必须与发起侧同口径 ——
- * 内置离线引擎就绪即可用（离线不需要网络），多角色模板不再是阻断项；
- * 流式限制只作用于 HTTP 通道。
+ * TtsPrebuildDialog 回归（IF-14-G / IF-14-H）：
+ * 1) 预合成门禁必须与发起侧同口径 —— 内置离线引擎就绪即可用（离线不需要网络），
+ *    多角色模板不再是阻断项，流式限制只作用于 HTTP 通道；
+ * 2) 弹窗改为统一 AppDialogFrame 卡片（IF-14-H 透明弹窗）后，门禁口径不得改变。
  */
-class TtsPrebuildGateTest {
+class TtsPrebuildDialogTest {
 
     @Test
     fun `离线引擎就绪即可用且不需要网络`() {

@@ -9,12 +9,12 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,9 +39,13 @@ import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.TtsPrebuildService
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogTextField
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -182,81 +186,80 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
             offlineHint = ready
             gateError = gateCheck()
         }
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.tts_casting_prebuild_menu),
-                style = MaterialTheme.typography.titleMedium,
-                color = style.primaryText
-            )
-            Text(
-                text = stringResource(
-                    if (offlineHint) R.string.tts_casting_prebuild_flow_hint_offline
-                    else R.string.tts_casting_prebuild_flow_hint
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = style.secondaryText
-            )
-            Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = startInput,
-                    onValueChange = { startInput = it.filter { ch -> ch.isDigit() } },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    enabled = gateError == null,
-                    label = { Text(stringResource(R.string.tts_casting_prebuild_start_chapter), style = MaterialTheme.typography.bodySmall) }
-                )
-                Text(
-                    text = "—",
-                    color = style.secondaryText,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-                OutlinedTextField(
-                    value = endInput,
-                    onValueChange = { endInput = it.filter { ch -> ch.isDigit() } },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    enabled = gateError == null,
-                    label = { Text(stringResource(R.string.tts_casting_prebuild_end_chapter), style = MaterialTheme.typography.bodySmall) }
-                )
-            }
-            if (chapterCount > 0) {
-                Text(
-                    text = stringResource(R.string.tts_casting_prebuild_chapter_count, chapterCount),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = style.secondaryText,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-            gateError?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = style.accent,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End
-            ) {
-                TextButton(onClick = { dismissAllowingStateLoss() }) {
-                    Text(stringResource(R.string.cancel), color = style.secondaryText)
+        // 统一弹层基线（同语义既有实现＝AppDialogFrame）：此前裸 Column 无卡片背景，
+        // 真机 2026-11-01 复现文字直接叠在正文上的"透明弹窗"（IF-14-H）。
+        AppDialogFrame(
+            title = stringResource(R.string.tts_casting_prebuild_menu),
+            message = stringResource(
+                if (offlineHint) R.string.tts_casting_prebuild_flow_hint_offline
+                else R.string.tts_casting_prebuild_flow_hint
+            ),
+            content = {
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppDialogTextField(
+                            value = startInput,
+                            onValueChange = { startInput = it.filter { ch -> ch.isDigit() } },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            readOnly = gateError != null,
+                            label = stringResource(R.string.tts_casting_prebuild_start_chapter)
+                        )
+                        Text(
+                            text = "—",
+                            color = style.secondaryText,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        AppDialogTextField(
+                            value = endInput,
+                            onValueChange = { endInput = it.filter { ch -> ch.isDigit() } },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            readOnly = gateError != null,
+                            label = stringResource(R.string.tts_casting_prebuild_end_chapter)
+                        )
+                    }
+                    if (chapterCount > 0) {
+                        Text(
+                            text = stringResource(R.string.tts_casting_prebuild_chapter_count, chapterCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = style.secondaryText,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    gateError?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = style.accent,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
-                TextButton(
+            },
+            actions = {
+                val palette = style.toMiuixPalette()
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.cancel),
+                    palette = palette,
+                    onClick = { dismissAllowingStateLoss() },
+                    cornerRadius = style.actionRadius
+                )
+                Spacer(Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.tts_casting_prebuild_start),
+                    palette = palette,
+                    primary = true,
                     enabled = gateError == null && !submitting,
-                    onClick = { onStartPrebuild() }
-                ) {
-                    Text(stringResource(R.string.tts_casting_prebuild_start), color = style.accent)
-                }
+                    loading = submitting,
+                    onClick = { onStartPrebuild() },
+                    cornerRadius = style.actionRadius
+                )
             }
-        }
+        )
     }
 
     /** 发起：网络预检→章界校验→enqueue（去重/上限判定在 Manager）→前台服务 */
