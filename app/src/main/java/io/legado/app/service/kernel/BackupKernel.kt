@@ -239,6 +239,10 @@ object BackupKernel {
             // NEW-51（2026-10-16）：朗读配乐/音效（分组 + 曲目 + 音频文件）——四处同名同文件铁律
             // 第 ④ 处（Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上）
             Backup.stageReadAloudBgm(webBackupPath)
+            // 2026-11-01：内置朗读音色库 / 角色规则（四处同名同文件铁律第 ④ 处 ——
+            // Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上）
+            Backup.stageTtsVoices(webBackupPath)
+            Backup.stageLegadoRules(webBackupPath)
 
             // 服务器配置加密存储
             GSON.toJson(appDb.serverDao.all).let { json ->

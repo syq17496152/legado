@@ -386,6 +386,8 @@ object Restore {
         restoreCoverGallery(path)
         // NEW-51（2026-10-16）：朗读配乐/音效（分组 + 曲目 + 音频文件）——此前只备份不还原同类缺口
         restoreReadAloudBgm(path)
+        // 2026-11-01：内置朗读音色库 / 角色规则（目录项；此前只备份不还原会造成同类缺口）
+        restoreTtsVoiceAssets(path)
 
         //AppWebDav.downBgs()
         appCtx.getSharedPreferences(path, "config")?.all?.let { map ->
@@ -599,6 +601,24 @@ object Restore {
                 )
             }
         }
+    }
+
+    /**
+     * 2026-11-01：内置朗读音色库（`tts/voices`）与角色规则（`legado_rules`）还原。
+     *
+     * 反向映射对齐 `Backup.stageTtsVoices` / `Backup.stageLegadoRules`：整目录复制回 `filesDir/`
+     * 同名路径；`BuiltinVoiceStore.list()` 按 `index.json` 的 mtime 自愈 ⇒ 复制后无需手动失效缓存。
+     * 覆盖写（overwrite=true）保证「换机后旧数据不残留脏条目」。
+     */
+    internal suspend fun restoreTtsVoiceAssets(path: String) = withContext(IO) {
+        copyDirBack(File(path, Backup.TTS_VOICES_DIR), File(appCtx.filesDir, Backup.TTS_VOICES_DIR))
+        copyDirBack(File(path, Backup.LEGADO_RULES_DIR), File(appCtx.filesDir, Backup.LEGADO_RULES_DIR))
+    }
+
+    private fun copyDirBack(src: File, dst: File) {
+        if (!src.isDirectory) return
+        dst.parentFile?.createFolderIfNotExist()
+        src.copyRecursively(dst, overwrite = true)
     }
 
     private fun File.isImageFile(): Boolean =

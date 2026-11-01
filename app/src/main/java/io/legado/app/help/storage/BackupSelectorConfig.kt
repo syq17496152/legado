@@ -81,6 +81,11 @@ object BackupSelectorConfig {
         // 故本条目同时承载元数据 JSON 与音频目录（与 `bg` 的「目录项」范式一致，可整条取消勾选）。
         // 四处同名同文件铁律齐补：本表 + `Backup` 写出 + `Restore` 还原 + Web 备份硬编码全集。
         BackupItem("readAloudBgm", "readAloudAudio", "朗读配乐与音效", "其他"),
+        // 2026-11-01：内置朗读音色库（自录/CloneTTS 导入的参考音频）与角色规则此前**不在备份范围**
+        // ⇒ 换机 / 重装后音色与已学角色规则全丢，且参考音频不可下载、不可重建。
+        // 四处同名同文件铁律齐补：本表 + `Backup` 写出 + `Restore` 还原 + `BackupKernel` Web 备份。
+        BackupItem("ttsVoices", Backup.TTS_VOICES_DIR, "朗读音色库", "其他"),
+        BackupItem("ttsRules", Backup.LEGADO_RULES_DIR, "朗读角色规则", "其他"),
         BackupItem("bookCache", "book_cache", "书籍缓存", "其他")
     )
 

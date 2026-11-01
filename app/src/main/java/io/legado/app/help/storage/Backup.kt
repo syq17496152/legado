@@ -95,6 +95,16 @@ object Backup {
     // `File(filesDir, "readAloudAudio/$assetType")` 同口径；备份/恢复共用本常量防再次漂移）。
     internal const val READ_ALOUD_AUDIO_DIR = "readAloudAudio"
 
+    /**
+     * 内置朗读音色库（`filesDir/tts/voices`：`index.json` + `<id>/ref.wav`）。
+     * 2026-11-01：自录音色与 CloneTTS 导入音色此前**不在备份范围** ⇒ 换机/重装即丢，
+     * 参考音频是用户本地资产（不可下载、不可重建）⇒ 纳入备份（四处同名同文件铁律齐补）。
+     */
+    internal const val TTS_VOICES_DIR = "tts/voices"
+
+    /** 朗读角色规则（`filesDir/legado_rules`：`fixed_roles.json` + `book/<key>.json`），同批纳入备份 */
+    internal const val LEGADO_RULES_DIR = "legado_rules"
+
     val backupPath: String by lazy {
         appCtx.filesDir.getFile("backup").createFolderIfNotExist().absolutePath
     }
@@ -250,6 +260,26 @@ object Backup {
         audioRoot.listFiles()?.filter { it.isDirectory }?.forEach { typeDir ->
             typeDir.copyRecursively(File(target, typeDir.name), overwrite = true)
         }
+    }
+
+    /**
+     * 2026-11-01：内置朗读音色库纳入备份（整目录原样复制到 `<根>/tts/voices`）。
+     * 反向映射见 `Restore.restoreTtsVoiceAssets`；目录项范式与 `bg` / `readAloudAudio` 一致。
+     */
+    internal suspend fun stageTtsVoices(rootPath: String) {
+        copyDirTo(File(appCtx.filesDir, TTS_VOICES_DIR), File(rootPath, TTS_VOICES_DIR))
+    }
+
+    /** 2026-11-01：朗读角色规则纳入备份（整目录原样复制到 `<根>/legado_rules`） */
+    internal suspend fun stageLegadoRules(rootPath: String) {
+        copyDirTo(File(appCtx.filesDir, LEGADO_RULES_DIR), File(rootPath, LEGADO_RULES_DIR))
+    }
+
+    /** 目录存在才复制（缺失即跳过，不产生空目录污染备份包） */
+    private fun copyDirTo(src: File, dst: File) {
+        if (!src.isDirectory) return
+        dst.parentFile?.createFolderIfNotExist()
+        src.copyRecursively(dst, overwrite = true)
     }
 
     private fun uniqueCoverGalleryFolderName(
@@ -645,6 +675,13 @@ object Backup {
         // 元数据 JSON + 音频目录由 stageReadAloudBgm 一并写出）
         if (selectedFiles.contains(READ_ALOUD_AUDIO_DIR)) {
             stageReadAloudBgm(backupPath)
+        }
+        // 2026-11-01：内置朗读音色库 / 角色规则（目录项，与 `bg` 同口径；各自独立可勾选）
+        if (selectedFiles.contains(TTS_VOICES_DIR)) {
+            stageTtsVoices(backupPath)
+        }
+        if (selectedFiles.contains(LEGADO_RULES_DIR)) {
+            stageLegadoRules(backupPath)
         }
         if (selectedFiles.contains(HighlightRuleStore.backupFileName)) {
             stageHighlightRuleBackgroundFiles(backupPath)
