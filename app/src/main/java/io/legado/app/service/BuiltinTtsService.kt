@@ -199,33 +199,27 @@ class BuiltinTtsService : TextToSpeechService() {
             scheduleIdleExit()
             return
         }
-        val started = runCatching {
-            callback.start(
-                audio.sampleRate,
-                android.media.AudioFormat.ENCODING_PCM_16BIT,
-                CHANNEL_MONO
-            )
-        }.getOrDefault(TextToSpeech.ERROR)
-        if (started != TextToSpeech.SUCCESS) {
+        val writer = BuiltinTtsCallbackWriter(callback)
+        val startCode = writer.start(audio.sampleRate, CHANNEL_MONO)
+        if (startCode != TextToSpeech.SUCCESS) {
+            AppLog.put("内置TTS回调启动被拒 rc=$startCode")
             scheduleIdleExit()
             return
         }
-        // 按 ~200ms 分块回调，让系统播放器边收边播（降低首字延迟）
-        val bytesPerChunk = BuiltinTtsSynthesisMath.chunkBytes(audio.sampleRate)
-        var offset = 0
-        while (offset < audio.pcm.size) {
-            val length = minOf(bytesPerChunk, audio.pcm.size - offset)
-            val result = runCatching { callback.audioAvailable(audio.pcm, offset, length) }
-                .getOrDefault(TextToSpeech.ERROR)
-            if (result != TextToSpeech.SUCCESS) break
-            offset += length
-        }
-        runCatching { callback.done() }
+        // 按 ~200ms 分块回传，且**不得超过框架声明的单次缓冲上限**
+        val bytesPerChunk = writer.chunkBytes(audio.sampleRate)
+        val report = writer.write(audio.pcm, bytesPerChunk)
+        writer.done()
         AppLog.putDebugWithTag(
             AppLog.TAG_TTS_TRACE,
-            "builtin 合成完成 sr=${audio.sampleRate} pcm=${audio.pcm.size} bytes",
+            "builtin 合成完成 sr=${audio.sampleRate} pcm=${audio.pcm.size} bytes" +
+                    " chunk=$bytesPerChunk written=${report.writtenBytes}" +
+                    " failAt=${report.failedAt} rc=${report.errorCode}",
             level = AppLog.Level.INFO
         )
+        if (!report.completed) {
+            AppLog.put("内置TTS回调写入失败：偏移 ${report.failedAt}/${audio.pcm.size}，返回码 ${report.errorCode}")
+        }
         scheduleIdleExit()
     }
 
@@ -361,4 +355,58 @@ internal object BuiltinTtsSynthesisMath {
 
     fun chunkBytes(sampleRate: Int, chunkMillis: Int = 200): Int =
         (sampleRate * 2 * chunkMillis / 1000).coerceAtLeast(2048)
+}
+
+/**
+ * 合成回调写块器（T1.5 真机铁证 2026-11-01）：
+ * 框架的 `SynthesisCallback` 有**单次缓冲上限** `getMaxBufferSize()`，超过上限的块会被拒
+ * （返回 ERROR 或抛异常）⇒ 表现为「合成完成但**全程无声**」且 AudioTrack 从未播放一帧。
+ * 本类把 PCM 按「期望 200ms」与「框架上限」的较小值切块回传，并记录首个失败偏移与返回码，
+ * 让真机日志能直接定位「无声」是引擎侧还是框架侧。
+ */
+internal class BuiltinTtsCallbackWriter(private val callback: SynthesisCallback) {
+
+    data class WriteReport(
+        val writtenBytes: Int,
+        val totalBytes: Int,
+        val failedAt: Int,
+        val errorCode: Int
+    ) {
+        val completed: Boolean get() = failedAt < 0 && writtenBytes == totalBytes
+    }
+
+    /** 单块字节数：期望 200ms 分块，但不得超过框架上限（并按 16bit 单声道对齐为偶数） */
+    fun chunkBytes(sampleRate: Int): Int {
+        val desired = BuiltinTtsSynthesisMath.chunkBytes(sampleRate)
+        val max = runCatching { callback.maxBufferSize }.getOrDefault(0)
+        if (max <= 0) return desired
+        // 上限过小时按偶数字节兜底，避免非帧对齐或块数爆炸
+        val cap = if (max % 2 == 0) max else max - 1
+        return minOf(desired, cap.coerceAtLeast(2))
+    }
+
+    fun start(sampleRate: Int, channels: Int): Int = runCatching {
+        callback.start(sampleRate, android.media.AudioFormat.ENCODING_PCM_16BIT, channels)
+    }.getOrDefault(TextToSpeech.ERROR)
+
+    fun write(pcm: ByteArray, chunkBytes: Int): WriteReport {
+        val perChunk = chunkBytes.coerceAtLeast(2)
+        var offset = 0
+        var failedAt = -1
+        var errorCode = 0
+        while (offset < pcm.size) {
+            val length = minOf(perChunk, pcm.size - offset)
+            val result = runCatching { callback.audioAvailable(pcm, offset, length) }
+                .getOrDefault(TextToSpeech.ERROR)
+            if (result != TextToSpeech.SUCCESS) {
+                failedAt = offset
+                errorCode = result
+                break
+            }
+            offset += length
+        }
+        return WriteReport(offset, pcm.size, failedAt, errorCode)
+    }
+
+    fun done(): Int = runCatching { callback.done() }.getOrDefault(TextToSpeech.ERROR)
 }
