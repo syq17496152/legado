@@ -6442,6 +6442,20 @@ class ReadBookActivity : BaseReadBookActivity(),
         showEpubCoreScheduleModeDialog()
     }
 
+    // 内置离线朗读三入口（Compose 溢出菜单，本地书与网络书一致可见；IF-14-C）
+    override fun showTtsPrebuild() {
+        binding.readMenu.runMenuOut()
+        showTtsPrebuildDialog()
+    }
+
+    override fun openBuiltinTtsEngine() {
+        startActivity<BuiltinTtsActivity>()
+    }
+
+    override fun openCastScene() {
+        startActivity<CastSceneActivity>()
+    }
+
     private fun toggleDelTag(tag: Long, reason: String) {
         ReadBook.book?.let {
             if (it.getDelTag(tag)) {

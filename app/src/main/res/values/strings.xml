@@ -3237,6 +3237,7 @@ Selected text or question:
     <string name="tts_casting_prebuild_start">开始预合成</string>
     <string name="tts_casting_prebuild_scanning">统计中…</string>
     <string name="tts_casting_prebuild_flow_hint">按章节范围后台合成音频，播放时命中缓存零等待；将消耗网络流量</string>
+    <string name="tts_casting_prebuild_flow_hint_offline">按章节范围后台合成音频，播放时命中缓存零等待；离线引擎合成，不消耗流量</string>
     <string name="tts_casting_prebuild_start_chapter">起始章节号</string>
     <string name="tts_casting_prebuild_end_chapter">结束章节号</string>
     <string name="tts_casting_prebuild_chapter_count">本书共 %1$d 章</string>

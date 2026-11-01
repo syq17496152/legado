@@ -114,7 +114,11 @@ data class ReadMenuTitleBarActions(
     val onDelHTagClick: () -> Unit,
     val onEpubScheduleModeClick: () -> Unit,
     /** Q-N4：AI 净化（与「替换净化」同行区，读菜单溢出列表） */
-    val onAiPurifyClick: () -> Unit
+    val onAiPurifyClick: () -> Unit,
+    /** 内置离线朗读三入口（批量预合成 / 引擎管理 / 听书场景卡） */
+    val onTtsPrebuildClick: () -> Unit,
+    val onBuiltinTtsClick: () -> Unit,
+    val onCastSceneClick: () -> Unit
 )
 
 data class ReadMenuActionBarState(
@@ -262,7 +266,10 @@ fun ReadMenuTitleBar(
                             onAiPurifyClick = actions.onAiPurifyClick,
                             onRollbackSourceClick = actions.onRollbackSourceClick,
                             onEyePageTurnClick = actions.onEyePageTurnClick,
-                            onEpubScheduleModeClick = actions.onEpubScheduleModeClick
+                            onEpubScheduleModeClick = actions.onEpubScheduleModeClick,
+                            onTtsPrebuildClick = actions.onTtsPrebuildClick,
+                            onBuiltinTtsClick = actions.onBuiltinTtsClick,
+                            onCastSceneClick = actions.onCastSceneClick
                         )
                         popupHandle = ModernActionPopup.show(
                             context,
@@ -830,6 +837,22 @@ private fun readMenuButtonIconRes(
     }
 }
 
+/**
+ * 内置离线朗读三入口（溢出菜单置顶项）：批量预合成 / 离线多角色引擎 / 听书场景卡。
+ *
+ * 与本地/网络书无关 —— 三个能力都只依赖端侧模型与本地文本，
+ * 因此不放进 `menu_group_on_line`（那组对本地书整组隐藏，2026-11-01 真机 IF-14-C）。
+ */
+internal fun builtinTtsOverflowEntries(
+    onPrebuild: () -> Unit,
+    onOpenEngine: () -> Unit,
+    onOpenScene: () -> Unit
+): List<ModernActionPopup.Action> = listOf(
+    ModernActionPopup.Action(title = "批量预合成", invoke = onPrebuild),
+    ModernActionPopup.Action(title = "离线多角色引擎", invoke = onOpenEngine),
+    ModernActionPopup.Action(title = "听书场景卡", invoke = onOpenScene)
+)
+
 private fun buildOverflowActions(
     isLocalBook: Boolean,
     isEpub: Boolean,
@@ -863,9 +886,22 @@ private fun buildOverflowActions(
     /** R11：回滚上一书源 */
     onRollbackSourceClick: () -> Unit,
     /** R1：眼动翻页开关 */
-    onEyePageTurnClick: () -> Unit
+    onEyePageTurnClick: () -> Unit,
+    /** 内置离线朗读三入口（本地书同样可见：与书源在线状态无关） */
+    onTtsPrebuildClick: () -> Unit,
+    onBuiltinTtsClick: () -> Unit,
+    onCastSceneClick: () -> Unit
 ): List<ModernActionPopup.Action> {
     val actions = mutableListOf<ModernActionPopup.Action>()
+    // 内置离线朗读入口置顶：本地书（isLocal=true）此前因挂在 on_line 组而整组隐藏，
+    // 而 Compose 溢出菜单是硬编码列表（不读 R.menu.book_read），故必须在此显式添加（2026-11-01 真机铁证）。
+    actions.addAll(
+        builtinTtsOverflowEntries(
+            onPrebuild = onTtsPrebuildClick,
+            onOpenEngine = onBuiltinTtsClick,
+            onOpenScene = onCastSceneClick
+        )
+    )
     if (isLocalTxt) {
         actions.add(ModernActionPopup.Action(title = "TXT目录规则", invoke = onTocRegexClick))
     }

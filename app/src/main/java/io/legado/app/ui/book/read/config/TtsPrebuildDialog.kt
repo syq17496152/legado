@@ -18,10 +18,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -30,7 +32,6 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.prebuild.TtsPrebuildManager
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
@@ -45,10 +46,33 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** 预合成门禁阻断原因（纯函数返回值，便于 JVM 单测；资源文案在调用侧映射） */
+internal enum class PrebuildGateBlock { ENGINE, STREAM, NETWORK }
+
+/**
+ * 预合成门禁判定：**复用** `TtsPrebuildManager.prebuildGate` 作为唯一引擎/网络口径
+ * （内置离线就绪即可用、只有 HTTP 才要网络），再叠加流式开关（只作用于 HTTP 通道）。
+ * 多角色模板不再是阻断项（T3.3 已支持按段+角色音色预合成）。
+ */
+internal fun prebuildGateBlock(
+    builtinReady: Boolean,
+    httpTtsAvailable: Boolean,
+    streamReadAloud: Boolean,
+    networkAvailable: Boolean
+): PrebuildGateBlock? {
+    if (httpTtsAvailable && streamReadAloud) return PrebuildGateBlock.STREAM
+    return when (TtsPrebuildManager.prebuildGate(builtinReady, httpTtsAvailable, networkAvailable)) {
+        TtsPrebuildManager.PrebuildGate.OK -> null
+        TtsPrebuildManager.PrebuildGate.NEED_ENGINE -> PrebuildGateBlock.ENGINE
+        TtsPrebuildManager.PrebuildGate.NO_NETWORK -> PrebuildGateBlock.NETWORK
+    }
+}
 
 /**
  * 批量预合成发起对话框（P2-7，§3.7.2 启动链）：
- * 门控三条件预检（type∈{1,2}/非流式/多角色未激活，任一不满足禁用并分别明示原因）
+ * 门控预检（引擎可用/非流式，任一不满足禁用并分别明示原因；内置离线引擎与多角色模板均可用）
  * +起止章节输入+网络预检+流量提示 → enqueue（参数快照）→ 前台服务
  */
 class TtsPrebuildDialog : ComposeDialogFragment() {
@@ -108,22 +132,29 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
     /** 门控三条件（§3.7.1-6）：返回 null=可用，非 null=禁用原因（S9-3 逐一明示） */
     private fun gateCheck(): String? {
         val route = ReadAloud.currentRoute
-        if (route.engineType != SpeechRoute.ENGINE_HTTP) {
-            return getString(R.string.tts_casting_prebuild_gate_system)
+        val appContext = requireContext().applicationContext
+        // T3.2/T3.3 已让预合成支持「内置离线引擎」与「多角色模板」（BuiltinPrebuildUnits.multiRoleUnits），
+        // 门禁必须与发起侧（onSubmit 的 prebuildGate）同口径，否则离线用户永远点不动（2026-11-01 真机 IF-14-G）。
+        val builtinReady = BuiltinTtsRuntime.isReady() &&
+            BuiltinTtsRuntime.isActiveEngine(appContext, route.engineValue)
+        val httpTts = if (route.engineType == SpeechRoute.ENGINE_HTTP) {
+            route.engineValue.toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
+        } else {
+            null
         }
-        val httpTts = route.engineValue.toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
-        if (httpTts == null) {
-            return getString(R.string.tts_casting_prebuild_gate_system)
+        return when (
+            prebuildGateBlock(
+                builtinReady = builtinReady,
+                httpTtsAvailable = httpTts != null,
+                streamReadAloud = AppConfig.streamReadAloudAudio,
+                networkAvailable = isNetworkAvailable()
+            )
+        ) {
+            PrebuildGateBlock.ENGINE -> getString(R.string.tts_casting_prebuild_gate_system)
+            PrebuildGateBlock.STREAM -> getString(R.string.tts_casting_prebuild_gate_stream)
+            PrebuildGateBlock.NETWORK -> getString(R.string.tts_casting_prebuild_no_net)
+            null -> null
         }
-        if (AppConfig.streamReadAloudAudio) {
-            return getString(R.string.tts_casting_prebuild_gate_stream)
-        }
-        // P1-23 修复：门禁走书级生效口径（resolveActiveTemplateId 含书级覆盖），
-        // 旧实现只查全局激活——本书覆盖激活多人时门禁误放行
-        if (TtsCastingStore.resolveActiveTemplateId(ReadBook.book?.bookUrl.orEmpty()) != null) {
-            return getString(R.string.tts_casting_prebuild_gate_multi_role)
-        }
-        return null
     }
 
     private fun isNetworkAvailable(): Boolean {
@@ -135,7 +166,20 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
     @Composable
     private fun PrebuildScreen() {
         val style = rememberAppDialogStyle()
+        // 离线内置引擎不耗流量，提示文案需随之切换（原文案对离线用户是误导）；
+        // 且 Runtime 只在引擎服务/管理页 init ⇒ 这里必须先 init+ensureSeeded，否则 isReady() 恒 NONE
+        // （真机 3.26.110110 复现：模型就绪却仍提示「不支持批量预合成」）。
+        val context = LocalContext.current
+        var offlineHint by remember { mutableStateOf(false) }
         androidx.compose.runtime.LaunchedEffect(Unit) {
+            val ready = withContext(Dispatchers.IO) {
+                val app = context.applicationContext
+                BuiltinTtsRuntime.init(app)
+                BuiltinTtsRuntime.ensureSeeded()
+                BuiltinTtsRuntime.isReady() &&
+                    BuiltinTtsRuntime.isActiveEngine(app, ReadAloud.currentRoute.engineValue)
+            }
+            offlineHint = ready
             gateError = gateCheck()
         }
         Column(
@@ -149,7 +193,10 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
                 color = style.primaryText
             )
             Text(
-                text = stringResource(R.string.tts_casting_prebuild_flow_hint),
+                text = stringResource(
+                    if (offlineHint) R.string.tts_casting_prebuild_flow_hint_offline
+                    else R.string.tts_casting_prebuild_flow_hint
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = style.secondaryText
             )

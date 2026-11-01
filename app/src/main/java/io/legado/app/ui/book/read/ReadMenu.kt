@@ -430,7 +430,10 @@ class ReadMenu @JvmOverloads constructor(
                             onTocRegexClick = { callBack.showTocRegex() },
                             onDelRubyTagClick = { callBack.toggleRubyTag() },
                             onDelHTagClick = { callBack.toggleHTag() },
-                            onEpubScheduleModeClick = { callBack.showEpubCoreScheduleMode() }
+                            onEpubScheduleModeClick = { callBack.showEpubCoreScheduleMode() },
+                            onTtsPrebuildClick = { callBack.showTtsPrebuild() },
+                            onBuiltinTtsClick = { callBack.openBuiltinTtsEngine() },
+                            onCastSceneClick = { callBack.openCastScene() }
                         ),
                         style = style,
                         modifier = Modifier.fillMaxWidth()
@@ -867,5 +870,10 @@ class ReadMenu @JvmOverloads constructor(
 
         /** Q-N4：AI 净化（阅读菜单「替换净化」旁入口） */
         fun purifySelection()
+
+        /** 内置离线朗读入口（本地书同样可达；默认空实现，避免其它实现类编译中断） */
+        fun showTtsPrebuild() = Unit
+        fun openBuiltinTtsEngine() = Unit
+        fun openCastScene() = Unit
     }
 }
