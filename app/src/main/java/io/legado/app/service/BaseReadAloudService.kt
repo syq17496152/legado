@@ -48,6 +48,7 @@ import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ListeningPlaybackCoordinator
 import io.legado.app.model.ReadAloud
+import io.legado.app.model.ReadAloudChapterAdvance
 import io.legado.app.model.ReadBook
 import io.legado.app.receiver.MediaButtonReceiver
 import io.legado.app.ui.book.read.ReadBookActivity
@@ -649,7 +650,11 @@ abstract class BaseReadAloudService : BaseService(),
             play()
         } else {
             toLast = true
-            ReadBook.moveToPrevChapter(true)
+            // IF-14-M：上一章同源口径（显式标为朗读推进，避免被当成手动导航）
+            ReadBook.moveToPrevChapter(
+                upContent = true,
+                fromReadAloud = ReadAloudChapterAdvance.fromReadAloudForService(isRun)
+            )
         }
     }
 
@@ -1051,14 +1056,24 @@ abstract class BaseReadAloudService : BaseService(),
     open fun prevChapter() {
         toLast = false
         resumeReadAloudInternal()
-        ReadBook.moveToPrevChapter(true, toLast = false)
+        // IF-14-M：显式标为朗读推进，否则跨章会被当成手动导航（跟随脱离 + 待续播不登记）
+        ReadBook.moveToPrevChapter(
+            upContent = true,
+            toLast = false,
+            fromReadAloud = ReadAloudChapterAdvance.fromReadAloudForService(isRun)
+        )
     }
 
     open fun nextChapter() {
         ReadBook.upReadTime()
         AppLog.putDebug("${ReadBook.curTextChapter?.chapter?.title} 朗读结束跳转下一章并朗读")
         resumeReadAloudInternal()
-        if (!ReadBook.moveToNextChapter(true)) {
+        // IF-14-M：`moveToNextChapter(true)` 的 true 只绑定 upContent，fromReadAloud 会退化为 false
+        if (!ReadBook.moveToNextChapter(
+                upContent = true,
+                fromReadAloud = ReadAloudChapterAdvance.fromReadAloudForService(isRun)
+            )
+        ) {
             stopSelf()
         }
     }

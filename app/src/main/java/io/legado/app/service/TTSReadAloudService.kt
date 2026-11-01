@@ -280,11 +280,26 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     @Synchronized
     override fun play() {
-        if (!ttsInitFinish) return
-        if (!requestFocus()) return
-        if (contentList.isEmpty()) {
-            AppLog.putDebug("朗读列表为空")
-            ReadBook.readAloud()
+        val initFinished = ttsInitFinish
+        // 焦点只在初始化完成后申请（与原分支顺序一致，避免无谓抢占）
+        val focusGranted = initFinished && requestFocus()
+        val blockReason = ReadAloudStartGuard.blockReason(
+            initFinished = initFinished,
+            focusGranted = focusGranted,
+            contentEmpty = contentList.isEmpty()
+        )
+        if (blockReason.isNotEmpty()) {
+            // IF-14-M：起播被前置条件静默拦截时**必须留痕**（否则长时朗读表现为「无痕断流」）
+            AppLog.putDebugWithTag(
+                AppLog.TAG_TTS_TRACE,
+                "play 阻断 reason=$blockReason nowSpeak=$nowSpeak 单元=${contentList.size}" +
+                        " chapter=${textChapter?.chapter?.index}",
+                level = AppLog.Level.INFO
+            )
+            if (blockReason == ReadAloudStartGuard.REASON_EMPTY_LIST) {
+                AppLog.putDebug("朗读列表为空")
+                ReadBook.readAloud()
+            }
             return
         }
         super.play()

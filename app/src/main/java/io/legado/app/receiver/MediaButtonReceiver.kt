@@ -10,6 +10,7 @@ import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ReadAloud
+import io.legado.app.model.ReadAloudChapterAdvance
 import io.legado.app.model.ReadBook
 import io.legado.app.service.AudioPlayService
 import io.legado.app.service.BaseReadAloudService
@@ -54,7 +55,12 @@ class MediaButtonReceiver : BroadcastReceiver() {
                     when (keycode) {
                         KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
                             if (context.getPrefBoolean("mediaButtonPerNext", false)) {
-                                ReadBook.moveToPrevChapter(true)
+                                // IF-14-M：朗读服务运行中触发跨章必须按朗读推进处理，否则跳章后不再起播
+                                ReadBook.moveToPrevChapter(
+                                    upContent = true,
+                                    fromReadAloud = ReadAloudChapterAdvance
+                                        .fromReadAloudForService(BaseReadAloudService.isRun)
+                                )
                             } else {
                                 ReadAloud.prevParagraph(context)
                             }
@@ -62,7 +68,11 @@ class MediaButtonReceiver : BroadcastReceiver() {
 
                         KeyEvent.KEYCODE_MEDIA_NEXT -> {
                             if (context.getPrefBoolean("mediaButtonPerNext", false)) {
-                                ReadBook.moveToNextChapter(true)
+                                ReadBook.moveToNextChapter(
+                                    upContent = true,
+                                    fromReadAloud = ReadAloudChapterAdvance
+                                        .fromReadAloudForService(BaseReadAloudService.isRun)
+                                )
                             } else {
                                 ReadAloud.nextParagraph(context)
                             }

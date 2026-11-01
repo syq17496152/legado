@@ -729,11 +729,14 @@ object ReadBook : CoroutineScope by MainScope() {
             prevTextChapter = curTextChapter
             curTextChapter = loadedNextChapter
             nextTextChapter = null
+            // IF-14-L：目标章已预载但未排版完成时 curPageChanged 不会续播，必须登记待续播索引
+            ReadAloudChapterAdvance.pendingIndex(
+                fromReadAloud = fromReadAloud,
+                chapterCompleted = curTextChapter?.isCompleted == true,
+                chapterIndex = durChapterIndex
+            ).takeIf { it >= 0 }?.let { readAloudPendingLoadChapterIndex = it }
             if (curTextChapter == null) {
                 AppLog.putDebug("moveToNextChapter-章节未加载,开始加载")
-                if (fromReadAloud) {
-                    readAloudPendingLoadChapterIndex = durChapterIndex
-                }
                 if (upContentInPlace) callBack?.get()?.upContent()
                 loadContent(durChapterIndex, upContent, resetPageOffset = false)
             } else if (upContent && upContentInPlace) {
@@ -768,11 +771,14 @@ object ReadBook : CoroutineScope by MainScope() {
             prevTextChapter = curTextChapter
             curTextChapter = loadedNextChapter
             nextTextChapter = null
+            // IF-14-L：同上（Await 变体口径必须一致）
+            ReadAloudChapterAdvance.pendingIndex(
+                fromReadAloud = fromReadAloud,
+                chapterCompleted = curTextChapter?.isCompleted == true,
+                chapterIndex = durChapterIndex
+            ).takeIf { it >= 0 }?.let { readAloudPendingLoadChapterIndex = it }
             if (curTextChapter == null) {
                 AppLog.putDebug("moveToNextChapter-章节未加载,开始加载")
-                if (fromReadAloud) {
-                    readAloudPendingLoadChapterIndex = durChapterIndex
-                }
                 if (upContentInPlace) callBack?.get()?.upContentAwait()
                 loadContentAwait(durChapterIndex, upContent, resetPageOffset = false)
             } else if (upContent && upContentInPlace) {
@@ -808,10 +814,13 @@ object ReadBook : CoroutineScope by MainScope() {
             nextTextChapter = curTextChapter
             curTextChapter = loadedPrevChapter
             prevTextChapter = null
+            // IF-14-L：上一章同源口径（预载但未排版完成时同样需要登记待续播）
+            ReadAloudChapterAdvance.pendingIndex(
+                fromReadAloud = fromReadAloud,
+                chapterCompleted = curTextChapter?.isCompleted == true,
+                chapterIndex = durChapterIndex
+            ).takeIf { it >= 0 }?.let { readAloudPendingLoadChapterIndex = it }
             if (curTextChapter == null) {
-                if (fromReadAloud) {
-                    readAloudPendingLoadChapterIndex = durChapterIndex
-                }
                 if (upContentInPlace) callBack?.get()?.upContent()
                 loadContent(durChapterIndex, upContent, resetPageOffset = false)
             } else if (upContent && upContentInPlace) {
@@ -922,11 +931,16 @@ object ReadBook : CoroutineScope by MainScope() {
             AppLog.putDebug("readAloud-章节未排版,已置待播标记")
             return
         }
-        if (textChapter.isCompleted) {
-            // R4：新朗读会话启动 → 恢复跟随（跨章返回/重新发起朗读不再从页首重播）
-            SpeechFollowState.restoreForNewSpeechSession()
-            ReadAloud.play(appCtx, play, startPos = startPos)
+        if (ReadAloudChapterAdvance.shouldDeferUntilCompleted(textChapter.isCompleted)) {
+            // IF-14-M：章末续播常命中「已载入但未排版完成」窗口，原实现在此静默丢弃（无标记、无日志）；
+            // 与 R15 同口径置待播标记，由该章排版完成回调 consumePendingReadAloud() 补播一次。
+            pendingReadAloud.markPending()
+            AppLog.putDebug("readAloud-章节排版中,已置待播标记")
+            return
         }
+        // R4：新朗读会话启动 → 恢复跟随（跨章返回/重新发起朗读不再从页首重播）
+        SpeechFollowState.restoreForNewSpeechSession()
+        ReadAloud.play(appCtx, play, startPos = startPos)
     }
 
     /**
