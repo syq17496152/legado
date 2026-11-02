@@ -98,6 +98,14 @@ class OfflineCharacterDiscoveryTest {
         assertFalse("郑吒嗤" in names)
     }
 
+    /** AD-16：JVM/无模型环境必须自动回落规则路径，不能因缺模型直接空结果 */
+    @Test
+    fun `无 NER 模型时仍走规则兜底`() {
+        assertFalse(NerTextEngine.isModelReady())
+        val names = NerTextEngine.findMentions("张三说：“好。”", detectUnknown = true).map { it.name }
+        assertTrue("张三" in names)
+    }
+
     /** 变更数口径：清理旧碎片与新增一样触发分镜重算，不能只看 added */
     @Test
     fun `新增与清理都计入变更数`() {
@@ -114,10 +122,17 @@ class OfflineCharacterDiscoveryTest {
             "却冷笑道：“你以为呢？”",
             "解释了半天，也没人信。"
         )
-        assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
+        val actual = OfflineCharacterDiscovery.candidates(paragraphs).map { it.name }
+        assertTrue("意外候选：$actual", actual.isEmpty())
         assertTrue(NerTextEngine.isImplausibleName("都知"))
         assertTrue(NerTextEngine.isImplausibleName("能转"))
         assertTrue(NerTextEngine.isImplausibleName("解释"))
+        // 2026-11-02 第三次真机：万语/边哭/后女/连她/盖中 也是"姓+动词/代词/方位"拼出来的
+        assertTrue(NerTextEngine.isImplausibleName("万语"))
+        assertTrue(NerTextEngine.isImplausibleName("边哭"))
+        assertTrue(NerTextEngine.isImplausibleName("后女"))
+        assertTrue(NerTextEngine.isImplausibleName("连她"))
+        assertTrue(NerTextEngine.isImplausibleName("盖中"))
     }
 
     /** 黑名单不得误伤真实角色（郑吒/赵樱空/张杰/詹岚） */

@@ -58,24 +58,30 @@ object OfflineCharacterDiscovery {
      */
     fun candidates(paragraphs: List<String>, limit: Int = DEFAULT_LIMIT): List<Candidate> {
         if (paragraphs.isEmpty() || limit <= 0) return emptyList()
-        return toCandidates(scanCues(paragraphs), limit)
+        val trustModel = NerTextEngine.isModelReady()
+        return toCandidates(scanCues(paragraphs, trustModel), limit, trustModel)
     }
 
-    /** 姓氏候选族（2/3 字并存）→ cue 邻接过滤 → 频次消歧，产出最终候选 */
-    private fun toCandidates(scan: CueScan, limit: Int): List<Candidate> =
-        selectNames(scan.counts).take(limit).map { (name, count) ->
+    /** 人名信号 → 频次统计，产出最终候选（有 NER 模型时信任模型信号） */
+    private fun toCandidates(scan: CueScan, limit: Int, trustModel: Boolean): List<Candidate> =
+        selectNames(scan.counts, trustModel).take(limit).map { (name, count) ->
             // 性别只做弱推断（人名 + 首次出现段落代词/称谓），识别不到就留空交给配声按音色挑
             Candidate(name, BookCharacter.inferGender(name + scan.firstContext[name].orEmpty()), count)
         }
 
-    /** 逐段收集姓氏候选族的 cue 命中次数（不裁决长度，留给 [selectNames] 用频次消歧） */
-    private fun scanCues(paragraphs: List<String>): CueScan {
+    /**
+     * 逐段收集人名信号次数：
+     * - 有 NER 模型：模型输出的 PER 实体/cue 候选都可直接计数（不再要求紧跟说话 cue，
+     *   否则旁白里的角色会被漏掉）；
+     * - 无模型：退回"姓氏候选 + cue 邻接"规则。
+     */
+    private fun scanCues(paragraphs: List<String>, trustModel: Boolean): CueScan {
         val cueCounts = LinkedHashMap<String, Int>()
         val firstContext = LinkedHashMap<String, String>()
         paragraphs.forEach { paragraph ->
             if (paragraph.isBlank()) return@forEach
-            NerTextEngine.surnameCandidates(paragraph).forEach { mention ->
-                if (hasSpeechCue(paragraph, mention.end)) {
+            NerTextEngine.findMentions(paragraph, detectUnknown = true).forEach { mention ->
+                if (trustModel || hasSpeechCue(paragraph, mention.end)) {
                     cueCounts[mention.name] = (cueCounts[mention.name] ?: 0) + 1
                     firstContext.putIfAbsent(mention.name, paragraph)
                 }
@@ -94,9 +100,18 @@ object OfflineCharacterDiscovery {
      * 规则：① 单姓三字名至少 cue 命中 2 次；② 短名被长名完全覆盖（差值 ≤0）⇒ 短名是碎片；
      * ③ 短名独立出现且长名不足 3 次 ⇒ 长名是"短名+尾巴"碎片。复姓名不受 ① 约束。
      */
-    internal fun selectNames(cueCounts: Map<String, Int>): List<Pair<String, Int>> {
+    internal fun selectNames(
+        cueCounts: Map<String, Int>,
+        trustModel: Boolean = false
+    ): List<Pair<String, Int>> {
         val candidates = cueCounts.filterValues { it > 0 }.toMutableMap()
         candidates.keys.toList().forEach { name ->
+            // 伪人名（姓+高频动词）在任何路径都剔除
+            if (NerTextEngine.isImplausibleName(name)) {
+                candidates.remove(name)
+                return@forEach
+            }
+            if (trustModel) return@forEach
             if (name.length >= 3 &&
                 !NerTextEngine.startsWithCompoundSurname(name) &&
                 (candidates[name] ?: 0) < MIN_LONG_NAME_CUES
@@ -104,14 +119,16 @@ object OfflineCharacterDiscovery {
                 candidates.remove(name)
             }
         }
-        candidates.keys.sortedBy { it.length }.forEach { short ->
-            val shortCount = candidates[short] ?: return@forEach
-            val longer = candidates.keys.firstOrNull { it.length > short.length && it.startsWith(short) }
-                ?: return@forEach
-            val longCount = candidates[longer] ?: return@forEach
-            when {
-                shortCount - longCount <= 0 -> candidates.remove(short)
-                longCount < CONFIRMED_LONG_NAME_CUES -> candidates.remove(longer)
+        if (!trustModel) {
+            candidates.keys.sortedBy { it.length }.forEach { short ->
+                val shortCount = candidates[short] ?: return@forEach
+                val longer = candidates.keys.firstOrNull { it.length > short.length && it.startsWith(short) }
+                    ?: return@forEach
+                val longCount = candidates[longer] ?: return@forEach
+                when {
+                    shortCount - longCount <= 0 -> candidates.remove(short)
+                    longCount < CONFIRMED_LONG_NAME_CUES -> candidates.remove(longer)
+                }
             }
         }
         // 稳定排序：同次数同长度时保持"首次出现"顺序，保证结果可复现
@@ -148,8 +165,9 @@ object OfflineCharacterDiscovery {
         limit: Int = DEFAULT_LIMIT
     ): DiscoveryResult = withContext(Dispatchers.IO) {
         if (bookKey.isBlank()) return@withContext DiscoveryResult(0, 0)
-        val scan = scanCues(paragraphs)
-        val found = toCandidates(scan, limit)
+        val trustModel = NerTextEngine.isModelReady()
+        val scan = scanCues(paragraphs, trustModel)
+        val found = toCandidates(scan, limit, trustModel)
         // 先清理旧碎片（萧宏/郑吒嗤），否则旧角色继续占位并污染归因（2026-11-02 用户反馈）
         val pruned = pruneFragments(bookKey, found.map { it.name }.toSet(), scan.counts)
         if (found.isEmpty()) return@withContext DiscoveryResult(0, pruned)

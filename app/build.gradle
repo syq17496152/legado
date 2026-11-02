@@ -305,6 +305,8 @@ if (mdTiny) {
 dependencies {
     // 内置离线 TTS 引擎（builtin-offline-tts / AD-01）：sherpa-onnx AAR（本地文件，不入库；见 scripts/fetch_sherpa_aar.py）
     implementation(files("libs/sherpa-onnx.aar"))
+    // 端侧 NER（AD-16）：LAC-ONNX 中文分词/词性/人名实体推理（模型不进包，走导入/下载）
+    implementation(libs.onnxruntime.android)
     // tar.bz2 模型包解压（T1.2 模型导入）
     implementation("org.apache.commons:commons-compress:1.26.2")
     //compileOnly "com.android.tools.build:gradle:$agp_version"

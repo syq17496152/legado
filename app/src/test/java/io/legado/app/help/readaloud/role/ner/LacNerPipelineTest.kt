@@ -1,0 +1,105 @@
+package io.legado.app.help.readaloud.role.ner
+
+import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * LAC-ONNX 解码/后处理纯逻辑（AD-16）：
+ * Viterbi → BIO 词元 → PER 剥尾 + cue 候选。全部可 JVM 直测，不需要模型文件。
+ */
+class LacNerPipelineTest {
+
+    @Test
+    fun `viterbi 选择分数最高的标签路径`() {
+        val emissions = arrayOf(
+            floatArrayOf(0f, -10f),
+            floatArrayOf(0f, -10f),
+            floatArrayOf(-10f, 0f)
+        )
+        val transitions = arrayOf(
+            floatArrayOf(0f, 0f),
+            floatArrayOf(0f, 0f)
+        )
+        val path = LacDecoder.viterbi(emissions, transitions, 3)
+        assertEquals(listOf(0, 0, 1), path.toList())
+    }
+
+    @Test
+    fun `BIO 合并出人名与动词词元`() {
+        val tags = mapOf(
+            16 to "PER-B",
+            17 to "PER-I",
+            38 to "v-B",
+            39 to "v-I",
+            44 to "w-B",
+            45 to "w-I"
+        )
+        // 郑( PER-B ) 吒( PER-I ) 嗤( v-B ) 笑( v-I ) 道( v-B )
+        val ids = intArrayOf(16, 17, 38, 39, 38, 44)
+        val tokens = LacDecoder.decodeTokens("郑吒嗤笑道：", ids, tags)
+        assertEquals("郑吒", tokens[0].word)
+        assertEquals("PER", tokens[0].label)
+        assertEquals(0, tokens[0].start)
+        assertEquals(2, tokens[0].end)
+        assertEquals("嗤笑", tokens[1].word)
+        assertEquals("v", tokens[1].label)
+        assertEquals("道", tokens[2].word)
+    }
+
+    @Test
+    fun `PER 尾部误并动作字要剥掉`() {
+        val tokens = listOf(
+            LacDecoder.Token("赵樱空道", "PER", 0, 4),
+            LacDecoder.Token("詹岚仰", "PER", 10, 13),
+            LacDecoder.Token("郑吒", "PER", 20, 22)
+        )
+        val names = LacNerPostProcessor.personMentions(tokens).map { it.name }
+        assertEquals(listOf("赵樱空", "詹岚", "郑吒"), names)
+    }
+
+    @Test
+    fun `无 PER 标签的角色名可由 cue 词元兜底`() {
+        val tokens = listOf(
+            LacDecoder.Token("零点", "TIME", 0, 2),
+            LacDecoder.Token("道", "v", 2, 3),
+            LacDecoder.Token("：", "w", 3, 4)
+        )
+        val names = LacNerPostProcessor.cueCandidates(tokens).map { it.name }
+        assertEquals(listOf("零点"), names)
+    }
+
+    @Test
+    fun `形容词与高频组合不得被 cue 兜底误收`() {
+        val adjectives = listOf(
+            LacDecoder.Token("软弱", "a", 0, 2),
+            LacDecoder.Token("说道", "v", 2, 4),
+            LacDecoder.Token("：", "w", 4, 5)
+        )
+        assertTrue(LacNerPostProcessor.cueCandidates(adjectives).isEmpty())
+
+        val common = listOf(
+            LacDecoder.Token("万语", "n", 0, 2),
+            LacDecoder.Token("千言道", "n", 2, 5),
+            LacDecoder.Token("：", "w", 5, 6)
+        )
+        assertTrue(LacNerPostProcessor.cueCandidates(common).isEmpty())
+    }
+
+    @Test
+    fun `空输入与未知标签返回空或单字词元`() {
+        assertTrue(LacDecoder.decodeTokens("", intArrayOf(), emptyMap()).isEmpty())
+        assertNull(LacNerPostProcessor.personMentions(emptyList()).firstOrNull())
+    }
+
+    @Test
+    fun `信任模型时三字名即使只出现一次也保留`() {
+        val counts = linkedMapOf("萧宏律" to 1, "赵樱空" to 1)
+        val trusted = OfflineCharacterDiscovery.selectNames(counts, trustModel = true)
+        assertEquals(listOf("萧宏律", "赵樱空"), trusted.map { it.first })
+        // 无模型（规则路径）时仍按频次门槛剔除一次性三字名
+        assertTrue(OfflineCharacterDiscovery.selectNames(counts, trustModel = false).isEmpty())
+    }
+}

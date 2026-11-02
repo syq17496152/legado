@@ -58,6 +58,7 @@ import io.legado.app.help.readaloud.role.BookAliasStore
 import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleCacheStore
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
+import io.legado.app.help.readaloud.role.ner.NerModelManager
 import io.legado.app.help.tts.builtin.BuiltinModelProfile
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.help.tts.builtin.BuiltinVoice
@@ -173,6 +174,17 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         }
     }
 
+    /** AD-16：导入 LAC-ONNX NER 模型 ZIP（模型不进 APK，导入后完全离线识别） */
+    private val pickNerZip = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            pageState.value = pageState.value.copy(busy = true, message = "导入 NER 模型…")
+            val result = NerModelManager.importZip(this@BuiltinTtsActivity, uri)
+            pageState.value = pageState.value.copy(busy = false, message = result.message)
+            reload()
+        }
+    }
+
     private val exportVoices = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
@@ -236,6 +248,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             intent?.getStringExtra(EXTRA_IMPORT_VOICES)?.takeIf { it.isNotBlank() }?.let { fileName ->
                 importVoicesFromImportDir(fileName)
             }
+            // 联调用：adb 传 --es import_ner <文件名> → 从外置导入目录导入 LAC NER 模型
+            intent?.getStringExtra(EXTRA_IMPORT_NER)?.takeIf { it.isNotBlank() }?.let { fileName ->
+                importNerFromImportDir(fileName)
+            }
         }
     }
 
@@ -243,6 +259,19 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     private suspend fun importVoicesFromImportDir(fileName: String) {
         pageState.value = pageState.value.copy(busy = true, message = "导入音色包中…")
         val message = BuiltinAssetOps.importVoiceZip(fileName)
+        pageState.value = pageState.value.copy(busy = false, message = message)
+        reload()
+    }
+
+    /** 联调用：从外置导入目录导入 LAC NER 模型 ZIP（adb push 后 --es import_ner 触发） */
+    private suspend fun importNerFromImportDir(fileName: String) {
+        pageState.value = pageState.value.copy(busy = true, message = "导入 NER 模型…")
+        val file = File(BuiltinTtsRuntime.paths().importDir, fileName)
+        val message = if (!file.isFile) {
+            "导入目录内没有 $fileName"
+        } else {
+            NerModelManager.importZip(this, Uri.fromFile(file)).message
+        }
         pageState.value = pageState.value.copy(busy = false, message = message)
         reload()
     }
@@ -376,6 +405,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 PageAction.IdentifyRoles -> identifyRoles()
                 PageAction.EnableMultiRole -> enableMultiRole()
                 PageAction.QuickEnable -> quickEnable()
+                PageAction.ImportNerModel ->
+                    pickNerZip.launch(arrayOf("application/zip", "application/octet-stream"))
                 is PageAction.AssignSegment -> assignSegment(action)
                 is PageAction.AssignVoice -> assignVoice(action)
                 is PageAction.EditCharacter -> openCharacterEditor(action.characterId)
@@ -717,6 +748,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         const val EXTRA_AUTO_SETUP = "auto_setup"
         /** 联调：从外置导入目录自动导入指定音色包（文件名），供 653 规模 L2 验证 */
         const val EXTRA_IMPORT_VOICES = "import_voices"
+        /** 联调：从外置导入目录自动导入 LAC NER 模型（文件名） */
+        const val EXTRA_IMPORT_NER = "import_ner"
         /** 改绑学习时截取的 cue 窗口（引号两侧各 24 字，与离线归因的近场口径一致） */
         private const val CUE_WINDOW = 24
         /** 批量试听一次最多几个（T8.8，避免一次播太久） */
@@ -761,6 +794,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 limit = runCatching { BuiltinTtsRuntime.cache().diskLimitBytes() }.getOrDefault(0L)
             ),
             importDir = BuiltinTtsRuntime.paths().importDir.absolutePath,
+            nerModelReady = NerModelManager.isReady(this),
             hasBook = bookKey != null,
             roleSummary = BuiltinTtsViewMapper.roleSummary(
                 bookKey,

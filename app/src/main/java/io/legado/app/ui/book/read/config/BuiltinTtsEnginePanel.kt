@@ -87,6 +87,7 @@ internal fun EnginePanel(
             }
         }
         StatusCard(state = state, onAction = onAction)
+        NerModelCard(state = state, onAction = onAction)
         if (state.importDir.isNotBlank()) {
             AppCard {
                 SectionTitle("模型导入目录")
@@ -182,6 +183,43 @@ private fun ProfileCard(
                 ) {
                     Text(context.getString(R.string.builtin_tts_model_delete))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 端侧 NER 模型卡（AD-16）：模型可下载/导入、不进 APK；
+ * 就绪后角色识别走 LAC 模型（分词/词性/人名实体），未就绪回落姓氏规则兜底。
+ */
+@Composable
+private fun NerModelCard(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionTitle("角色识别模型（NER）")
+            Spacer(Modifier.width(8.dp))
+            StatusPill(
+                text = BuiltinTtsUiSupport.nerModelStatusText(state.nerModelReady),
+                tone = if (state.nerModelReady) StatusTone.POSITIVE else StatusTone.WARNING
+            )
+        }
+        Text(
+            text = if (state.nerModelReady) {
+                "LAC-ONNX 端侧模型已加载：按分词/词性/人名实体识别，旁白与三字名都更准"
+            } else {
+                "导入 LAC-ONNX 模型包（约 30MB，解压进应用私有目录），导入后完全离线识别角色"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(onClick = { onAction(PageAction.ImportNerModel) }) {
+                Text(if (state.nerModelReady) "重新导入 NER 模型" else "导入 NER 模型（ZIP）")
             }
         }
     }

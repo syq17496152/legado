@@ -122,6 +122,9 @@ internal object BuiltinTtsUiSupport {
     /** 首页就绪胶囊（纯函数可单测）：语音包齐备与否一眼可见 */
     fun readyPill(ready: Boolean): String = if (ready) "离线就绪" else "语音包未就绪"
 
+    /** NER 模型状态胶囊（AD-16，纯函数可单测）：就绪/未安装 */
+    fun nerModelStatusText(ready: Boolean): String = if (ready) "已就绪" else "未安装"
+
     /** 音色头像首字（纯函数可单测）：空白名回落 "?"，避免空圆 */
     fun voiceInitial(name: String): String {
         val trimmed = name.trim()

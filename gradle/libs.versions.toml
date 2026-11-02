@@ -36,6 +36,8 @@ nanoHttpd = "2.3.1"
 okhttp = "5.4.0"
 preference = "1.2.1"
 quickChineseTransfer = "0.2.17"
+# 端侧 NER（builtin-offline-tts AD-16）：LAC-ONNX 推理运行时（模型下载/导入，不进包）
+onnxruntime = "1.20.0"
 
 splitties = "3.0.0"
 desugar = "2.1.5"
@@ -259,6 +261,7 @@ quickjs-kt = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjsKt"
 javascript-engine = { module = "androidx.javascriptengine:javascriptengine", version.ref = "javascriptEngine" }
 
 renderscript-intrinsics-replacement-toolkit = { module = "com.github.TomasValenta:renderscript-intrinsics-replacement-toolkit", version = "8eaa829ddd" }
+onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
 zxing-lite = { module = "com.github.jenly1314:zxing-lite", version.ref = "zxingLite" }
 subsampling-scale-image-view = { module = "com.davemorrissey.labs:subsampling-scale-image-view-androidx", version.ref = "ssiv" }
 

@@ -83,7 +83,9 @@ data class BuiltinTtsPageState(
     /** 降级矩阵结论（T3.5）：错误/警告/正常 逐条文案 */
     val findingsText: String = "",
     /** 缓存水位（T3.4）：用量 / 上限 / 百分比 */
-    val cacheWatermark: String = ""
+    val cacheWatermark: String = "",
+    /** 端侧 NER 模型（AD-16）是否已就绪 */
+    val nerModelReady: Boolean = false
 )
 
 /** 分镜一行：段落片段 + 当前角色判定（未识别不静默归旁白） */
@@ -128,6 +130,8 @@ sealed interface PageAction {
     data object IdentifyRoles : PageAction
     data object EnableMultiRole : PageAction
     data object QuickEnable : PageAction
+    /** AD-16：导入 LAC-ONNX NER 模型包（ZIP，模型不进 APK） */
+    data object ImportNerModel : PageAction
     data class AssignSegment(
         val paragraphIndex: Int,
         val start: Int,

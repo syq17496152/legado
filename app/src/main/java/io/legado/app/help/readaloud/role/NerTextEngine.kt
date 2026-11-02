@@ -1,8 +1,14 @@
 package io.legado.app.help.readaloud.role
 
+import io.legado.app.help.readaloud.role.ner.NerModelManager
+import splitties.init.appCtx
+
 /**
- * 端侧（零依赖）人名信号：已知角色名精确命中 + 中文姓氏启发式。
- * 只产出"人名 + 区间"作为 **信号**，不直接判定说话人（AD-16）。
+ * 端侧人名信号门面（AD-16）：
+ * - **有 LAC 模型**：用模型输出的分词/词性/PER 实体 + cue 候选（主路径）；
+ * - **无模型**：回落中文姓氏启发式（兜底路径，保证老设备仍可用）。
+ *
+ * 只产出"人名 + 区间"作为 **信号**，不直接判定说话人。
  */
 object NerTextEngine {
 
@@ -73,32 +79,18 @@ object NerTextEngine {
             }
         }
         if (detectUnknown) {
-            var i = 0
-            while (i < text.length) {
-                val c = text[i]
-                if (c.toString() in surnames) {
-                    val end = nameEnd(text, i)
-                    if (end > i + 1) {
-                        val name = text.substring(i, end)
-                        if (name !in stopWords && name !in nonNameWords &&
-                            !isImplausibleName(name) && !result.any { it.start == i }
-                        ) {
-                            result.add(Mention(name, i, end))
-                        }
-                        i = end
-                        continue
-                    }
-                }
-                i++
+            val model = modelMentions(text)
+            if (model != null) {
+                // 有模型：PER 实体 + cue 候选是主路径（不再跑姓氏启发式）
+                model.forEach { result.add(it) }
+            } else {
+                // 无模型：回落姓氏启发式（仅兜底，避免纯规则成为主路径）
+                // 用 surnameCandidates 保留 2/3 字候选族，长度由 OfflineCharacterDiscovery 按频次裁决
+                // 注意：同一姓氏位置会产出 2/3 字两种形态，不能按 start 去重（否则三字名会被砍成两字）
+                surnameCandidates(text).forEach { result.add(it) }
             }
         }
         return result.sortedBy { it.start }
-    }
-
-    /** 姓后连续 1 个汉字视为名字（复姓允许 2 个；遇到虚词/标点即止） */
-    private fun nameEnd(text: String, start: Int): Int {
-        val compound = compoundSurnames.firstOrNull { text.startsWith(it, start) }
-        return scanNameEnd(text, start, if (compound != null) 3 else 2)
     }
 
     /** 从 [start] 起扫描最多 [maxLen] 字（含姓）：遇到非汉字或虚词即停，返回实际结束下标 */
@@ -145,6 +137,17 @@ object NerTextEngine {
         return result.toList()
     }
 
+    /** NER 模型是否已就绪（无 Context 的 JVM 环境返回 false） */
+    fun isModelReady(): Boolean =
+        runCatching { NerModelManager.isReady(appCtx) }.getOrDefault(false)
+
+    /**
+     * 模型 NER 信号：null=模型不可用（回落规则）；空列表=模型可用但本段没有人名。
+     * JVM 单测无 appCtx 时同样返回 null，走规则路径。
+     */
+    fun modelMentions(text: String): List<Mention>? =
+        runCatching { NerModelManager.mentions(appCtx, text) }.getOrNull()
+
     /** 名称是否以复姓开头（复姓三/四字名不参与"必须重复出现"的频次门槛） */
     fun startsWithCompoundSurname(name: String): Boolean =
         compoundSurnames.any { name.startsWith(it) }
@@ -155,9 +158,17 @@ object NerTextEngine {
      * 例：`都知道：“…”`（都知道）、`能转身就跑`（能转身）都会被姓氏启发式误当人名。
      */
     private val implausibleGivenChars = setOf(
-        '知', '转', '冷', '摸', '调', '数', '有', '他', '深', '忽', '嗤', '释', '觉', '到',
-        '来', '去', '走', '站', '坐', '起', '开', '关', '得', '做', '用', '把', '被', '让',
-        '给', '能', '会', '可', '要'
+        // 高频动词/动作
+        '知', '转', '冷', '摸', '调', '数', '有', '深', '忽', '嗤', '释', '觉', '到',
+        '来', '去', '走', '站', '坐', '起', '开', '关', '得', '做', '用', '把', '被',
+        '让', '给', '能', '会', '可', '要', '语', '哭', '笑', '跑', '飞', '打', '杀',
+        '叫', '喊', '说', '道', '问', '答', '想', '看', '听', '吃', '喝', '睡', '醒',
+        '躺', '回', '过', '出', '进', '拿', '放',
+        // 代词/虚词/方位/程度
+        '他', '她', '女', '中', '上', '下', '里', '外', '前', '后', '大', '小', '多', '少',
+        '好', '高', '低', '长', '短', '快', '慢', '新', '旧', '真', '假', '生', '死',
+        '该', '应', '需', '无', '不', '没', '很', '太', '更', '最', '也', '只', '又',
+        '才', '便', '却', '还', '已', '将', '正'
     )
 
     /** 是否为"姓 + 高频动词/副词"拼出的伪人名（发现期过滤 + 旧数据清理共用同一口径） */

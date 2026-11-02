@@ -56,6 +56,13 @@ class BuiltinTtsActivityTest {
         )
     }
 
+    /** AD-16：NER 模型状态胶囊文案（就绪 / 未安装） */
+    @Test
+    fun `NER 模型状态文案`() {
+        assertEquals("已就绪", BuiltinTtsUiSupport.nerModelStatusText(true))
+        assertEquals("未安装", BuiltinTtsUiSupport.nerModelStatusText(false))
+    }
+
     /** IF-IM-08：即使只清理旧碎片（新增 0），discovery.changed>0 也必须重算分镜 */
     @Test
     fun `仅清理碎片也必须强制重算分镜`() {
