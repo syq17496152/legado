@@ -1830,8 +1830,17 @@ private fun ReadAloudPlayerContent(
                 maxWidth < 360.dp -> 18.dp
                 else -> 24.dp
             }
-            val topPadding = if (veryShort) 10.dp else 18.dp
-            val bottomPadding = if (veryShort) 16.dp else 26.dp
+            // 横屏上下留白收紧：把省下的高度让给唱片（横屏时唱片是用户最想看清的封面）
+            val topPadding = when {
+                landscape -> 8.dp
+                veryShort -> 10.dp
+                else -> 18.dp
+            }
+            val bottomPadding = when {
+                landscape -> 10.dp
+                veryShort -> 16.dp
+                else -> 26.dp
+            }
 
             Column(
                 modifier = Modifier
@@ -1912,6 +1921,7 @@ private fun ReadAloudPlayerContent(
                         PlayerControlDock(
                             state = state,
                             colors = colors,
+                            compact = landscape,
                             activeSheet = if (sheetVisible) activeSheet else PlayerSheet.None,
                             onSheetChange = { sheet ->
                                 if (sheetVisible && activeSheet == sheet) {
@@ -4708,20 +4718,24 @@ private fun PlayerControlDock(
     onPlayPause: () -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
-    onOpenChapterList: () -> Unit
+    onOpenChapterList: () -> Unit,
+    /** 横屏紧凑档：按钮与间距收窄，把高度让给舞台（触控目标仍 ≥44dp） */
+    compact: Boolean = false
 ) {
     val context = LocalContext.current
+    val transportSize = if (compact) 44.dp else 50.dp
+    val playSurfaceSize = if (compact) 58.dp else 68.dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(126.dp),
+            .height(if (compact) 108.dp else 126.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 14.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 300.dp),
+                .widthIn(max = if (compact) 270.dp else 300.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -4729,13 +4743,13 @@ private fun PlayerControlDock(
                 icon = R.drawable.ic_skip_previous,
                 contentDescription = "上一章",
                 colors = colors,
-                size = 50.dp,
-                iconSize = 25.dp,
+                size = transportSize,
+                iconSize = if (compact) 22.dp else 25.dp,
                 onClick = onPreviousChapter
             )
             Surface(
                 onClick = onPlayPause,
-                modifier = Modifier.size(68.dp),
+                modifier = Modifier.size(playSurfaceSize),
                 shape = CircleShape,
                 color = Color.White.copy(alpha = 0.92f),
                 shadowElevation = 16.dp
@@ -4746,7 +4760,7 @@ private fun PlayerControlDock(
                         ImmersiveStagePolicy.TransportIcon.Busy
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(if (compact) 24.dp else 28.dp),
                             strokeWidth = 3.dp,
                             color = Color.Black.copy(alpha = 0.72f),
                             trackColor = Color.Black.copy(alpha = 0.12f)
@@ -4756,7 +4770,7 @@ private fun PlayerControlDock(
                             painter = painterResource(if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp),
                             contentDescription = if (state.playing) context.getString(R.string.pause) else context.getString(R.string.audio_play),
                             tint = Color.Black.copy(alpha = 0.88f),
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(if (compact) 27.dp else 32.dp)
                         )
                     }
                 }
@@ -4765,8 +4779,8 @@ private fun PlayerControlDock(
                 icon = R.drawable.ic_skip_next,
                 contentDescription = "下一章",
                 colors = colors,
-                size = 50.dp,
-                iconSize = 25.dp,
+                size = transportSize,
+                iconSize = if (compact) 22.dp else 25.dp,
                 onClick = onNextChapter
             )
         }

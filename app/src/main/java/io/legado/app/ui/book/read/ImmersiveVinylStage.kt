@@ -49,16 +49,23 @@ internal object ImmersiveStagePolicy {
 
     /**
      * 唱片直径：矮屏优先保控件，不能按原封面尺寸硬套。
-     * 2026-11-02 用户反馈封面转动区域偏小 ⇒ 三档整体上调约 12%（仍给标题/正文留足空间）。
+     * 2026-11-02 用户反馈封面转动区域偏小 ⇒ 常屏 208→264dp、矮屏 172→196dp 上调；
+     * 极端矮屏维持 156dp，避免压住标题与正文。
      */
     fun discDiameter(veryShort: Boolean, short: Boolean): Dp = when {
         veryShort -> 156.dp
         short -> 196.dp
-        else -> 236.dp
+        else -> 264.dp
     }
 
-    /** 横屏舞台（左右分栏）的唱片直径（同步上调，保持视觉一致） */
-    fun landscapeDiscDiameter(short: Boolean): Dp = if (short) 156.dp else 192.dp
+    /** 横屏舞台（左右分栏）的唱片直径（横屏高度受限，取能放下的最大值） */
+    fun landscapeDiscDiameter(short: Boolean): Dp = if (short) 176.dp else 216.dp
+
+    /**
+     * 中心封面占唱片直径的比例：黑胶盘面在深色背景上几乎不可见，
+     * 用户感知的"转动区域"实际是封面 ⇒ 从 0.52 提到 0.62 直接放大可感知区域。
+     */
+    const val COVER_RATIO = 0.62f
 
     /**
      * 中央播放键形态：
@@ -177,7 +184,7 @@ internal fun ImmersiveVinylDisc(
         val hasCover = !state.coverUrl.isNullOrBlank()
         Box(
             modifier = Modifier
-                .size(diameter * 0.52f)
+                .size(diameter * ImmersiveStagePolicy.COVER_RATIO)
                 .graphicsLayer { rotationZ = rotation.value }
                 .clip(CircleShape)
                 .background(discBase),
@@ -216,7 +223,7 @@ internal fun ImmersiveVinylDisc(
             )
             drawCircle(
                 color = grooveColor,
-                radius = edge * 0.545f,
+                radius = edge * 0.66f,
                 style = Stroke(width = 1.dp.toPx())
             )
             drawTonearm(colors, edge)
@@ -246,7 +253,8 @@ private fun DrawScope.drawVinylFace(
     )
     if (grooves <= 0) return
     val outer = 0.94f
-    val inner = 0.56f
+    // 内圈从 0.56 外移到 0.68，避免纹理环压进放大后的封面
+    val inner = 0.68f
     for (i in 1..grooves) {
         val ratio = outer - (outer - inner) * (i - 1) / (grooves - 1).coerceAtLeast(1)
         drawCircle(

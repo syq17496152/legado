@@ -80,7 +80,9 @@ object NerTextEngine {
                     val end = nameEnd(text, i)
                     if (end > i + 1) {
                         val name = text.substring(i, end)
-                        if (name !in stopWords && name !in nonNameWords && !result.any { it.start == i }) {
+                        if (name !in stopWords && name !in nonNameWords &&
+                            !isImplausibleName(name) && !result.any { it.start == i }
+                        ) {
                             result.add(Mention(name, i, end))
                         }
                         i = end
@@ -134,7 +136,7 @@ object NerTextEngine {
                 val end = scanNameEnd(text, i, nameLen)
                 if (end != i + nameLen) continue
                 val name = text.substring(i, end)
-                if (name !in stopWords && name !in nonNameWords) {
+                if (name !in stopWords && name !in nonNameWords && !isImplausibleName(name)) {
                     result.add(Mention(name, i, end))
                 }
             }
@@ -146,6 +148,25 @@ object NerTextEngine {
     /** 名称是否以复姓开头（复姓三/四字名不参与"必须重复出现"的频次门槛） */
     fun startsWithCompoundSurname(name: String): Boolean =
         compoundSurnames.any { name.startsWith(it) }
+
+    /**
+     * 名字用字黑名单（单姓看第 2 字 / 复姓看第 3 字）：
+     * 这些高频动词/副词几乎不会出现在名字里，却能拼出"都知/能转/却冷"这类伪人名。
+     * 例：`都知道：“…”`（都知道）、`能转身就跑`（能转身）都会被姓氏启发式误当人名。
+     */
+    private val implausibleGivenChars = setOf(
+        '知', '转', '冷', '摸', '调', '数', '有', '他', '深', '忽', '嗤', '释', '觉', '到',
+        '来', '去', '走', '站', '坐', '起', '开', '关', '得', '做', '用', '把', '被', '让',
+        '给', '能', '会', '可', '要'
+    )
+
+    /** 是否为"姓 + 高频动词/副词"拼出的伪人名（发现期过滤 + 旧数据清理共用同一口径） */
+    fun isImplausibleName(name: String): Boolean {
+        if (name.length < 2) return false
+        if (name in nonNameWords || name in stopWords) return true
+        val givenIndex = if (startsWithCompoundSurname(name)) 2 else 1
+        return name.length > givenIndex && name[givenIndex] in implausibleGivenChars
+    }
 
     private val nameStopChars = setOf(
         '说', '道', '问', '答', '笑', '喊', '叫', '喝', '叹', '想', '看', '又', '便', '才', '就', '也',

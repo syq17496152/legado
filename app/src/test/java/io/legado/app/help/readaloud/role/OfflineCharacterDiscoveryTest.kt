@@ -105,6 +105,31 @@ class OfflineCharacterDiscoveryTest {
         assertEquals(2, OfflineCharacterDiscovery.DiscoveryResult(added = 1, pruned = 1).changed)
     }
 
+    /** 2026-11-02 二次真机：姓氏启发式曾把"都知/能转/却冷"落库，必须按名字用字黑名单剔除 */
+    @Test
+    fun `姓字加高频副动词不落候选`() {
+        val paragraphs = listOf(
+            "都知道：“这事没完。”",
+            "能转身就跑的人不多，他却做到了。",
+            "却冷笑道：“你以为呢？”",
+            "解释了半天，也没人信。"
+        )
+        assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
+        assertTrue(NerTextEngine.isImplausibleName("都知"))
+        assertTrue(NerTextEngine.isImplausibleName("能转"))
+        assertTrue(NerTextEngine.isImplausibleName("解释"))
+    }
+
+    /** 黑名单不得误伤真实角色（郑吒/赵樱空/张杰/詹岚） */
+    @Test
+    fun `名字用字黑名单不误伤真实姓名`() {
+        assertFalse(NerTextEngine.isImplausibleName("郑吒"))
+        assertFalse(NerTextEngine.isImplausibleName("赵樱空"))
+        assertFalse(NerTextEngine.isImplausibleName("张杰"))
+        assertFalse(NerTextEngine.isImplausibleName("詹岚"))
+        assertFalse(NerTextEngine.isImplausibleName("萧宏律"))
+    }
+
     /** 姓字起头的高频动词（解释/回答）不是人名，cue 邻接也不得入选 */
     @Test
     fun `姓字起头的非人名词不落候选`() {

@@ -201,6 +201,13 @@ object OfflineCharacterDiscovery {
             if (!character.autoCreated || character.source != SOURCE_OFFLINE) return@forEach
             val name = character.name.trim()
             if (name.isBlank() || name in discoveredNames) return@forEach
+            // 旧版本落库的伪人名（解释/却冷/都知…）直接用同一"名字用字"口径清掉
+            if (NerTextEngine.isImplausibleName(name)) {
+                runCatching { appDb.bookCharacterDao.deleteCharacterWithRelations(character) }
+                    .onSuccess { pruned++ }
+                    .onFailure { AppLog.put("离线角色伪名清理失败（$name）：${it.message}") }
+                return@forEach
+            }
             // 短碎片：它的全部出现都被新长名覆盖（次数差值 ≤0）才算碎片；独立出现则保留
             val prefixLonger = discoveredNames.firstOrNull { it.length > name.length && it.startsWith(name) }
             val prefixOfNew = prefixLonger != null &&

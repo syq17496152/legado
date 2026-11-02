@@ -56,7 +56,7 @@ class ImmersiveStagePolicyTest {
     fun `竖屏唱片尺寸按屏高分三档且已整体上调`() {
         assertEquals(156f, ImmersiveStagePolicy.discDiameter(true, true).value, 0.01f)
         assertEquals(196f, ImmersiveStagePolicy.discDiameter(false, true).value, 0.01f)
-        assertEquals(236f, ImmersiveStagePolicy.discDiameter(false, false).value, 0.01f)
+        assertEquals(264f, ImmersiveStagePolicy.discDiameter(false, false).value, 0.01f)
         // 用户反馈"封面转动区域偏小"：三档都必须大于旧值 140/172/208
         assertTrue(ImmersiveStagePolicy.discDiameter(true, true).value > 140f)
         assertTrue(ImmersiveStagePolicy.discDiameter(false, true).value > 172f)
@@ -65,8 +65,17 @@ class ImmersiveStagePolicyTest {
 
     @Test
     fun `横屏唱片尺寸按紧凑档区分且已整体上调`() {
-        assertEquals(156f, ImmersiveStagePolicy.landscapeDiscDiameter(true).value, 0.01f)
-        assertEquals(192f, ImmersiveStagePolicy.landscapeDiscDiameter(false).value, 0.01f)
+        assertEquals(176f, ImmersiveStagePolicy.landscapeDiscDiameter(true).value, 0.01f)
+        assertEquals(216f, ImmersiveStagePolicy.landscapeDiscDiameter(false).value, 0.01f)
+        // 横屏高度受限，但直径仍必须大于旧值 136/168
+        assertTrue(ImmersiveStagePolicy.landscapeDiscDiameter(true).value > 136f)
+        assertTrue(ImmersiveStagePolicy.landscapeDiscDiameter(false).value > 168f)
+    }
+
+    @Test
+    fun `封面占直径比例大于旧值放大小尺寸感知区域`() {
+        assertEquals(0.62f, ImmersiveStagePolicy.COVER_RATIO, 0.001f)
+        assertTrue(ImmersiveStagePolicy.COVER_RATIO > 0.52f)
     }
 
     @Test
