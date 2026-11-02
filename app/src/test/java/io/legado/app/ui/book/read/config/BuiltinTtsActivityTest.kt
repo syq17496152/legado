@@ -289,4 +289,15 @@ class BuiltinTtsActivityTest {
         // 上限未知（引擎未初始化）时只显示用量，不显示 0%
         assertEquals("缓存 512 B", BuiltinTtsUiSupport.cacheWatermarkText(512, 0))
     }
+
+    /** IF-IM-08 自愈回归：碎片名落库后，一键开书必须补发现并让 0 命中的旧分镜缓存失效 */
+    @Test
+    fun `一键开书重算分镜的判定`() {
+        // 补到了新角色：即使旧缓存有命中也要重算（新角色可能改变段归属）
+        assertEquals(true, BuiltinTtsUiSupport.shouldForceRecomputeStoryboard(discoveredCharacters = 3, cachedRecognized = 12))
+        // 没有新角色但旧缓存 0 命中（碎片名时代的缓存）：必须重算，否则永远无换声
+        assertEquals(true, BuiltinTtsUiSupport.shouldForceRecomputeStoryboard(discoveredCharacters = 0, cachedRecognized = 0))
+        // 没有新角色且旧缓存已有命中：沿用缓存，避免每次开书都全章重算
+        assertEquals(false, BuiltinTtsUiSupport.shouldForceRecomputeStoryboard(discoveredCharacters = 0, cachedRecognized = 35))
+    }
 }

@@ -48,4 +48,33 @@ class OfflineCharacterDiscoveryTest {
         assertEquals(3, candidates.size)
         assertEquals(names.take(3), candidates.map { it.name })
     }
+
+    /** 2026-11-02 真机回归：单姓最长只取 2 字，避免把后续动词吞成"郑吒嗤"这类碎片名 */
+    @Test
+    fun `单姓人名不吞后续动词`() {
+        val paragraphs = listOf(
+            "郑吒嗤笑道：“你想真正的活着吗？”",
+            "郑吒忽然道：“先别急，听听他们怎么说。”"
+        )
+        val candidates = OfflineCharacterDiscovery.candidates(paragraphs)
+        assertEquals(listOf("郑吒"), candidates.map { it.name })
+        assertEquals(2, candidates[0].cueCount)
+    }
+
+    @Test
+    fun `复姓保留三字名`() {
+        val paragraphs = listOf("欧阳锋说：“这一招你看清了么？”")
+        val candidates = OfflineCharacterDiscovery.candidates(paragraphs)
+        assertEquals(listOf("欧阳锋"), candidates.map { it.name })
+    }
+
+    /** 姓字起头的高频动词（解释/回答）不是人名，cue 邻接也不得入选 */
+    @Test
+    fun `姓字起头的非人名词不落候选`() {
+        val paragraphs = listOf(
+            "他解释道：“这只是个意外。”",
+            "她回答：“我明白了。”"
+        )
+        assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
+    }
 }

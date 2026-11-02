@@ -42,6 +42,18 @@ object NerTextEngine {
         "他", "她", "它", "我", "你", "您", "谁", "众", "人", "大家", "有人", "对方", "此人", "那人"
     )
 
+    /** 复姓（允许 3 字名；单姓只取 2 字，避免把后续动词吞进人名，见 2026-11-02 真机碎片名问题） */
+    private val compoundSurnames = setOf(
+        "欧阳", "司马", "上官", "夏侯", "诸葛", "东方", "皇甫", "尉迟", "公孙", "慕容",
+        "长孙", "宇文", "司徒", "鲜于", "南宫", "独孤", "西门", "轩辕", "令狐", "端木"
+    )
+
+    /** 高频非人名词（姓字起头但整体是动词/副词，cue 邻接也会误命中） */
+    private val nonNameWords = setOf(
+        "解释", "回答", "继续", "突然", "然后", "于是", "终于", "只是", "果然", "接着",
+        "随着", "过了", "到了", "看着", "想着", "听着", "笑着", "说着", "边看", "边听"
+    )
+
     /**
      * @param knownNames 本书已知角色名（优先精确命中，精度最高）
      * @param detectUnknown 是否补充姓氏启发式（用于无名角色发现）
@@ -68,7 +80,7 @@ object NerTextEngine {
                     val end = nameEnd(text, i)
                     if (end > i + 1) {
                         val name = text.substring(i, end)
-                        if (name !in stopWords && !result.any { it.start == i }) {
+                        if (name !in stopWords && name !in nonNameWords && !result.any { it.start == i }) {
                             result.add(Mention(name, i, end))
                         }
                         i = end
@@ -81,10 +93,12 @@ object NerTextEngine {
         return result.sortedBy { it.start }
     }
 
-    /** 姓后连续 1~2 个汉字视为名字（遇到虚词/标点即止） */
+    /** 姓后连续 1 个汉字视为名字（复姓允许 2 个；遇到虚词/标点即止） */
     private fun nameEnd(text: String, start: Int): Int {
+        val compound = compoundSurnames.firstOrNull { text.startsWith(it, start) }
+        val maxEnd = if (compound != null) start + 3 else start + 2
         var end = start + 1
-        while (end < text.length && end < start + 3) {
+        while (end < text.length && end < maxEnd) {
             val c = text[end]
             if (c.code !in 0x4E00..0x9FFF) break
             if (c in nameStopChars) break

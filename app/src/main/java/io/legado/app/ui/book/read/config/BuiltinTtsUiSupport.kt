@@ -37,6 +37,14 @@ internal object BuiltinTtsUiSupport {
         return "角色 $characters（新增 $discovered）· 配声 $assigned · $template$storyboard"
     }
 
+    /**
+     * 一键开书是否需要强制重算分镜（IF-IM-08 自愈）。
+     * 本次补录到了新角色（旧缓存可能仍 0 命中）或旧缓存本来就 0 命中 ⇒ 必须重算；
+     * 否则沿用缓存，避免每次开书都做一次全章归因。
+     */
+    fun shouldForceRecomputeStoryboard(discoveredCharacters: Int, cachedRecognized: Int): Boolean =
+        discoveredCharacters > 0 || cachedRecognized <= 0
+
     /** 存储总览文案（T4.9，纯函数可单测）：模型 / 音色 / 缓存 / 合计 */
     fun storageSummary(modelBytes: Long, voiceBytes: Long, cacheBytes: Long): String {
         val total = modelBytes + voiceBytes + cacheBytes
