@@ -36,6 +36,16 @@ class TTSReadAloudServiceTest {
     }
 
     @Test
+    fun `显示名缺失时提示改用目标包名`() {
+        // speakerName 为空时 label 回落「系统默认」；提示若仍用它会出现"「系统默认」未安装"的矛盾文案
+        val (_, notice) = TTSReadAloudService.resolveInitEngine(
+            SpeechRoute.ENGINE_SYSTEM, "com.gone.tts", false, false, false, "系统默认"
+        )
+        assertTrue(notice.orEmpty().contains("com.gone.tts"))
+        assertTrue(!notice.orEmpty().contains("「系统默认」"))
+    }
+
+    @Test
     fun `强制默认或已回退时不再重复提示`() {
         val forced = TTSReadAloudService.resolveInitEngine(
             SpeechRoute.ENGINE_SYSTEM, "com.gone.tts", false, true, false, "某引擎"

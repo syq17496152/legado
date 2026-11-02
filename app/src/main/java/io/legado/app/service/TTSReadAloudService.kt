@@ -101,7 +101,9 @@ class TTSReadAloudService : BaseReadAloudService() {
         ): Pair<String, String?> {
             if (forceDefault || fallbackInit) return "" to null
             if (TtsEngineGuard.needsFallback(engineType, engineValue, packageInstalled)) {
-                return "" to TtsEngineGuard.fallbackMessage(label)
+                // speakerName 为空时 label 会回落「系统默认」，提示改用目标包名，避免"「系统默认」未安装"自相矛盾
+                val display = label.takeIf { it.isNotBlank() && it != "系统默认" } ?: engineValue
+                return "" to TtsEngineGuard.fallbackMessage(display)
             }
             return engineValue to null
         }
