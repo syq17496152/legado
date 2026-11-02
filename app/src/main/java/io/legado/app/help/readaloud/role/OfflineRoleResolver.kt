@@ -1,6 +1,8 @@
 package io.legado.app.help.readaloud.role
 
 import io.legado.app.constant.AppLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
@@ -43,6 +45,7 @@ object OfflineRoleResolver {
     private const val CONF_ALIAS = 0.95
     private const val CONF_CUE = 0.90
     private const val CONF_LEARNED_CUE = 0.92
+    private const val CONF_NER_CUE = 0.90
     private const val CONF_NER = 0.78
     private const val CONF_LOCK = 0.70
     private const val CONF_TURN = 0.60
@@ -56,12 +59,13 @@ object OfflineRoleResolver {
 
     private fun memoryKey(bookKey: String, chapterIndex: Int) = "$bookKey|$chapterIndex"
 
-    /** 解析整章（纯函数，便于 JVM 单测） */
+    /** 解析整章（纯函数，便于 JVM 单测）。[signals] 可注入，默认走端侧 NER 模型（AD-16） */
     fun resolve(
         paragraphs: List<String>,
         units: List<ReadAloudRoleUnit>,
         characters: List<RoleCharacter>,
-        learnedCues: Map<String, String> = emptyMap()
+        learnedCues: Map<String, String> = emptyMap(),
+        signals: (String) -> NerTextEngine.ParagraphSignals = NerTextEngine::signals
     ): Result {
         if (units.isEmpty()) {
             return Result(emptyList(), 0, 0, 0)
@@ -75,6 +79,8 @@ object OfflineRoleResolver {
         var lastSpeaker: RoleCharacter? = null
         var lastParagraph = -1
         val rotation = ArrayDeque<RoleCharacter>()
+        // 同段多句共用一次模型推理结果（章内逐段缓存，避免重复跑 LAC）
+        val signalCache = HashMap<Int, NerTextEngine.ParagraphSignals>()
 
         units.sortedWith(compareBy({ it.firstParagraphIndex }, { it.firstStart })).forEach { unit ->
             val range = unit.ranges.firstOrNull()
@@ -107,7 +113,8 @@ object OfflineRoleResolver {
                 learnedCues = learnedCues,
                 lastSpeaker = lastSpeaker,
                 lastParagraph = lastParagraph,
-                rotation = rotation
+                rotation = rotation,
+                signal = signalCache.getOrPut(range.paragraphIndex) { signals(paragraph) }
             )
             if (assignment != null) {
                 recognized++
@@ -163,6 +170,28 @@ object OfflineRoleResolver {
             ?.first
     }
 
+    /**
+     * 模型人名信号中离引号簇最近的一个（AD-16 ③）：
+     * 前文只在引号前 25 字内、后文只在引号后 15 字内取，前文同距优先（说话人 cue 通常在前）。
+     */
+    private fun nearestMention(
+        mentions: List<NerTextEngine.Mention>,
+        rangeStart: Int,
+        rangeEnd: Int,
+        maxBefore: Int = 25,
+        maxAfter: Int = 15
+    ): String? {
+        return mentions.mapNotNull { mention ->
+            val beforeGap = rangeStart - mention.end
+            val afterGap = mention.start - rangeEnd
+            when {
+                beforeGap in 0..maxBefore -> mention.name to beforeGap
+                afterGap in 0..maxAfter -> mention.name to (maxBefore + afterGap)
+                else -> null
+            }
+        }.minByOrNull { it.second }?.first
+    }
+
     private fun assign(
         unit: ReadAloudRoleUnit,
         paragraph: String,
@@ -171,7 +200,8 @@ object OfflineRoleResolver {
         learnedCues: Map<String, String>,
         lastSpeaker: RoleCharacter?,
         lastParagraph: Int,
-        rotation: ArrayDeque<RoleCharacter>
+        rotation: ArrayDeque<RoleCharacter>,
+        signal: NerTextEngine.ParagraphSignals
     ): Assigned? {
         val range = unit.ranges.first()
         val cueText = buildString {
@@ -196,7 +226,17 @@ object OfflineRoleResolver {
             }
         }
 
-        // ③ cue 命中：取**离引号最近**的角色名（前文取 lastIndexOf、后文取 indexOf）。
+        // ③ 端侧 NER cue（AD-16 主路径）：模型分词+词性判出的"名词性词元 + 说话动词 + 冒号/引号"，
+        //    取离引号最近的角色名；这是模型判定，不是正则穷举。
+        if (signal.modelReady) {
+            nearestMention(signal.cues, range.start, range.end)?.let { name ->
+                matchName(name, nameMap)?.let {
+                    return Assigned(it.name, it.id, "ner-cue", CONF_NER_CUE)
+                }
+            }
+        }
+
+        // ④ 字典 cue 命中：取**离引号最近**的角色名（前文 lastIndexOf、后文 indexOf）。
         // 不能用"cue 文本里任意包含"：preprocessor 的 cueBefore 会带上跨段上下文，
         // 上一段的角色名会抢先命中 ⇒ 张冠李戴（2026-10-31 回归集实证：s01 第二句被判给张三）
         if (cueText.isNotBlank()) {
@@ -206,27 +246,36 @@ object OfflineRoleResolver {
                 }
             }
         }
-        cueNames(nearCue).forEach { candidate ->
-            matchName(candidate, nameMap)?.let {
-                return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
+        // 无模型时才做"任意 1~4 字 + 说话动词"的正则抽取（兜底路径；有模型时不走，避免规则瞎猜）
+        if (!signal.modelReady) {
+            cueNames(nearCue).forEach { candidate ->
+                matchName(candidate, nameMap)?.let {
+                    return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
+                }
             }
         }
 
-        // ④ NER 邻接（引号簇 ±25 字内出现角色名）
-        val mentions = NerTextEngine.findMentions(paragraph, knownNames, detectUnknown = false)
-        val near = NerTextEngine.mentionsNear(paragraph, range.start, range.end, mentions)
-        near.firstOrNull()?.name?.let { name ->
-            matchName(name, nameMap)?.let { return Assigned(it.name, it.id, "ner", CONF_NER) }
+        // ⑤ NER 邻接（引号簇 ±25 字）：有模型用 PER 实体，无模型回落字典精确匹配
+        if (signal.modelReady) {
+            nearestMention(signal.persons, range.start, range.end)?.let { name ->
+                matchName(name, nameMap)?.let { return Assigned(it.name, it.id, "ner", CONF_NER) }
+            }
+        } else {
+            val mentions = NerTextEngine.findMentions(paragraph, knownNames, detectUnknown = false)
+            val near = NerTextEngine.mentionsNear(paragraph, range.start, range.end, mentions)
+            near.firstOrNull()?.name?.let { name ->
+                matchName(name, nameMap)?.let { return Assigned(it.name, it.id, "ner", CONF_NER) }
+            }
         }
 
-        // ⑤ 对话锁：同段连续对白且无新 cue → 继承上一句
+        // ⑥ 对话锁：同段连续对白且无新 cue → 继承上一句
         val sameParagraph = range.paragraphIndex == lastParagraph
         val hasExplicitCue = cueNames(cueText).isNotEmpty()
         if (sameParagraph && !hasExplicitCue && lastSpeaker != null && unit.roleType == "character") {
             return Assigned(lastSpeaker.name, lastSpeaker.id, "lock", CONF_LOCK)
         }
 
-        // ⑥ 对话轮转（换段后的无名对白：在 ≤3 已知角色中取与上一句不同的一个）
+        // ⑦ 对话轮转（换段后的无名对白：在 ≤3 已知角色中取与上一句不同的一个）
         if (unit.roleType == "character" || unit.roleType == "thought") {
             val pronounGender = pronounGender(paragraph, range)
             val candidates = rotation.filter { it.name != lastSpeaker?.name }
@@ -365,18 +414,33 @@ object OfflineRoleResolver {
                 return cachedSegments
             }
         }
-        return runCatching {
-            val units = ReadAloudRolePreprocessor.process(paragraphs, 0).units
-            val learned = aliasStore?.cuesFor(bookKey).orEmpty()
-            val result = resolve(paragraphs, units, characters, learned)
-            if (result.segments.isNotEmpty()) {
-                memory[key] = result.segments
-                OfflineRoleCacheStore.write(bookKey, chapterIndex, chapterTitle, paragraphs, result.segments)
-            }
-            result.segments
-        }.onFailure {
-            AppLog.put("离线归因失败（章 $chapterIndex）：${it.message}")
-        }.getOrDefault(emptyList())
+        // AD-16：段落级归因会跑端侧 LAC 推理（逐段），必须离开主线程（调用方为 TTS 服务主线程作用域）
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val units = ReadAloudRolePreprocessor.process(paragraphs, 0).units
+                val learned = aliasStore?.cuesFor(bookKey).orEmpty()
+                val result = resolve(paragraphs, units, characters, learned)
+                if (result.segments.isNotEmpty()) {
+                    // 正式诊断日志（保留）：区分"模型判定"与"字典/锁/轮转"的分布，用于验证 AD-16 主路径真实生效
+                    val byReason = result.segments.groupingBy { it.reason }.eachCount()
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "roleResolve ch=$chapterIndex nerCue=${byReason["ner-cue"] ?: 0} " +
+                            "ner=${byReason["ner"] ?: 0} cue=${byReason["cue-hit"] ?: 0} " +
+                            "lock=${byReason["lock"] ?: 0} turn=${byReason["turn-taking"] ?: 0} " +
+                            "unknown=${byReason["unknown"] ?: 0}",
+                        level = AppLog.Level.INFO
+                    )
+                    memory[key] = result.segments
+                    OfflineRoleCacheStore.write(
+                        bookKey, chapterIndex, chapterTitle, paragraphs, result.segments
+                    )
+                }
+                result.segments
+            }.onFailure {
+                AppLog.put("离线归因失败（章 $chapterIndex）：${it.message}")
+            }.getOrDefault(emptyList())
+        }
     }
 
     fun clearMemory(bookKey: String) {

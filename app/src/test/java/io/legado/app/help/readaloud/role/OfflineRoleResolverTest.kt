@@ -157,4 +157,86 @@ class OfflineRoleResolverTest {
         assertEquals("narrator", result.segments[0].roleType)
         assertTrue(result.segments[0].characterName.isBlank())
     }
+
+    /** AD-16 主路径：模型词性 cue（名词性词元 + 说话动词 + 冒号）优先于正则/字典抽取 */
+    @Test
+    fun `模型 cue 命中走 ner-cue 而不是正则`() {
+        val paragraphs = listOf("零点道：“别动。”")
+        val withNickname = characters + OfflineRoleResolver.RoleCharacter(id = 3L, name = "零点")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(
+                modelReady = true,
+                cues = listOf(NerTextEngine.Mention("零点", 0, 2)),
+                persons = emptyList()
+            )
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 3, 8, cueBefore = "零点道：")),
+            withNickname,
+            emptyMap(),
+            signals
+        )
+        assertEquals("零点", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+        assertEquals(0.90, result.segments[0].confidence, 0.001)
+    }
+
+    /** AD-16 ③ 第二级：模型 PER 实体 + 引号邻接（无显式 cue 时也能定位说话人） */
+    @Test
+    fun `模型 PER 引号邻接走 ner`() {
+        val paragraphs = listOf("“我们走吧。”李四点点头。")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(
+                modelReady = true,
+                cues = emptyList(),
+                persons = listOf(NerTextEngine.Mention("李四", 7, 9))
+            )
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 0, 6)),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("李四", result.segments[0].characterName)
+        assertEquals("ner", result.segments[0].reason)
+    }
+
+    /** 模型就绪但本段无 cue 时，仍可用字典 cue（证明不是"模型一开就废掉兜底"） */
+    @Test
+    fun `模型就绪但无 cue 时字典 cue 兜底`() {
+        val paragraphs = listOf("张三说：“我们走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(modelReady = true)
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 4, 10, cueBefore = "张三说：")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("cue-hit", result.segments[0].reason)
+    }
+
+    /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
+    @Test
+    fun `无模型时正则 cue 兜底`() {
+        val paragraphs = listOf("张三说：“我们走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(modelReady = false)
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 4, 10, cueBefore = "张三说：")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("cue-hit", result.segments[0].reason)
+    }
 }

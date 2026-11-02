@@ -74,30 +74,14 @@ object NerModelManager {
         }
     }
 
-    /**
-     * 模型 NER 信号：PER 实体 + cue 候选（去重按起点）。
-     * 返回 null 表示模型不可用（调用方回落规则路径）；空列表表示模型可用但没识别到人名。
-     */
-    fun mentions(context: Context, text: String): List<NerTextEngine.Mention>? {
-        val ner = engine(context) ?: return null
-        return runCatching {
-            val persons = ner.personMentions(text)
-            val cues = ner.cueCandidates(text)
-            (persons + cues)
-                .distinctBy { it.start }
-                .sortedBy { it.start }
-                .map { NerTextEngine.Mention(it.name, it.start, it.end) }
-        }.onFailure {
-            AppLog.put("LAC NER 推理失败：${it.message}")
-        }.getOrNull()
-    }
-
     fun reset() {
         synchronized(this) {
             runCatching { engine?.close() }
             engine = null
             enginePath = null
         }
+        // 模型切换后旧推理结果不可复用（段落缓存与模型版本绑定）
+        NerTextEngine.clearSignalCache()
     }
 
     /** 导入模型 ZIP（可从任意子目录读，只取文件名匹配的文件），原子替换旧模型 */

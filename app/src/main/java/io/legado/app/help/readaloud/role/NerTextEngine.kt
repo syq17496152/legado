@@ -1,5 +1,6 @@
 package io.legado.app.help.readaloud.role
 
+import io.legado.app.help.readaloud.role.ner.LacNerPostProcessor
 import io.legado.app.help.readaloud.role.ner.NerModelManager
 import splitties.init.appCtx
 
@@ -79,10 +80,13 @@ object NerTextEngine {
             }
         }
         if (detectUnknown) {
-            val model = modelMentions(text)
-            if (model != null) {
+            val signals = signals(text)
+            if (signals.modelReady) {
                 // 有模型：PER 实体 + cue 候选是主路径（不再跑姓氏启发式）
-                model.forEach { result.add(it) }
+                (signals.persons + signals.cues)
+                    .distinctBy { it.start }
+                    .sortedBy { it.start }
+                    .forEach { result.add(it) }
             } else {
                 // 无模型：回落姓氏启发式（仅兜底，避免纯规则成为主路径）
                 // 用 surnameCandidates 保留 2/3 字候选族，长度由 OfflineCharacterDiscovery 按频次裁决
@@ -137,6 +141,53 @@ object NerTextEngine {
         return result.toList()
     }
 
+    /**
+     * 段落级 NER 信号（AD-16 主路径）：一次推理同时产出两类信号，避免重复跑模型。
+     * - [cues]：名词性词元 + 说话动词 + 冒号/引号 ⇒ 模型判定的"谁在说话"cue；
+     * - [persons]：PER 人名实体 ⇒ 引号邻接候选。
+     * [modelReady]=false 时二者为空，调用方回落字典/正则兜底。
+     */
+    data class ParagraphSignals(
+        val modelReady: Boolean,
+        val cues: List<Mention> = emptyList(),
+        val persons: List<Mention> = emptyList()
+    )
+
+    /** 模型不可用（含 JVM 单测无 appCtx）时返回 `modelReady=false`，不抛异常 */
+    fun signals(text: String): ParagraphSignals {
+        if (text.isBlank()) return ParagraphSignals(false)
+        // 章开始角色发现与段级归因共用同一次推理（LRU 64 段，避免同章重复跑 LAC）
+        synchronized(signalCache) { signalCache[text] }?.let { return it }
+        val result = computeSignals(text)
+        synchronized(signalCache) { signalCache[text] = result }
+        return result
+    }
+
+    private fun computeSignals(text: String): ParagraphSignals {
+        val engine = runCatching { NerModelManager.engine(appCtx) }.getOrNull()
+            ?: return ParagraphSignals(false)
+        val tokens = runCatching { engine.analyze(text) }.getOrNull()
+            ?: return ParagraphSignals(false)
+        val cues = LacNerPostProcessor.cueCandidates(tokens)
+            .map { Mention(it.name, it.start, it.end) }
+        val persons = LacNerPostProcessor.personMentions(tokens)
+            .map { Mention(it.name, it.start, it.end) }
+        return ParagraphSignals(true, cues, persons)
+    }
+
+    /** 清空段落推理缓存（模型重导入/切换后调用，避免旧模型结果残留） */
+    fun clearSignalCache() {
+        synchronized(signalCache) { signalCache.clear() }
+    }
+
+    private val signalCache = object : LinkedHashMap<String, ParagraphSignals>(16, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, ParagraphSignals>
+        ): Boolean = size > SIGNAL_CACHE_SIZE
+    }
+
+    private const val SIGNAL_CACHE_SIZE = 64
+
     /** NER 模型是否已就绪（无 Context 的 JVM 环境返回 false） */
     fun isModelReady(): Boolean =
         runCatching { NerModelManager.isReady(appCtx) }.getOrDefault(false)
@@ -145,8 +196,11 @@ object NerTextEngine {
      * 模型 NER 信号：null=模型不可用（回落规则）；空列表=模型可用但本段没有人名。
      * JVM 单测无 appCtx 时同样返回 null，走规则路径。
      */
-    fun modelMentions(text: String): List<Mention>? =
-        runCatching { NerModelManager.mentions(appCtx, text) }.getOrNull()
+    fun modelMentions(text: String): List<Mention>? {
+        val signals = signals(text)
+        if (!signals.modelReady) return null
+        return (signals.persons + signals.cues).distinctBy { it.start }.sortedBy { it.start }
+    }
 
     /** 名称是否以复姓开头（复姓三/四字名不参与"必须重复出现"的频次门槛） */
     fun startsWithCompoundSurname(name: String): Boolean =

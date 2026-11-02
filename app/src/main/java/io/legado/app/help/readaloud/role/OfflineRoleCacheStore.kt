@@ -19,7 +19,7 @@ data class OfflineRoleSegment(
     val characterName: String = "",
     val characterId: Long = 0L,
     val confidence: Double = 0.0,
-    /** cue-hit / alias / ner / lock / turn-taking / unknown */
+    /** alias / learned-cue / ner-cue / ner / cue-hit / lock / turn-taking / unknown */
     val reason: String = "unknown"
 ) {
     val recognized: Boolean get() = characterId > 0L || characterName.isNotBlank()
@@ -37,7 +37,11 @@ private data class OfflineSegmentsJson(
  */
 object OfflineRoleCacheStore {
 
-    const val MODE_PREFIX = "offline-rule-v1"
+    /**
+     * 归因算法版本（缓存命名空间）。AD-16 主路径改为「端侧 NER cue/PER」后必须升版：
+     * 旧版（纯正则 cue）产出的分镜缓存不可复用，否则用户看到的仍是旧判定。
+     */
+    const val MODE_PREFIX = "offline-ner-v2"
     private const val SCHEMA = "playback-v1"
 
     fun mode(): String = "$MODE_PREFIX|${ReadAloudRolePreprocessor.VERSION}"
@@ -71,6 +75,8 @@ object OfflineRoleCacheStore {
             parse(json).takeIf { it.isNotEmpty() }?.let { return@withContext it }
         }
         appDb.aiReadAloudRoleCacheDao.latestUsableByChapter(bookKey, chapterIndex)
+            // 只认当前算法版本的缓存：旧版本（正则 cue）结果不得顶替，否则升级后仍显示旧判定
+            ?.takeIf { it.mode.startsWith(MODE_PREFIX) }
             ?.segmentsJson
             ?.let { json -> parse(json).takeIf { it.isNotEmpty() } }
     }
