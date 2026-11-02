@@ -31,6 +31,7 @@ import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
+import io.legado.app.help.readaloud.TtsEngineGuard
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
@@ -82,6 +83,28 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     companion object {
         private const val WATCHDOG_TIMEOUT_MS = 8000L
+
+        /**
+         * 初始化引擎决策（5.6 可单测纯函数）：返回 `engine`（传给 TextToSpeech，空=系统默认）与
+         * `notice`（需提示给用户的回退原因，null=无需提示）。
+         *
+         * 为什么要单独抽出来：Android 对不存在的引擎包仍回调 SUCCESS（真机 2026-11-03 实证），
+         * 若不在创建前探测，用户只会看到"音色变了"，拿不到可读原因。
+         */
+        internal fun resolveInitEngine(
+            engineType: String,
+            engineValue: String,
+            packageInstalled: Boolean,
+            forceDefault: Boolean,
+            fallbackInit: Boolean,
+            label: String
+        ): Pair<String, String?> {
+            if (forceDefault || fallbackInit) return "" to null
+            if (TtsEngineGuard.needsFallback(engineType, engineValue, packageInstalled)) {
+                return "" to TtsEngineGuard.fallbackMessage(label)
+            }
+            return engineValue to null
+        }
     }
 
     private var textToSpeech: TextToSpeech? = null
@@ -154,6 +177,10 @@ class TTSReadAloudService : BaseReadAloudService() {
         }
     }
 
+    /** 目标引擎包是否仍安装（5.6 回退探测；探测失败按"未安装"处理更安全） */
+    private fun isPackageInstalled(pkg: String): Boolean =
+        pkg.isNotBlank() && runCatching { packageManager.getPackageInfo(pkg, 0) }.isSuccess
+
     @Synchronized
     private fun initTts(forceDefault: Boolean = false) {
         ttsInitFinish = false
@@ -161,12 +188,16 @@ class TTSReadAloudService : BaseReadAloudService() {
         // 清理迟到看门狗，本轮重新判定
         removeWatchdog()
         val route = SpeechRoute.resolveSpeechRoute(ReadAloud.ttsEngine)
-        // AD-03：回退初始化（单次）强制默认引擎，不挂看门狗
-        val engine = if (forceDefault || fallbackInit) {
-            ""
-        } else {
-            route.engineValue
-        }
+        // AD-03 + 5.6：回退（单次）强制默认引擎；目标引擎包已卸载时提前回退并给出可读原因
+        val (engine, fallbackNotice) = resolveInitEngine(
+            engineType = route.engineType,
+            engineValue = route.engineValue,
+            packageInstalled = isPackageInstalled(route.engineValue),
+            forceDefault = forceDefault,
+            fallbackInit = fallbackInit,
+            label = currentEngineLabel()
+        )
+        fallbackNotice?.let { AppLog.put(it, toast = true) }
         LogUtils.d(TAG, "initTts engine:$engine generation:$initGeneration forceDefault:$forceDefault")
         // P1-10 修复：onInit 携带发起本轮 init 的代际，迟到回调按代际失效
         // （否则旧引擎迟到的 SUCCESS 会把新引擎 ttsInitFinish 置 true，看门狗条件恒假永不降级）
