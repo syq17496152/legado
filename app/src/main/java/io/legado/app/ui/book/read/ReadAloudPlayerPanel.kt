@@ -2103,10 +2103,31 @@ private data class PlayerChapterModel(
     val audioInfo: ReadAloudPlayerPanel.AudioInfoUi
 )
 
+/**
+ * 舞台文字取色（可单测）：深色阅读主题 + 浅色 App 主题这类混搭下，palette.textColor 与舞台背景
+ * 明暗同侧（白字压白底）会不可读；此时改用主题主色推导墨色，保证对比度且不硬编码颜色。
+ */
+internal fun shouldSwapInk(textIsLight: Boolean, backgroundIsLight: Boolean): Boolean =
+    textIsLight == backgroundIsLight
+
+internal fun stageInkColor(textColor: Int, seedColor: Int, backgroundIsLight: Boolean, alpha: Float): Color {
+    val textIsLight = ColorUtils.isColorLight(textColor)
+    if (!shouldSwapInk(textIsLight, backgroundIsLight)) return Color(textColor).copy(alpha = alpha)
+    // 明暗同侧：以主题主色向背景反方向混合，得到仍属主题色系的墨色
+    val blendTarget = if (backgroundIsLight) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+    return Color(ColorUtils.blendColors(seedColor, blendTarget, 0.62f)).copy(alpha = alpha)
+}
+
 @Composable
 internal fun rememberPlayerColors(palette: ReaderSheetStyle.Palette): PlayerColors {
     val accent = Color(palette.accentColor)
     val night = AppConfig.isNightTheme || !ColorUtils.isColorLight(palette.surface)
+    val stageBackground = if (night) {
+        ColorUtils.blendColors(palette.surface, android.graphics.Color.BLACK, 0.68f)
+    } else {
+        ColorUtils.blendColors(palette.surface, android.graphics.Color.WHITE, 0.72f)
+    }
+    val stageLight = ColorUtils.isColorLight(stageBackground)
     val panel = if (night) {
         Color(ColorUtils.blendColors(palette.panel, android.graphics.Color.BLACK, 0.50f))
     } else {
@@ -2119,17 +2140,13 @@ internal fun rememberPlayerColors(palette: ReaderSheetStyle.Palette): PlayerColo
     }
     return PlayerColors(
         night = night,
-        background = if (night) {
-            Color(ColorUtils.blendColors(palette.surface, android.graphics.Color.BLACK, 0.68f))
-        } else {
-            Color(ColorUtils.blendColors(palette.surface, android.graphics.Color.WHITE, 0.72f))
-        },
+        background = Color(stageBackground),
         panel = panel,
         panelStrong = panelStrong,
         panelBorder = Color.Transparent,
-        primaryText = Color(palette.textColor).copy(alpha = 0.94f),
-        secondaryText = Color(palette.secondaryTextColor).copy(alpha = 0.88f),
-        subtleText = Color(palette.secondaryTextColor).copy(alpha = 0.66f),
+        primaryText = stageInkColor(palette.textColor, palette.primaryColor, stageLight, 0.94f),
+        secondaryText = stageInkColor(palette.secondaryTextColor, palette.primaryColor, stageLight, 0.88f),
+        subtleText = stageInkColor(palette.secondaryTextColor, palette.primaryColor, stageLight, 0.66f),
         accent = accent,
         accentText = if (ColorUtils.isColorLight(palette.accentColor)) Color.Black else Color.White,
         fluidA = accent,
