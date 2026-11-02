@@ -255,6 +255,12 @@ android {
     }
     packaging {
         resources.excludes.add('META-INF/*')
+        // sherpa-onnx(static-link-onnxruntime) 与 onnxruntime-android 在 x86 各带一份
+        // lib/x86/libonnxruntime.so；x86 不在交付 ABI 内（debug=arm64/armeabi，release=arm64/x86_64），
+        // 用 pickFirst 消除 merge 重复路径即可，不影响目标 ABI 的运行时。
+        jniLibs {
+            pickFirsts += ['lib/x86/libonnxruntime.so']
+        }
     }
 
     sourceSets {
