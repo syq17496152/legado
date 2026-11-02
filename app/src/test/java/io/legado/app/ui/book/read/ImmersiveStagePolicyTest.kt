@@ -82,6 +82,13 @@ class ImmersiveStagePolicyTest {
     }
 
     @Test
+    fun `低配闸门覆盖低内存与旧系统`() {
+        assertTrue(ImmersiveStagePolicy.shouldReduceMotion(lowRam = true, sdkInt = 33))
+        assertTrue(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 25))
+        assertFalse(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 26))
+    }
+
+    @Test
     fun `封面缺失占位取书名首字`() {
         assertEquals("无", ImmersiveStagePolicy.coverFallbackLabel("无限恐怖"))
         assertEquals("三", ImmersiveStagePolicy.coverFallbackLabel("  三体 "))

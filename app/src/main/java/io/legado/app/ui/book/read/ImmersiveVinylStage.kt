@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -74,6 +75,12 @@ internal object ImmersiveStagePolicy {
     fun vinylGrooveCount(lowRam: Boolean): Int = if (lowRam) 7 else 14
 
     /**
+     * 低配闸门：低内存设备或 API < 26（本项目 minSdk 23，老机 GPU 余量更少）统一降级。
+     * 降级动作 = 关粒子 + 纹理环减半，但保留唱片旋转（核心视觉不丢）。
+     */
+    fun shouldReduceMotion(lowRam: Boolean, sdkInt: Int): Boolean = lowRam || sdkInt < 26
+
+    /**
      * 封面缺失时的中心占位字：取书名首个非空白字符，书名也空则用「书」。
      * 目的：唱片中心不能出现空白黑洞（spec 要求的异常回退）。
      */
@@ -98,9 +105,10 @@ internal object ImmersiveStagePolicy {
     }
 }
 
-private fun isLowRamDevice(): Boolean {
+private fun isReducedMotionDevice(): Boolean {
     val am = appCtx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-    return am?.isLowRamDevice == true
+    val lowRam = am?.isLowRamDevice == true
+    return ImmersiveStagePolicy.shouldReduceMotion(lowRam, Build.VERSION.SDK_INT)
 }
 
 /**
@@ -122,7 +130,7 @@ internal fun ImmersiveVinylDisc(
         foreground = state.foregroundActive,
         eInk = AppConfig.isEInkMode
     )
-    val lowRam = remember { isLowRamDevice() }
+    val lowRam = remember { isReducedMotionDevice() }
     val grooves = ImmersiveStagePolicy.vinylGrooveCount(lowRam)
     val rotation = remember { Animatable(0f) }
     LaunchedEffect(animate) {
@@ -272,7 +280,7 @@ internal fun ImmersiveParticleLayer(
         foreground = state.foregroundActive,
         eInk = AppConfig.isEInkMode
     )
-    val lowRam = remember { isLowRamDevice() }
+    val lowRam = remember { isReducedMotionDevice() }
     val count = ImmersiveStagePolicy.particleCount(lowRam, animate)
     if (count <= 0) return
     val seed = remember(state.bookName, state.paragraphKey) {
