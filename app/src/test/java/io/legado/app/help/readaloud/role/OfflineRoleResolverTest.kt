@@ -246,6 +246,32 @@ class OfflineRoleResolverTest {
         assertEquals("ner-cue", result.segments[0].reason)
     }
 
+    /** 跨段 cue：本段没有 cue、cue 落在上一段时，用近场窗口的模型推理判定（不是正则抽名） */
+    @Test
+    fun `跨段 cue 由模型窗口判定为 ner-cue`() {
+        val paragraphs = listOf("“我们走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            if (text.contains("张三说")) {
+                val at = text.indexOf("张三")
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    cues = listOf(NerTextEngine.Mention("张三", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 0, 6, cueBefore = "上一段结尾……张三说：")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
+
     /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
     @Test
     fun `无模型时正则 cue 兜底`() {

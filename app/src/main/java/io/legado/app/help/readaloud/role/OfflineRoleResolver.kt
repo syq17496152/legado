@@ -123,7 +123,8 @@ object OfflineRoleResolver {
                 lastSpeaker = lastSpeaker,
                 lastParagraph = lastParagraph,
                 rotation = rotation,
-                signal = paragraphSignal
+                signal = paragraphSignal,
+                signals = signals
             )
             if (assignment != null) {
                 recognized++
@@ -201,6 +202,23 @@ object OfflineRoleResolver {
         }.minByOrNull { it.second }?.first
     }
 
+    /**
+     * 跨段 cue 的模型判定：对近场窗口（引号前 24 字 + 引号后 24 字）再跑一次短推理，
+     * 取**最靠近引号**且能匹配到已登记角色的模型 cue（窗口越靠后越接近引号 ⇒ 从后往前找）。
+     */
+    private fun cueWindowName(
+        window: String,
+        nameMap: Map<String, RoleCharacter>,
+        signals: (String) -> NerTextEngine.ParagraphSignals
+    ): RoleCharacter? {
+        if (window.isBlank()) return null
+        val windowSignal = signals(window)
+        if (!windowSignal.modelReady) return null
+        return windowSignal.cues.asReversed().firstNotNullOfOrNull { mention ->
+            matchName(mention.name, nameMap)
+        }
+    }
+
     private fun assign(
         unit: ReadAloudRoleUnit,
         paragraph: String,
@@ -210,7 +228,8 @@ object OfflineRoleResolver {
         lastSpeaker: RoleCharacter?,
         lastParagraph: Int,
         rotation: ArrayDeque<RoleCharacter>,
-        signal: NerTextEngine.ParagraphSignals
+        signal: NerTextEngine.ParagraphSignals,
+        signals: (String) -> NerTextEngine.ParagraphSignals
     ): Assigned? {
         val range = unit.ranges.first()
         val cueText = buildString {
@@ -242,6 +261,11 @@ object OfflineRoleResolver {
                 matchName(name, nameMap)?.let {
                     return Assigned(it.name, it.id, "ner-cue", CONF_NER_CUE)
                 }
+            }
+            // 跨段 cue：preprocessor 的 cueBefore 会带上上一段结尾（"…张三说："），短片段的模型推理很便宜，
+            // 用近场窗口再判一次，覆盖"本段没有 cue、cue 落在上一段"的对白（真机 ch=67 这类模型 cue=0 的主因）
+            cueWindowName(nearCue, nameMap, signals)?.let {
+                return Assigned(it.name, it.id, "ner-cue", CONF_NER_CUE)
             }
         }
 
