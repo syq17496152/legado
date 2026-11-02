@@ -38,7 +38,9 @@ object OfflineRoleResolver {
         val segments: List<OfflineRoleSegment>,
         val narration: Int,
         val recognized: Int,
-        val unknown: Int
+        val unknown: Int,
+        /** 本章模型 cue 候选总数（诊断用：>0 说明模型确实产出了信号，0 说明模型没识别到 cue） */
+        val modelCueSpans: Int = 0
     )
 
     private const val MIN_ACCEPT = 0.50
@@ -81,6 +83,9 @@ object OfflineRoleResolver {
         val rotation = ArrayDeque<RoleCharacter>()
         // 同段多句共用一次模型推理结果（章内逐段缓存，避免重复跑 LAC）
         val signalCache = HashMap<Int, NerTextEngine.ParagraphSignals>()
+        // 模型 cue 候选总览（每段只计一次，供 roleResolve 日志判断"模型是否产出信号"）
+        val countedParagraphs = HashSet<Int>()
+        var modelCueSpans = 0
 
         units.sortedWith(compareBy({ it.firstParagraphIndex }, { it.firstStart })).forEach { unit ->
             val range = unit.ranges.firstOrNull()
@@ -105,6 +110,10 @@ object OfflineRoleResolver {
                 return@forEach
             }
 
+            val paragraphSignal = signalCache.getOrPut(range.paragraphIndex) { signals(paragraph) }
+            if (paragraphSignal.modelReady && countedParagraphs.add(range.paragraphIndex)) {
+                modelCueSpans += paragraphSignal.cues.size
+            }
             val assignment = assign(
                 unit = unit,
                 paragraph = paragraph,
@@ -114,7 +123,7 @@ object OfflineRoleResolver {
                 lastSpeaker = lastSpeaker,
                 lastParagraph = lastParagraph,
                 rotation = rotation,
-                signal = signalCache.getOrPut(range.paragraphIndex) { signals(paragraph) }
+                signal = paragraphSignal
             )
             if (assignment != null) {
                 recognized++
@@ -144,7 +153,7 @@ object OfflineRoleResolver {
             })
             lastParagraph = range.paragraphIndex
         }
-        return Result(segments, narration, recognized, unknown)
+        return Result(segments, narration, recognized, unknown, modelCueSpans)
     }
 
     private data class Assigned(
@@ -428,7 +437,7 @@ object OfflineRoleResolver {
                         "roleResolve ch=$chapterIndex nerCue=${byReason["ner-cue"] ?: 0} " +
                             "ner=${byReason["ner"] ?: 0} cue=${byReason["cue-hit"] ?: 0} " +
                             "lock=${byReason["lock"] ?: 0} turn=${byReason["turn-taking"] ?: 0} " +
-                            "unknown=${byReason["unknown"] ?: 0}",
+                            "unknown=${byReason["unknown"] ?: 0} modelCues=${result.modelCueSpans}",
                         level = AppLog.Level.INFO
                     )
                     memory[key] = result.segments

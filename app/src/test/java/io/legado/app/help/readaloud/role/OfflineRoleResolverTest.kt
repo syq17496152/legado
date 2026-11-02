@@ -222,6 +222,30 @@ class OfflineRoleResolverTest {
         assertEquals("cue-hit", result.segments[0].reason)
     }
 
+    /** 诊断口径：同段多句只统计一次模型 cue 数（避免"模型没信号"被误判为"信号很多"） */
+    @Test
+    fun `同段多句只计一次模型 cue 总数`() {
+        val paragraphs = listOf("张三说：“一。”李四说：“二。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(
+                modelReady = true,
+                cues = listOf(
+                    NerTextEngine.Mention("张三", 0, 2),
+                    NerTextEngine.Mention("李四", 7, 9)
+                )
+            )
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 3, 6), unit("u2", 0, 12, 15)),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals(2, result.modelCueSpans)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
+
     /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
     @Test
     fun `无模型时正则 cue 兜底`() {

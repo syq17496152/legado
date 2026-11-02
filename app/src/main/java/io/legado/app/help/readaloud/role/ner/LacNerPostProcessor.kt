@@ -16,10 +16,16 @@ object LacNerPostProcessor {
 
     data class NameSpan(val name: String, val start: Int, val end: Int)
 
-    /** 可以直接作为 cue 人名的前一词元标签（名词类 + 模型 NER 标签） */
+    /** 可直接作为 cue 人名的前一词元标签（名词类 + 模型 NER 标签） */
     private val cueLabelAllowed = setOf(
         "n", "nr", "ns", "nz", "nw", "PER", "LOC", "ORG", "TIME", "s", "t"
     )
+
+    /**
+     * "人名+说话动词"合并词元可接受的标签：只认人名类（PER/nr/nz）。
+     * 不能放宽到 "n"：`千言道` 这类普通名词会以"道"结尾被误当 cue（回归集已证）。
+     */
+    private val mergedNameLabels = setOf("PER", "nr", "nz")
 
     private val speechVerbSuffixes = listOf(
         "说道", "问道", "答道", "笑道", "喊道", "叫道", "喝道", "叹道", "骂道",
@@ -45,6 +51,21 @@ object LacNerPostProcessor {
     fun cueCandidates(tokens: List<LacDecoder.Token>): List<NameSpan> {
         val spans = ArrayList<NameSpan>()
         tokens.forEachIndexed { index, token ->
+            // 模型常把"人名 + 说话动词"并成一个词元（郑吒说 / 赵樱空道 / 詹岚道）⇒ 该词元本身就是 cue，
+            // 不能再要求后面还有独立动词（否则模型 cue 几乎恒为空，归因退化成正则字典匹配：真机 2026-11-03 实证）
+            if (isSpeechVerb(token.word)) {
+                val merged = spanOf(token.word, token.start)
+                if (merged != null) {
+                    val personLabel = token.label in mergedNameLabels
+                    // OOV 人名常被降级标成普通名词 n：只在"姓氏起头"时接受，避免 `千言道` 这类误收
+                    val surnameFallback = token.label == "n" &&
+                        NerTextEngine.startsWithKnownSurname(merged.name)
+                    if (personLabel || surnameFallback) {
+                        spans.add(merged)
+                        return@forEachIndexed
+                    }
+                }
+            }
             if (index == 0 || !isSpeechVerb(token.word)) return@forEachIndexed
             if (!hasDialogueMarker(tokens, index)) return@forEachIndexed
             val prev = tokens[index - 1]
@@ -58,7 +79,8 @@ object LacNerPostProcessor {
         speechVerbSuffixes.any { word.endsWith(it) }
 
     private fun hasDialogueMarker(tokens: List<LacDecoder.Token>, verbIndex: Int): Boolean {
-        val last = minOf(tokens.lastIndex, verbIndex + 2)
+        // 允许中间夹顿号/逗号等 1~2 个词元（"郑吒说，道："式复述 cue）；窗口过宽会误收旁白
+        val last = minOf(tokens.lastIndex, verbIndex + 3)
         for (k in (verbIndex + 1)..last) {
             val w = tokens[k].word.trimStart()
             if (w.startsWith("：") || w.startsWith(":") || w.startsWith("“") || w.startsWith("\"")) {

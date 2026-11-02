@@ -72,6 +72,39 @@ class LacNerPipelineTest {
     }
 
     @Test
+    fun `PER 词元吞并说话动词时本身即 cue`() {
+        // 真机 2026-11-03 实证：LAC 常把"人名+说话动词"并成一个词元（郑吒说 / 赵樱空道），
+        // 若仍要求后面有独立动词，模型 cue 恒为空 ⇒ 归因退化成正则字典匹配
+        val merged = listOf(LacDecoder.Token("郑吒说", "PER", 0, 3))
+        assertEquals(listOf("郑吒"), LacNerPostProcessor.cueCandidates(merged).map { it.name })
+
+        val mergedWithAction = listOf(LacDecoder.Token("赵樱空道", "PER", 10, 14))
+        assertEquals(
+            listOf("赵樱空"),
+            LacNerPostProcessor.cueCandidates(mergedWithAction).map { it.name }
+        )
+        // 模型也可能把名字标成 nr（而非 PER）；合并词元规则必须同样覆盖
+        val nrMerged = listOf(LacDecoder.Token("詹岚道", "nr", 20, 23))
+        assertEquals(listOf("詹岚"), LacNerPostProcessor.cueCandidates(nrMerged).map { it.name })
+
+        // OOV 人名被降级标成普通名词 n：仅当剥离动词后是"姓氏起头"的人名才接受
+        val nLabeledSurname = listOf(LacDecoder.Token("郑吒说", "n", 30, 33))
+        assertEquals(listOf("郑吒"), LacNerPostProcessor.cueCandidates(nLabeledSurname).map { it.name })
+    }
+
+    @Test
+    fun `说话动词后隔两个词元的冒号仍算 cue`() {
+        val tokens = listOf(
+            LacDecoder.Token("零点", "TIME", 0, 2),
+            LacDecoder.Token("说", "v", 2, 3),
+            LacDecoder.Token("了", "u", 3, 4),
+            LacDecoder.Token("一句", "m", 4, 6),
+            LacDecoder.Token("：", "w", 6, 7)
+        )
+        assertEquals(listOf("零点"), LacNerPostProcessor.cueCandidates(tokens).map { it.name })
+    }
+
+    @Test
     fun `形容词与高频组合不得被 cue 兜底误收`() {
         val adjectives = listOf(
             LacDecoder.Token("软弱", "a", 0, 2),
