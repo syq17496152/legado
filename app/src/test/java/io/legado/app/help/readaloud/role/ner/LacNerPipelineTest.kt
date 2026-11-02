@@ -105,6 +105,41 @@ class LacNerPipelineTest {
     }
 
     @Test
+    fun `人名与说话动词之间夹动作助词时回看命中`() {
+        // "张三笑着说："：笑(v)/着(u) 夹在中间，只取紧邻前一词会漏掉（真机网文高频句式）
+        val withSmile = listOf(
+            LacDecoder.Token("张三", "nr", 0, 2),
+            LacDecoder.Token("笑", "v", 2, 3),
+            LacDecoder.Token("着", "u", 3, 4),
+            LacDecoder.Token("说", "v", 4, 5),
+            LacDecoder.Token("：", "w", 5, 6)
+        )
+        assertEquals(listOf("张三"), LacNerPostProcessor.cueCandidates(withSmile).map { it.name })
+
+        val withColdLaugh = listOf(
+            LacDecoder.Token("李四", "nr", 0, 2),
+            LacDecoder.Token("冷笑", "v", 2, 4),
+            LacDecoder.Token("着", "u", 4, 5),
+            LacDecoder.Token("道", "v", 5, 6),
+            LacDecoder.Token("：", "w", 6, 7)
+        )
+        assertEquals(listOf("李四"), LacNerPostProcessor.cueCandidates(withColdLaugh).map { it.name })
+    }
+
+    @Test
+    fun `代词说话时不回看前文名词`() {
+        // "他说道："必须立刻停：不能把前文的"张三"当成说话人（AD-15 宁不猜）
+        val tokens = listOf(
+            LacDecoder.Token("张三", "nr", 0, 2),
+            LacDecoder.Token("他", "r", 2, 3),
+            LacDecoder.Token("说", "v", 3, 4),
+            LacDecoder.Token("道", "v", 4, 5),
+            LacDecoder.Token("：", "w", 5, 6)
+        )
+        assertTrue(LacNerPostProcessor.cueCandidates(tokens).isEmpty())
+    }
+
+    @Test
     fun `形容词与高频组合不得被 cue 兜底误收`() {
         val adjectives = listOf(
             LacDecoder.Token("软弱", "a", 0, 2),

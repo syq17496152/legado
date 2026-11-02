@@ -27,6 +27,12 @@ object LacNerPostProcessor {
      */
     private val mergedNameLabels = setOf("PER", "nr", "nz")
 
+    /**
+     * 回看找人名时可跳过的非名词类标签（动词/形容词/副词/量词/介词/连词/助词/标点等）。
+     * **代词 r 不在其中**：遇到"他说/她道"必须立刻停，不能把前文名词当成说话人。
+     */
+    private val skipLabels = setOf("v", "a", "d", "q", "m", "p", "c", "u", "w", "x", "f")
+
     private val speechVerbSuffixes = listOf(
         "说道", "问道", "答道", "笑道", "喊道", "叫道", "喝道", "叹道", "骂道",
         "说", "道", "问", "答", "喊", "叫", "喝", "叹", "骂", "哼", "嚷", "吼", "嘀咕", "低语"
@@ -68,11 +74,25 @@ object LacNerPostProcessor {
             }
             if (index == 0 || !isSpeechVerb(token.word)) return@forEachIndexed
             if (!hasDialogueMarker(tokens, index)) return@forEachIndexed
-            val prev = tokens[index - 1]
-            if (prev.label !in cueLabelAllowed && prev.label != "") return@forEachIndexed
-            spanOf(prev.word, prev.start)?.let { spans.add(it) }
+            // 网文常见"张三笑着说 / 李四冷笑着道"：人名与说话动词之间夹动作/助词，
+            // 只取紧邻前一词会漏掉 ⇒ 回看至多 3 个词元找最近的名词性词元（模型标签驱动，不是正则）
+            val nameToken = nameBack(tokens, index) ?: return@forEachIndexed
+            spanOf(nameToken.word, nameToken.start)?.let { spans.add(it) }
         }
         return spans.distinctBy { it.start }
+    }
+
+    /** 从说话动词往前找最近的名词性命名词元（跳过动词/助词/副词/介词等，遇代词即停） */
+    private fun nameBack(tokens: List<LacDecoder.Token>, verbIndex: Int): LacDecoder.Token? {
+        val floor = maxOf(0, verbIndex - 3)
+        for (k in verbIndex - 1 downTo floor) {
+            val token = tokens[k]
+            if (token.label in cueLabelAllowed) return token
+            // 未知标签按兜底处理（与旧行为一致）；已知的非名词类继续回看
+            if (token.label in skipLabels || token.label == "") continue
+            return null
+        }
+        return null
     }
 
     private fun isSpeechVerb(word: String): Boolean =
