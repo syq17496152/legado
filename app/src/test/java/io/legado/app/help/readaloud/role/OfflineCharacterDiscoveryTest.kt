@@ -1,6 +1,7 @@
 package io.legado.app.help.readaloud.role
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,6 +67,42 @@ class OfflineCharacterDiscoveryTest {
         val paragraphs = listOf("欧阳锋说：“这一招你看清了么？”")
         val candidates = OfflineCharacterDiscovery.candidates(paragraphs)
         assertEquals(listOf("欧阳锋"), candidates.map { it.name })
+    }
+
+    /** 2026-11-02 用户反馈：萧宏律/赵樱空是真名，不能被 2 字上限截断成萧宏/赵樱 */
+    @Test
+    fun `三字单姓名在多次 cue 命中时完整保留`() {
+        val paragraphs = listOf(
+            "萧宏律说：“这里的规则不是你想的那样。”",
+            "萧宏律道：“先活下去再说。”",
+            "赵樱空道：“别废话，走。”",
+            "赵樱空说：“我断后。”"
+        )
+        val names = OfflineCharacterDiscovery.candidates(paragraphs).map { it.name }
+        assertEquals(listOf("萧宏律", "赵樱空"), names)
+        // 2 字前缀属于截断碎片，必须被剪掉
+        assertFalse("萧宏" in names)
+        assertFalse("赵樱" in names)
+    }
+
+    /** 一次出现的"人名+动作字"（郑吒嗤）必须被频次剔除，保住真名郑吒 */
+    @Test
+    fun `一次性尾巴碎片被频次剔除`() {
+        val paragraphs = listOf(
+            "郑吒嗤笑道：“你想真正的活着吗？”",
+            "郑吒说：“先别急，听听他们怎么说。”",
+            "郑吒道：“走吧。”"
+        )
+        val names = OfflineCharacterDiscovery.candidates(paragraphs).map { it.name }
+        assertEquals(listOf("郑吒"), names)
+        assertFalse("郑吒嗤" in names)
+    }
+
+    /** 变更数口径：清理旧碎片与新增一样触发分镜重算，不能只看 added */
+    @Test
+    fun `新增与清理都计入变更数`() {
+        assertEquals(0, OfflineCharacterDiscovery.DiscoveryResult(added = 0, pruned = 0).changed)
+        assertEquals(2, OfflineCharacterDiscovery.DiscoveryResult(added = 1, pruned = 1).changed)
     }
 
     /** 姓字起头的高频动词（解释/回答）不是人名，cue 邻接也不得入选 */

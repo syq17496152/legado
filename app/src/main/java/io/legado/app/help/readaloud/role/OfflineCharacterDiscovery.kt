@@ -26,38 +26,98 @@ object OfflineCharacterDiscovery {
 
     const val SOURCE_OFFLINE = "offline-rule-v1"
 
+    /** 单章候选上限：覆盖主角 + 主要配角（原 8 个会漏掉程啸等后续出场角色） */
+    const val DEFAULT_LIMIT = 12
+
+    /** 单姓三字名至少被 cue 命中两次才接纳（剔除"郑吒嗤"式一次性碎片） */
+    private const val MIN_LONG_NAME_CUES = 2
+
+    /** 与独立出现的短名并存时，长名需 ≥3 次才判定为真名，否则视为"短名+动词"碎片 */
+    private const val CONFIRMED_LONG_NAME_CUES = 3
+
     data class Candidate(
         val name: String,
         val gender: String,
         val cueCount: Int
     )
 
+    /** 角色发现结果：新增 / 清理碎片都意味着旧分镜缓存必须重算 */
+    data class DiscoveryResult(val added: Int, val pruned: Int) {
+        val changed: Int get() = added + pruned
+    }
+
+    /** 一次扫描的产物：各候选名的 cue 命中次数 + 首次出现段落（用于弱性别推断） */
+    private data class CueScan(
+        val counts: LinkedHashMap<String, Int>,
+        val firstContext: LinkedHashMap<String, String>
+    )
+
     /**
      * 纯函数：从章节段落抽取角色候选（按 cue 出现次数降序，最多 [limit] 个）。
      * 不读库、不联网，可直接单测。
      */
-    fun candidates(paragraphs: List<String>, limit: Int = 8): List<Candidate> {
+    fun candidates(paragraphs: List<String>, limit: Int = DEFAULT_LIMIT): List<Candidate> {
         if (paragraphs.isEmpty() || limit <= 0) return emptyList()
+        return toCandidates(scanCues(paragraphs), limit)
+    }
+
+    /** 姓氏候选族（2/3 字并存）→ cue 邻接过滤 → 频次消歧，产出最终候选 */
+    private fun toCandidates(scan: CueScan, limit: Int): List<Candidate> =
+        selectNames(scan.counts).take(limit).map { (name, count) ->
+            // 性别只做弱推断（人名 + 首次出现段落代词/称谓），识别不到就留空交给配声按音色挑
+            Candidate(name, BookCharacter.inferGender(name + scan.firstContext[name].orEmpty()), count)
+        }
+
+    /** 逐段收集姓氏候选族的 cue 命中次数（不裁决长度，留给 [selectNames] 用频次消歧） */
+    private fun scanCues(paragraphs: List<String>): CueScan {
         val cueCounts = LinkedHashMap<String, Int>()
         val firstContext = LinkedHashMap<String, String>()
         paragraphs.forEach { paragraph ->
             if (paragraph.isBlank()) return@forEach
-            val mentions = NerTextEngine.findMentions(paragraph, detectUnknown = true)
-            mentions.forEach { mention ->
+            NerTextEngine.surnameCandidates(paragraph).forEach { mention ->
                 if (hasSpeechCue(paragraph, mention.end)) {
                     cueCounts[mention.name] = (cueCounts[mention.name] ?: 0) + 1
                     firstContext.putIfAbsent(mention.name, paragraph)
                 }
             }
         }
-        return cueCounts.entries
-            .sortedByDescending { it.value }
-            .take(limit)
-            .map { entry ->
-                // 性别只做弱推断（人名 + 首次出现段落代词/称谓），识别不到就留空交给配声按音色挑
-                val gender = BookCharacter.inferGender(entry.key + firstContext[entry.key].orEmpty())
-                Candidate(entry.key, gender, entry.value)
+        return CueScan(cueCounts, firstContext)
+    }
+
+    /**
+     * 纯函数：全章频次消歧（2026-11-02 真机"角色识别不准"根因）。
+     *
+     * 姓氏启发式无法只凭单次出现判断三字名的边界：
+     * - `萧宏律说` / `赵樱空道` 是真名，截成 2 字就成了"萧宏/赵樱"这类碎片；
+     * - `郑吒嗤笑道` 是"人名 + 动作字"，扩成 3 字就成了"郑吒嗤"。
+     *
+     * 规则：① 单姓三字名至少 cue 命中 2 次；② 短名被长名完全覆盖（差值 ≤0）⇒ 短名是碎片；
+     * ③ 短名独立出现且长名不足 3 次 ⇒ 长名是"短名+尾巴"碎片。复姓名不受 ① 约束。
+     */
+    internal fun selectNames(cueCounts: Map<String, Int>): List<Pair<String, Int>> {
+        val candidates = cueCounts.filterValues { it > 0 }.toMutableMap()
+        candidates.keys.toList().forEach { name ->
+            if (name.length >= 3 &&
+                !NerTextEngine.startsWithCompoundSurname(name) &&
+                (candidates[name] ?: 0) < MIN_LONG_NAME_CUES
+            ) {
+                candidates.remove(name)
             }
+        }
+        candidates.keys.sortedBy { it.length }.forEach { short ->
+            val shortCount = candidates[short] ?: return@forEach
+            val longer = candidates.keys.firstOrNull { it.length > short.length && it.startsWith(short) }
+                ?: return@forEach
+            val longCount = candidates[longer] ?: return@forEach
+            when {
+                shortCount - longCount <= 0 -> candidates.remove(short)
+                longCount < CONFIRMED_LONG_NAME_CUES -> candidates.remove(longer)
+            }
+        }
+        // 稳定排序：同次数同长度时保持"首次出现"顺序，保证结果可复现
+        return candidates.entries
+            .sortedByDescending { it.value }
+            .map { it.key to it.value }
     }
 
     /**
@@ -78,17 +138,21 @@ object OfflineCharacterDiscovery {
     }
 
     /**
-     * 落库候选角色（幂等：已存在同名角色不覆盖），返回新增条数。
+     * 落库候选角色（幂等：已存在同名角色不覆盖），并清理旧版本落库的碎片名。
+     * 返回新增 / 清理条数；[DiscoveryResult.changed] > 0 时调用方必须重算分镜缓存。
      * [bookKey] 用 [io.legado.app.help.book.BookIdentity] 口径（与既有角色表一致）。
      */
     suspend fun ensureCharacters(
         bookKey: String,
         paragraphs: List<String>,
-        limit: Int = 8
-    ): Int = withContext(Dispatchers.IO) {
-        if (bookKey.isBlank()) return@withContext 0
-        val found = candidates(paragraphs, limit)
-        if (found.isEmpty()) return@withContext 0
+        limit: Int = DEFAULT_LIMIT
+    ): DiscoveryResult = withContext(Dispatchers.IO) {
+        if (bookKey.isBlank()) return@withContext DiscoveryResult(0, 0)
+        val scan = scanCues(paragraphs)
+        val found = toCandidates(scan, limit)
+        // 先清理旧碎片（萧宏/郑吒嗤），否则旧角色继续占位并污染归因（2026-11-02 用户反馈）
+        val pruned = pruneFragments(bookKey, found.map { it.name }.toSet(), scan.counts)
+        if (found.isEmpty()) return@withContext DiscoveryResult(0, pruned)
         var added = 0
         val now = System.currentTimeMillis()
         found.forEachIndexed { index, candidate ->
@@ -115,7 +179,39 @@ object OfflineCharacterDiscovery {
                 added++
             }.onFailure { AppLog.put("离线角色落库失败（${candidate.name}）：${it.message}") }
         }
-        AppLog.put("离线角色发现：候选 ${found.size} / 新增 $added")
-        added
+        AppLog.put("离线角色发现：候选 ${found.size} / 新增 $added / 清理碎片 $pruned")
+        DiscoveryResult(added, pruned)
+    }
+
+    /**
+     * 清理旧版本落库的自动角色碎片（只动 `autoCreated` + 离线来源，绝不碰用户手建角色）：
+     * - 旧名是新角色的严格前缀（萧宏 → 萧宏律）：无条件清理；
+     * - 旧名比新角色长且以它开头（郑吒嗤 → 郑吒）：仅当本章该旧名 cue 次数不足 3（一次性尾巴碎片）。
+     */
+    private fun pruneFragments(
+        bookKey: String,
+        discoveredNames: Set<String>,
+        rawCueCounts: Map<String, Int>
+    ): Int {
+        if (discoveredNames.isEmpty()) return 0
+        val existing = runCatching { appDb.bookCharacterDao.characters(bookKey) }
+            .getOrDefault(emptyList())
+        var pruned = 0
+        existing.forEach { character ->
+            if (!character.autoCreated || character.source != SOURCE_OFFLINE) return@forEach
+            val name = character.name.trim()
+            if (name.isBlank() || name in discoveredNames) return@forEach
+            // 短碎片：它的全部出现都被新长名覆盖（次数差值 ≤0）才算碎片；独立出现则保留
+            val prefixLonger = discoveredNames.firstOrNull { it.length > name.length && it.startsWith(name) }
+            val prefixOfNew = prefixLonger != null &&
+                    (rawCueCounts[name] ?: 0) <= (rawCueCounts[prefixLonger] ?: 0)
+            val overlongOld = discoveredNames.any { name.length > it.length && name.startsWith(it) } &&
+                    (rawCueCounts[name] ?: 0) < CONFIRMED_LONG_NAME_CUES
+            if (!prefixOfNew && !overlongOld) return@forEach
+            runCatching { appDb.bookCharacterDao.deleteCharacterWithRelations(character) }
+                .onSuccess { pruned++ }
+                .onFailure { AppLog.put("离线角色碎片清理失败（$name）：${it.message}") }
+        }
+        return pruned
     }
 }

@@ -47,15 +47,30 @@ import splitties.init.appCtx
  */
 internal object ImmersiveStagePolicy {
 
-    /** 唱片直径：矮屏优先保控件，不能按原封面尺寸硬套 */
+    /**
+     * 唱片直径：矮屏优先保控件，不能按原封面尺寸硬套。
+     * 2026-11-02 用户反馈封面转动区域偏小 ⇒ 三档整体上调约 12%（仍给标题/正文留足空间）。
+     */
     fun discDiameter(veryShort: Boolean, short: Boolean): Dp = when {
-        veryShort -> 140.dp
-        short -> 172.dp
-        else -> 208.dp
+        veryShort -> 156.dp
+        short -> 196.dp
+        else -> 236.dp
     }
 
-    /** 横屏舞台（左右分栏）的唱片直径 */
-    fun landscapeDiscDiameter(short: Boolean): Dp = if (short) 136.dp else 168.dp
+    /** 横屏舞台（左右分栏）的唱片直径（同步上调，保持视觉一致） */
+    fun landscapeDiscDiameter(short: Boolean): Dp = if (short) 156.dp else 192.dp
+
+    /**
+     * 中央播放键形态：
+     * 播放中必须显示暂停双杠（用户铁要求"播放时不转圈"）；仅未播放且加载/准备中才显示进度环。
+     */
+    enum class TransportIcon { Pause, Busy, Play }
+
+    fun transportIcon(playing: Boolean, busy: Boolean): TransportIcon = when {
+        playing -> TransportIcon.Pause
+        busy -> TransportIcon.Busy
+        else -> TransportIcon.Play
+    }
 
     /** 旋转与粒子的统一闸门：仅"前台 + 正在播放 + 非电子墨水"才跑帧 */
     fun shouldAnimate(playing: Boolean, foreground: Boolean, eInk: Boolean): Boolean =

@@ -35,14 +35,6 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
-import android.content.res.ColorStateList
-import android.text.TextUtils
-import android.widget.FrameLayout
-import android.widget.TextView
-import androidx.lifecycle.repeatOnLifecycle
-import io.legado.app.help.readaloud.ReadAloudRoleBadge
-import io.legado.app.lib.theme.themeMutedColorOrDefault
-import io.legado.app.lib.theme.themeTabBackgroundColorOrDefault
 import androidx.core.view.WindowCompat
 import androidx.core.view.get
 import androidx.core.view.isVisible
@@ -538,7 +530,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAiPanel.attach(this)
         binding.readAiSummaryPanel.attach(this)
         binding.readAloudPlayerPanel.attach(this, this)
-        attachReadAloudRoleBadge()
+        // 当前角色徽章已并入朗读面板（进度条正上方居中），不再在阅读页左下浮层叠加
         ReadAloudAppCapsuleHost.updateReadBookPanelActive(binding.readAloudPlayerPanel.isFullPanelActive())
         binding.readAloudPlayerPanel.post {
             consumeGlobalReadAloudPanelOpen()
@@ -722,46 +714,6 @@ class ReadBookActivity : BaseReadBookActivity(),
                     binding.epubReadView.selectTextAtCanvasFallback(x, y)?.let { fallbackAnchor ->
                         binding.epubReadView.deferOrShowSelectionMenu(fallbackAnchor)
                     }
-                }
-            }
-        }
-    }
-
-    private var readAloudRoleBadgeView: TextView? = null
-
-    /**
-     * T8.7 当前段角色徽章浮层：取色走主题 token（tabBackgroundColor / muted），
-     * 位置贴左下并抬高 96dp，避让底部工具栏与正文；只在朗读期间由 [ReadAloudRoleBadge] 驱动显示。
-     */
-    private fun attachReadAloudRoleBadge() {
-        if (readAloudRoleBadgeView != null) return
-        val badge = TextView(this).apply {
-            textSize = 12f
-            setTextColor(themeMutedColorOrDefault())
-            background = ContextCompat.getDrawable(this@ReadBookActivity, R.drawable.bg_popup_menu)
-            backgroundTintList = ColorStateList.valueOf(themeTabBackgroundColorOrDefault())
-            setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 4.dpToPx())
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            elevation = 3f.dpToPx()
-            visibility = View.GONE
-        }
-        val lp = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.START
-            marginStart = 16.dpToPx()
-            bottomMargin = 96.dpToPx()
-        }
-        binding.root.addView(badge, lp)
-        readAloudRoleBadgeView = badge
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                ReadAloudRoleBadge.state.collect { label ->
-                    val text = ReadAloudRoleBadge.text(label)
-                    badge.text = text
-                    badge.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
                 }
             }
         }

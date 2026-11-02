@@ -53,16 +53,48 @@ class ImmersiveStagePolicyTest {
     }
 
     @Test
-    fun `竖屏唱片尺寸按屏高分三档`() {
-        assertEquals(140f, ImmersiveStagePolicy.discDiameter(true, true).value, 0.01f)
-        assertEquals(172f, ImmersiveStagePolicy.discDiameter(false, true).value, 0.01f)
-        assertEquals(208f, ImmersiveStagePolicy.discDiameter(false, false).value, 0.01f)
+    fun `竖屏唱片尺寸按屏高分三档且已整体上调`() {
+        assertEquals(156f, ImmersiveStagePolicy.discDiameter(true, true).value, 0.01f)
+        assertEquals(196f, ImmersiveStagePolicy.discDiameter(false, true).value, 0.01f)
+        assertEquals(236f, ImmersiveStagePolicy.discDiameter(false, false).value, 0.01f)
+        // 用户反馈"封面转动区域偏小"：三档都必须大于旧值 140/172/208
+        assertTrue(ImmersiveStagePolicy.discDiameter(true, true).value > 140f)
+        assertTrue(ImmersiveStagePolicy.discDiameter(false, true).value > 172f)
+        assertTrue(ImmersiveStagePolicy.discDiameter(false, false).value > 208f)
     }
 
     @Test
-    fun `横屏唱片尺寸按紧凑档区分`() {
-        assertEquals(136f, ImmersiveStagePolicy.landscapeDiscDiameter(true).value, 0.01f)
-        assertEquals(168f, ImmersiveStagePolicy.landscapeDiscDiameter(false).value, 0.01f)
+    fun `横屏唱片尺寸按紧凑档区分且已整体上调`() {
+        assertEquals(156f, ImmersiveStagePolicy.landscapeDiscDiameter(true).value, 0.01f)
+        assertEquals(192f, ImmersiveStagePolicy.landscapeDiscDiameter(false).value, 0.01f)
+    }
+
+    @Test
+    fun `播放中中央键必须是暂停双杠`() {
+        assertEquals(
+            ImmersiveStagePolicy.TransportIcon.Pause,
+            ImmersiveStagePolicy.transportIcon(playing = true, busy = true)
+        )
+        assertEquals(
+            ImmersiveStagePolicy.TransportIcon.Pause,
+            ImmersiveStagePolicy.transportIcon(playing = true, busy = false)
+        )
+    }
+
+    @Test
+    fun `未播放且加载中才显示进度环`() {
+        assertEquals(
+            ImmersiveStagePolicy.TransportIcon.Busy,
+            ImmersiveStagePolicy.transportIcon(playing = false, busy = true)
+        )
+    }
+
+    @Test
+    fun `未播放且空闲显示播放三角`() {
+        assertEquals(
+            ImmersiveStagePolicy.TransportIcon.Play,
+            ImmersiveStagePolicy.transportIcon(playing = false, busy = false)
+        )
     }
 
     @Test

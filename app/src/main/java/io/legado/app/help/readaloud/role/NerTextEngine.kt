@@ -96,7 +96,12 @@ object NerTextEngine {
     /** 姓后连续 1 个汉字视为名字（复姓允许 2 个；遇到虚词/标点即止） */
     private fun nameEnd(text: String, start: Int): Int {
         val compound = compoundSurnames.firstOrNull { text.startsWith(it, start) }
-        val maxEnd = if (compound != null) start + 3 else start + 2
+        return scanNameEnd(text, start, if (compound != null) 3 else 2)
+    }
+
+    /** 从 [start] 起扫描最多 [maxLen] 字（含姓）：遇到非汉字或虚词即停，返回实际结束下标 */
+    private fun scanNameEnd(text: String, start: Int, maxLen: Int): Int {
+        val maxEnd = start + maxLen
         var end = start + 1
         while (end < text.length && end < maxEnd) {
             val c = text[end]
@@ -106,6 +111,41 @@ object NerTextEngine {
         }
         return end
     }
+
+    /**
+     * 姓氏候选族（供 `OfflineCharacterDiscovery.selectNames` 做全章频次消歧）：
+     * 同一姓氏位置同时给出 2 字与 3 字（单姓）/ 3 字与 4 字（复姓）形态。
+     *
+     * 不在这里裁决长度：三字名（萧宏律/赵樱空）必须保留，而"郑吒嗤"这类
+     * "人名+动作字"碎片只能靠出现频次剔除——单看一次出现无法区分。
+     */
+    fun surnameCandidates(text: String): List<Mention> {
+        if (text.isEmpty()) return emptyList()
+        val result = LinkedHashSet<Mention>()
+        var i = 0
+        while (i < text.length) {
+            val compound = compoundSurnames.firstOrNull { text.startsWith(it, i) }
+            if (compound == null && text[i].toString() !in surnames) {
+                i++
+                continue
+            }
+            val surnameLen = if (compound != null) 2 else 1
+            for (nameLen in (surnameLen + 1)..(surnameLen + 2)) {
+                val end = scanNameEnd(text, i, nameLen)
+                if (end != i + nameLen) continue
+                val name = text.substring(i, end)
+                if (name !in stopWords && name !in nonNameWords) {
+                    result.add(Mention(name, i, end))
+                }
+            }
+            i += surnameLen + 1
+        }
+        return result.toList()
+    }
+
+    /** 名称是否以复姓开头（复姓三/四字名不参与"必须重复出现"的频次门槛） */
+    fun startsWithCompoundSurname(name: String): Boolean =
+        compoundSurnames.any { name.startsWith(it) }
 
     private val nameStopChars = setOf(
         '说', '道', '问', '答', '笑', '喊', '叫', '喝', '叹', '想', '看', '又', '便', '才', '就', '也',

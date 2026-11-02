@@ -83,6 +83,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -142,6 +143,7 @@ import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.casting.TtsMultiRoleDiagnostics
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
+import io.legado.app.help.readaloud.ReadAloudRoleBadge
 import io.legado.app.help.readaloud.ReadAloudSpeakerLoudnessManager
 import io.legado.app.help.readaloud.ReadAloudSpeechPlanItem
 import io.legado.app.help.readaloud.ReadAloudSpeechPlanner
@@ -1903,6 +1905,8 @@ private fun ReadAloudPlayerContent(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Spacer(modifier = Modifier.height(if (veryShort) 8.dp else 14.dp))
+                        // 当前角色放在进度条正上方居中：不再贴左下遮挡操作区（2026-11-02 用户反馈）
+                        RoleSpeakerLabel(colors)
                         MinimalProgress(state, colors, onProgressSeek)
                         Spacer(modifier = Modifier.height(if (veryShort) 8.dp else 12.dp))
                         PlayerControlDock(
@@ -2403,7 +2407,10 @@ internal fun ReadAloudCapsuleSurface(
             color = Color.White.copy(alpha = 0.92f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                if (state.playbackBusy) {
+                // 播放中优先暂停双杠：仅"未播放 + 加载中"才显示进度环（transportIcon 决策可单测）
+                if (ImmersiveStagePolicy.transportIcon(state.playing, state.playbackBusy) ==
+                    ImmersiveStagePolicy.TransportIcon.Busy
+                ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
@@ -4603,6 +4610,28 @@ private fun LyricParagraphLine(
     )
 }
 
+/**
+ * 当前朗读角色（T8.7）：渲染在进度条正上方居中，随服务逐段写入的 [ReadAloudRoleBadge] 更新；
+ * 空白标签直接不占位，避免播放/暂停时布局跳动。
+ */
+@Composable
+private fun RoleSpeakerLabel(colors: PlayerColors) {
+    val label by ReadAloudRoleBadge.state.collectAsState()
+    val text = ReadAloudRoleBadge.text(label)
+    if (text.isBlank()) return
+    Text(
+        text = text,
+        color = colors.secondaryText,
+        fontSize = MaterialTheme.typography.labelSmall.fontSize,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp)
+    )
+}
+
 @Composable
 private fun MinimalProgress(
     state: ReadAloudPlayerPanel.PlayerUiState,
@@ -4712,7 +4741,10 @@ private fun PlayerControlDock(
                 shadowElevation = 16.dp
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    if (state.playbackBusy) {
+                    // 播放中优先暂停双杠（与收起态播放键同一决策）：仅"未播放 + 加载中"才转圈
+                    if (ImmersiveStagePolicy.transportIcon(state.playing, state.playbackBusy) ==
+                        ImmersiveStagePolicy.TransportIcon.Busy
+                    ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(28.dp),
                             strokeWidth = 3.dp,

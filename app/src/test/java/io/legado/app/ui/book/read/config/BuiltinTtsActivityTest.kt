@@ -56,6 +56,17 @@ class BuiltinTtsActivityTest {
         )
     }
 
+    /** IF-IM-08：即使只清理旧碎片（新增 0），discovery.changed>0 也必须重算分镜 */
+    @Test
+    fun `仅清理碎片也必须强制重算分镜`() {
+        assertTrue(
+            BuiltinTtsUiSupport.shouldForceRecomputeStoryboard(
+                discoveredCharacters = 1, // changed = added(0) + pruned(1)
+                cachedRecognized = 35
+            )
+        )
+    }
+
     @Test
     fun `存储总览文案含三类与合计`() {
         assertEquals(

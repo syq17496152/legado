@@ -539,12 +539,12 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         var characters = CharacterVoiceAssignService.roleCharacters(bookKey)
         // 持续补发现（幂等）：旧版本可能已落库碎片名，或新章节出现新角色；
         // 只在"角色库为空"时发现会让错误角色永久占位、无法自愈（2026-11-02 真机铁证）
-        val discovered = OfflineCharacterDiscovery.ensureCharacters(bookKey, paragraphs)
-        if (discovered > 0) {
+        val discovery = OfflineCharacterDiscovery.ensureCharacters(bookKey, paragraphs)
+        if (discovery.changed > 0) {
             characters = CharacterVoiceAssignService.roleCharacters(bookKey)
         }
         // 离线分镜（AD-13/T5.3）：一键开书必须同时产出「段→角色」，否则分镜页为空、多角色只能靠模板兜底
-        // IF-IM-08 自愈：本次补录到新角色，或旧缓存本来就 0 命中 ⇒ 必须强制重算，否则碎片名缓存永久复用
+        // IF-IM-08 自愈：本次补录到新角色/清理到旧碎片，或旧缓存本来就 0 命中 ⇒ 必须强制重算
         val cachedRecognized = OfflineRoleResolver.cached(bookKey, chapter.chapter.index)
             ?.count { it.recognized } ?: 0
         val storyboardSegments = runCatching {
@@ -556,7 +556,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 characters = characters,
                 aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot),
                 forceRecompute = BuiltinTtsUiSupport
-                    .shouldForceRecomputeStoryboard(discovered, cachedRecognized)
+                    .shouldForceRecomputeStoryboard(discovery.changed, cachedRecognized)
             ).size
         }.onFailure {
             LogUtils.e("BuiltinTtsUi", "离线分镜失败：${it.stackTraceToString()}")
@@ -567,7 +567,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             busy = false,
             message = BuiltinTtsUiSupport.multiRoleSummary(
                 characters = characters.size,
-                discovered = discovered,
+                discovered = discovery.added,
                 assigned = assigned.assignments.size,
                 activated = activated,
                 storyboardSegments = storyboardSegments
