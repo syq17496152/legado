@@ -119,16 +119,16 @@ object OfflineCharacterDiscovery {
                 candidates.remove(name)
             }
         }
-        if (!trustModel) {
-            candidates.keys.sortedBy { it.length }.forEach { short ->
-                val shortCount = candidates[short] ?: return@forEach
-                val longer = candidates.keys.firstOrNull { it.length > short.length && it.startsWith(short) }
-                    ?: return@forEach
-                val longCount = candidates[longer] ?: return@forEach
-                when {
-                    shortCount - longCount <= 0 -> candidates.remove(short)
-                    longCount < CONFIRMED_LONG_NAME_CUES -> candidates.remove(longer)
-                }
+        // 前缀合并：无论有无模型都要做（否则"李帅"会和"李帅西"并存）
+        candidates.keys.sortedBy { it.length }.forEach { short ->
+            val shortCount = candidates[short] ?: return@forEach
+            val longer = candidates.keys.firstOrNull { it.length > short.length && it.startsWith(short) }
+                ?: return@forEach
+            val longCount = candidates[longer] ?: return@forEach
+            when {
+                shortCount - longCount <= 0 -> candidates.remove(short)
+                // 规则路径才把"短名+尾巴"当碎片删长名；模型可信时长名保留
+                !trustModel && longCount < CONFIRMED_LONG_NAME_CUES -> candidates.remove(longer)
             }
         }
         // 稳定排序：同次数同长度时保持"首次出现"顺序，保证结果可复现

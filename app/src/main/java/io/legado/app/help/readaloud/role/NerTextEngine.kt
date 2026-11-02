@@ -165,16 +165,20 @@ object NerTextEngine {
         '叫', '喊', '说', '道', '问', '答', '想', '看', '听', '吃', '喝', '睡', '醒',
         '躺', '回', '过', '出', '进', '拿', '放',
         // 代词/虚词/方位/程度
-        '他', '她', '女', '中', '上', '下', '里', '外', '前', '后', '大', '小', '多', '少',
+        '他', '她', '女', '中', '上', '下', '里', '外', '前', '后', '大', '小', '多', '少', '头',
         '好', '高', '低', '长', '短', '快', '慢', '新', '旧', '真', '假', '生', '死',
         '该', '应', '需', '无', '不', '没', '很', '太', '更', '最', '也', '只', '又',
         '才', '便', '却', '还', '已', '将', '正'
     )
 
+    /** 感叹词/语气词开头（模型 cue 路径偶发误报：呃恩/额头） */
+    private val interjectionStarts = setOf('呃', '额', '啊', '哦', '嗯', '唉', '咦', '嘿', '呵', '哎', '呀', '哇')
+
     /** 是否为"姓 + 高频动词/副词"拼出的伪人名（发现期过滤 + 旧数据清理共用同一口径） */
     fun isImplausibleName(name: String): Boolean {
         if (name.length < 2) return false
         if (name in nonNameWords || name in stopWords) return true
+        if (name.first() in interjectionStarts) return true
         val givenIndex = if (startsWithCompoundSurname(name)) 2 else 1
         return name.length > givenIndex && name[givenIndex] in implausibleGivenChars
     }

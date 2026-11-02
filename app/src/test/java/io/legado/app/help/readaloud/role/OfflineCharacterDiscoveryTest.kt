@@ -106,6 +106,18 @@ class OfflineCharacterDiscoveryTest {
         assertTrue("张三" in names)
     }
 
+    /** 模型路径同样要合并前缀碎片，并拒绝感叹词/身体词误报 */
+    @Test
+    fun `模型路径合并前缀并拒绝感叹词`() {
+        assertTrue(NerTextEngine.isImplausibleName("呃恩"))
+        assertTrue(NerTextEngine.isImplausibleName("额头"))
+        val trusted = OfflineCharacterDiscovery.selectNames(
+            linkedMapOf("李帅" to 3, "李帅西" to 3),
+            trustModel = true
+        )
+        assertEquals(listOf("李帅西"), trusted.map { it.first })
+    }
+
     /** 变更数口径：清理旧碎片与新增一样触发分镜重算，不能只看 added */
     @Test
     fun `新增与清理都计入变更数`() {
