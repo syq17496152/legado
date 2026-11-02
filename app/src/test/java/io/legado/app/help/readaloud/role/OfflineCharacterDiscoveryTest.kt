@@ -166,4 +166,12 @@ class OfflineCharacterDiscoveryTest {
         )
         assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
     }
+
+    @Test
+    fun `有模型时来源标 NER 无模型标规则兜底`() {
+        assertEquals("offline-ner-lac-v1", OfflineCharacterDiscovery.autoSource(trustModel = true))
+        assertEquals("offline-rule-v1", OfflineCharacterDiscovery.autoSource(trustModel = false))
+        // 两个来源都必须纳入自动清理口径（否则旧碎片清不掉 / 新旧混用）
+        assertTrue(OfflineCharacterDiscovery.SOURCE_OFFLINE != OfflineCharacterDiscovery.SOURCE_OFFLINE_NER)
+    }
 }

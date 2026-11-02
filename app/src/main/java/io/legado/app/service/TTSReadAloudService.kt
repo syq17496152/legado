@@ -27,6 +27,7 @@ import io.legado.app.help.readaloud.casting.TtsTagSplitter
 import io.legado.app.help.readaloud.casting.TtsVoiceRef
 import io.legado.app.help.readaloud.casting.UtteranceProgressSink
 import io.legado.app.help.readaloud.role.BookAliasStore
+import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
@@ -445,6 +446,28 @@ class TTSReadAloudService : BaseReadAloudService() {
         val chapterIndex = textChapter.chapter.index
         if (builtinActive) {
             runCatching {
+                // AD-16：章开始自动累积角色（离线 NER 模型识别；fail-open，不阻断播放）。
+                // 先发现再取角色快照，保证本章归因能用到新出场角色。
+                var rolesChanged = false
+                if (OfflineCharacterDiscovery.shouldDiscoverAtChapterStart(builtinActive, roleBookKey, contentList)) {
+                    val startedAt = System.currentTimeMillis()
+                    val discovery = OfflineCharacterDiscovery.ensureCharacters(roleBookKey, contentList)
+                    rolesChanged = discovery.changed > 0
+                    // 正式诊断日志（保留）：章开始 NER 发现耗时与产出，便于定位低配设备卡顿
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "roleDiscovery ch=$chapterIndex cost=${System.currentTimeMillis() - startedAt}ms " +
+                            "added=${discovery.added} pruned=${discovery.pruned}",
+                        level = AppLog.Level.INFO
+                    )
+                    if (rolesChanged) {
+                        AppLog.put(
+                            "离线角色累积（ch=$chapterIndex）：新增 ${discovery.added} / 清理碎片 ${discovery.pruned}"
+                        )
+                        // 角色集合变化 ⇒ 章节归因缓存与内存结果都不可复用（缓存键不含角色集）
+                        OfflineRoleResolver.clearMemory(roleBookKey)
+                    }
+                }
                 val roleCharacters = CharacterVoiceAssignService.roleCharacters(roleBookKey)
                 if (roleCharacters.isNotEmpty()) {
                     OfflineRoleResolver.ensure(
@@ -453,7 +476,8 @@ class TTSReadAloudService : BaseReadAloudService() {
                         chapterTitle = textChapter.chapter.title,
                         paragraphs = contentList,
                         characters = roleCharacters,
-                        aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+                        aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot),
+                        forceRecompute = rolesChanged
                     )
                 }
             }.onFailure { AppLog.put("离线角色归因准备失败：${it.message}") }

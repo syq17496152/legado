@@ -24,7 +24,28 @@ object OfflineCharacterDiscovery {
     private const val COLON_CN = "："
     private const val COLON_EN = ":"
 
+    /** 无模型时的姓氏启发式兜底来源（旧标记，保留兼容） */
     const val SOURCE_OFFLINE = "offline-rule-v1"
+
+    /** AD-16：端侧 LAC-ONNX NER 模型识别来源（有模型时落库的真实来源，避免把模型结果标成"规则"） */
+    const val SOURCE_OFFLINE_NER = "offline-ner-lac-v1"
+
+    /** 自动发现来源集合（碎片清理只动这两类，绝不碰用户手建角色） */
+    private val AUTO_SOURCES = setOf(SOURCE_OFFLINE, SOURCE_OFFLINE_NER)
+
+    /** 本次发现的真实来源：有模型=N ER，无模型=规则兜底（可单测，避免把模型结果标成"规则"） */
+    internal fun autoSource(trustModel: Boolean): String =
+        if (trustModel) SOURCE_OFFLINE_NER else SOURCE_OFFLINE
+
+    /**
+     * 章开始是否自动累积角色（可单测的门槛）：
+     * 仅在内置多角色链路生效、书标识有效、本章有正文时执行；避免旁白/空章做无谓的模型推理。
+     */
+    fun shouldDiscoverAtChapterStart(
+        builtinActive: Boolean,
+        bookKey: String,
+        paragraphs: List<String>
+    ): Boolean = builtinActive && bookKey.isNotBlank() && paragraphs.isNotEmpty()
 
     /** 单章候选上限：覆盖主角 + 主要配角（原 8 个会漏掉程啸等后续出场角色） */
     const val DEFAULT_LIMIT = 12
@@ -168,6 +189,8 @@ object OfflineCharacterDiscovery {
         val trustModel = NerTextEngine.isModelReady()
         val scan = scanCues(paragraphs, trustModel)
         val found = toCandidates(scan, limit, trustModel)
+        val source = autoSource(trustModel)
+        if (trustModel) migrateProvenance(bookKey)
         // 先清理旧碎片（萧宏/郑吒嗤），否则旧角色继续占位并污染归因（2026-11-02 用户反馈）
         val pruned = pruneFragments(bookKey, found.map { it.name }.toSet(), scan.counts)
         if (found.isEmpty()) return@withContext DiscoveryResult(0, pruned)
@@ -188,7 +211,7 @@ object OfflineCharacterDiscovery {
                         roleLevel = if (index == 0) BookCharacter.ROLE_MAIN else BookCharacter.ROLE_NORMAL,
                         sortOrder = index,
                         autoCreated = true,
-                        source = SOURCE_OFFLINE,
+                        source = source,
                         lastDetectedAt = now,
                         createdAt = now,
                         updatedAt = now
@@ -199,6 +222,26 @@ object OfflineCharacterDiscovery {
         }
         AppLog.put("离线角色发现：候选 ${found.size} / 新增 $added / 清理碎片 $pruned")
         DiscoveryResult(added, pruned)
+    }
+
+    /**
+     * 来源标记迁移：模型就绪时，把历史「规则」标记回写为 NER 来源。
+     * 只改 `source` 与 `updatedAt`，不动名字/性别/用户编辑内容；用于纠正旧版本把模型结果标成规则的误导。
+     */
+    private fun migrateProvenance(bookKey: String) {
+        val existing = runCatching { appDb.bookCharacterDao.characters(bookKey) }
+            .getOrDefault(emptyList())
+        val now = System.currentTimeMillis()
+        existing.forEach { character ->
+            if (!character.autoCreated || character.source != SOURCE_OFFLINE) return@forEach
+            runCatching {
+                appDb.bookCharacterDao.updateCharacter(
+                    character.copy(source = SOURCE_OFFLINE_NER, updatedAt = now)
+                )
+            }.onFailure {
+                AppLog.put("离线角色来源标记迁移失败（${character.name}）：${it.message}")
+            }
+        }
     }
 
     /**
@@ -216,7 +259,7 @@ object OfflineCharacterDiscovery {
             .getOrDefault(emptyList())
         var pruned = 0
         existing.forEach { character ->
-            if (!character.autoCreated || character.source != SOURCE_OFFLINE) return@forEach
+            if (!character.autoCreated || character.source !in AUTO_SOURCES) return@forEach
             val name = character.name.trim()
             if (name.isBlank() || name in discoveredNames) return@forEach
             // 旧版本落库的伪人名（解释/却冷/都知…）直接用同一"名字用字"口径清掉
