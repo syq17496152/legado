@@ -82,6 +82,18 @@ class ImmersiveStagePolicyTest {
     }
 
     @Test
+    fun `封面缺失占位取书名首字`() {
+        assertEquals("无", ImmersiveStagePolicy.coverFallbackLabel("无限恐怖"))
+        assertEquals("三", ImmersiveStagePolicy.coverFallbackLabel("  三体 "))
+    }
+
+    @Test
+    fun `书名为空时占位回落为书`() {
+        assertEquals("书", ImmersiveStagePolicy.coverFallbackLabel(""))
+        assertEquals("书", ImmersiveStagePolicy.coverFallbackLabel("   "))
+    }
+
+    @Test
     fun `不同种子相位不同`() {
         val a = ImmersiveStagePolicy.particlePhase(seed = 11, index = 3)
         val b = ImmersiveStagePolicy.particlePhase(seed = 12, index = 3)

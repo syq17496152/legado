@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,8 +29,10 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.image.CoverImageView
@@ -69,6 +72,15 @@ internal object ImmersiveStagePolicy {
 
     /** 黑胶纹理环数量：低内存设备减半，降低每帧 drawCircle 次数 */
     fun vinylGrooveCount(lowRam: Boolean): Int = if (lowRam) 7 else 14
+
+    /**
+     * 封面缺失时的中心占位字：取书名首个非空白字符，书名也空则用「书」。
+     * 目的：唱片中心不能出现空白黑洞（spec 要求的异常回退）。
+     */
+    fun coverFallbackLabel(bookName: String): String {
+        val first = bookName.trim().firstOrNull()?.toString().orEmpty()
+        return first.ifBlank { "书" }
+    }
 
     /**
      * 确定性伪随机相位（0..1）：同一 seed/index 恒定，保证重进面板粒子布局不跳变，
@@ -138,27 +150,38 @@ internal fun ImmersiveVinylDisc(
         ) {
             drawVinylFace(colors, discBase, grooveColor, grooves)
         }
-        // 中心封面：随盘面同角旋转
+        // 中心封面：随盘面同角旋转；封面缺失时用书名首字占位（不允许空白黑洞）
+        val hasCover = !state.coverUrl.isNullOrBlank()
         Box(
             modifier = Modifier
                 .size(diameter * 0.52f)
                 .graphicsLayer { rotationZ = rotation.value }
                 .clip(CircleShape)
-                .background(discBase)
+                .background(discBase),
+            contentAlignment = Alignment.Center
         ) {
-            BookCoverImage(
-                path = state.coverUrl,
-                name = state.bookName,
-                author = state.author,
-                sourceOrigin = state.sourceOrigin,
-                modifier = Modifier.fillMaxSize(),
-                style = CoverImageView.CoverStyle.FLAT,
-                loadOnlyWifi = false,
-                preferThumb = true,
-                forcePath = state.coverForcePath,
-                allowNameOverlay = state.coverAllowNameOverlay,
-                fillBounds = true
-            )
+            if (hasCover) {
+                BookCoverImage(
+                    path = state.coverUrl,
+                    name = state.bookName,
+                    author = state.author,
+                    sourceOrigin = state.sourceOrigin,
+                    modifier = Modifier.fillMaxSize(),
+                    style = CoverImageView.CoverStyle.FLAT,
+                    loadOnlyWifi = false,
+                    preferThumb = true,
+                    forcePath = state.coverForcePath,
+                    allowNameOverlay = state.coverAllowNameOverlay,
+                    fillBounds = true
+                )
+            } else {
+                Text(
+                    text = ImmersiveStagePolicy.coverFallbackLabel(state.bookName),
+                    color = colors.primaryText,
+                    fontSize = (diameter.value * 0.20f).sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
         // 表层：中心环 + 外缘描边（夜间可辨）+ 静态唱针
         Canvas(modifier = Modifier.fillMaxSize()) {
