@@ -152,6 +152,13 @@ object NerTextEngine {
     fun startsWithCompoundSurname(name: String): Boolean =
         compoundSurnames.any { name.startsWith(it) }
 
+    /** 名称是否以（单/复）姓氏开头：模型误报（法西斯/零散名词）多为无姓氏起头 */
+    fun startsWithKnownSurname(name: String): Boolean {
+        if (name.length < 2) return false
+        if (startsWithCompoundSurname(name)) return true
+        return name.first().toString() in surnames
+    }
+
     /**
      * 名字用字黑名单（单姓看第 2 字 / 复姓看第 3 字）：
      * 这些高频动词/副词几乎不会出现在名字里，却能拼出"都知/能转/却冷"这类伪人名。

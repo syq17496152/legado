@@ -56,6 +56,9 @@ object OfflineCharacterDiscovery {
     /** 与独立出现的短名并存时，长名需 ≥3 次才判定为真名，否则视为"短名+动词"碎片 */
     private const val CONFIRMED_LONG_NAME_CUES = 3
 
+    /** 模型路径：非姓氏起头的实体至少出现 2 次才收录（拦截"法西斯"这类一次性误报） */
+    private const val MIN_MODEL_UNSURNAMED_CUES = 2
+
     data class Candidate(
         val name: String,
         val gender: String,
@@ -91,9 +94,15 @@ object OfflineCharacterDiscovery {
         }
 
     /**
+     * 模型路径计数门槛（可单测）：姓氏起头的实体直接收；非姓氏实体需有说话 cue 邻接，
+     * 用来拦截模型把普通名词/组织名（法西斯）标成 PER 的误报。
+     */
+    internal fun shouldCountModelMention(name: String, cueAdjacent: Boolean): Boolean =
+        NerTextEngine.startsWithKnownSurname(name) || cueAdjacent
+
+    /**
      * 逐段收集人名信号次数：
-     * - 有 NER 模型：模型输出的 PER 实体/cue 候选都可直接计数（不再要求紧跟说话 cue，
-     *   否则旁白里的角色会被漏掉）；
+     * - 有 NER 模型：姓氏起头的 PER 实体直接计数（旁白里的角色不漏）；非姓氏实体需 cue 邻接；
      * - 无模型：退回"姓氏候选 + cue 邻接"规则。
      */
     private fun scanCues(paragraphs: List<String>, trustModel: Boolean): CueScan {
@@ -102,7 +111,15 @@ object OfflineCharacterDiscovery {
         paragraphs.forEach { paragraph ->
             if (paragraph.isBlank()) return@forEach
             NerTextEngine.findMentions(paragraph, detectUnknown = true).forEach { mention ->
-                if (trustModel || hasSpeechCue(paragraph, mention.end)) {
+                val cueAdjacent = hasSpeechCue(paragraph, mention.end)
+                val counted = if (trustModel) {
+                    // 模型路径：姓氏起头的实体直接计数；非姓氏实体必须有说话 cue 邻接，
+                    // 否则多是普通名词/组织名（法西斯），不是角色
+                    shouldCountModelMention(mention.name, cueAdjacent)
+                } else {
+                    cueAdjacent
+                }
+                if (counted) {
                     cueCounts[mention.name] = (cueCounts[mention.name] ?: 0) + 1
                     firstContext.putIfAbsent(mention.name, paragraph)
                 }
@@ -132,7 +149,16 @@ object OfflineCharacterDiscovery {
                 candidates.remove(name)
                 return@forEach
             }
-            if (trustModel) return@forEach
+            if (trustModel) {
+                // 模型 PER 也可能是普通名词（法西斯/某组织名）：非姓氏起头且只出现一次的一律不收；
+                // 真昵称（零点）在章内通常反复出现，仍可保留。
+                if (!NerTextEngine.startsWithKnownSurname(name) &&
+                    (candidates[name] ?: 0) < MIN_MODEL_UNSURNAMED_CUES
+                ) {
+                    candidates.remove(name)
+                }
+                return@forEach
+            }
             if (name.length >= 3 &&
                 !NerTextEngine.startsWithCompoundSurname(name) &&
                 (candidates[name] ?: 0) < MIN_LONG_NAME_CUES
@@ -262,6 +288,15 @@ object OfflineCharacterDiscovery {
             if (!character.autoCreated || character.source !in AUTO_SOURCES) return@forEach
             val name = character.name.trim()
             if (name.isBlank() || name in discoveredNames) return@forEach
+            // 旧版本落库的"人名+笑声叠字"碎片（张杰哈哈）：当前章已发现其基名（张杰）⇒ 清掉
+            val reduplicatedTail = name.length > 2 && name.last() == name[name.length - 2] &&
+                    discoveredNames.any { it.length < name.length && name.startsWith(it) }
+            if (reduplicatedTail) {
+                runCatching { appDb.bookCharacterDao.deleteCharacterWithRelations(character) }
+                    .onSuccess { pruned++ }
+                    .onFailure { AppLog.put("离线角色叠字碎片清理失败（$name）：${it.message}") }
+                return@forEach
+            }
             // 旧版本落库的伪人名（解释/却冷/都知…）直接用同一"名字用字"口径清掉
             if (NerTextEngine.isImplausibleName(name)) {
                 runCatching { appDb.bookCharacterDao.deleteCharacterWithRelations(character) }

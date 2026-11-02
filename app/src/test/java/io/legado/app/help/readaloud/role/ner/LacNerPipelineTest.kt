@@ -102,4 +102,29 @@ class LacNerPipelineTest {
         // 无模型（规则路径）时仍按频次门槛剔除一次性三字名
         assertTrue(OfflineCharacterDiscovery.selectNames(counts, trustModel = false).isEmpty())
     }
+
+    @Test
+    fun `模型 PER 尾部叠字笑声要剥掉`() {
+        val tokens = listOf(
+            LacDecoder.Token("张杰哈哈", "PER", 0, 4),
+            LacDecoder.Token("詹岚呵呵", "PER", 10, 14)
+        )
+        val names = LacNerPostProcessor.personMentions(tokens).map { it.name }
+        assertEquals(listOf("张杰", "詹岚"), names)
+    }
+
+    @Test
+    fun `非姓氏实体需说话 cue 邻接才计入`() {
+        assertTrue(OfflineCharacterDiscovery.shouldCountModelMention("张杰", cueAdjacent = false))
+        assertTrue(OfflineCharacterDiscovery.shouldCountModelMention("零点", cueAdjacent = true))
+        assertTrue(!OfflineCharacterDiscovery.shouldCountModelMention("法西斯", cueAdjacent = false))
+    }
+
+    @Test
+    fun `模型路径拦截一次性的非姓氏误报`() {
+        val counts = linkedMapOf("法西斯" to 1, "张杰" to 1, "零点" to 2)
+        val trusted = OfflineCharacterDiscovery.selectNames(counts, trustModel = true)
+        // 法西斯（非姓氏 + 仅 1 次）被剔除；张杰（姓氏起头）与零点（重复出现）保留（按次数降序）
+        assertEquals(listOf("零点", "张杰"), trusted.map { it.first })
+    }
 }

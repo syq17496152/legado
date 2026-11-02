@@ -70,6 +70,10 @@ object LacNerPostProcessor {
 
     private fun spanOf(rawWord: String, start: Int): NameSpan? {
         var name = rawWord
+        // 尾部叠字（哈哈/呵呵/嘿嘿）是笑声/语气，不是名字（模型偶发把"张杰哈哈"标成 PER）
+        while (name.length > 2 && name.last() == name[name.length - 2]) {
+            name = name.dropLast(2)
+        }
         while (name.length > 2 && name.last() in trailingActionChars) {
             name = name.dropLast(1)
         }
