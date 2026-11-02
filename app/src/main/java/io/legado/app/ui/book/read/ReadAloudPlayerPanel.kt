@@ -2141,6 +2141,7 @@ private fun CoverAtmosphereBackdrop(
             modifier = Modifier.fillMaxSize()
         )
         if (animateFluid) {
+            ImmersiveParticleLayer(state = state, colors = colors)
             FluidBackdropLayer(state, colors)
         }
         Box(
@@ -3635,10 +3636,10 @@ private fun LandscapePlayerBody(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (immersive) {
-            CoverArt(
+            ImmersiveVinylDisc(
                 state = state,
                 colors = colors,
-                width = if (short) 136.dp else 176.dp
+                diameter = ImmersiveStagePolicy.landscapeDiscDiameter(short)
             )
         }
         Column(
@@ -3749,14 +3750,10 @@ private fun ImmersivePlayerStage(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        CoverArt(
+        ImmersiveVinylDisc(
             state = state,
             colors = colors,
-            width = when {
-                veryShort -> 128.dp
-                short -> 164.dp
-                else -> 210.dp
-            }
+            diameter = ImmersiveStagePolicy.discDiameter(veryShort, short)
         )
         Spacer(modifier = Modifier.height(if (veryShort) 14.dp else 22.dp))
         BookIdentity(
@@ -4247,30 +4244,6 @@ private fun SceneAvatar(
             }
         }
     }
-}
-
-@Composable
-private fun CoverArt(
-    state: ReadAloudPlayerPanel.PlayerUiState,
-    colors: PlayerColors,
-    width: Dp,
-    modifier: Modifier = Modifier
-) {
-    BookCoverImage(
-        path = state.coverUrl,
-        name = state.bookName,
-        author = state.author,
-        sourceOrigin = state.sourceOrigin,
-        modifier = modifier
-            .width(width)
-            .aspectRatio(0.75f),
-        style = CoverImageView.CoverStyle.DETAIL,
-        loadOnlyWifi = false,
-        preferThumb = false,
-        forcePath = state.coverForcePath,
-        allowNameOverlay = state.coverAllowNameOverlay,
-        fillBounds = true
-    )
 }
 
 @Composable
