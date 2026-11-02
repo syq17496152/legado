@@ -291,4 +291,10 @@ cn.hutool.core.util.**{*;}
 }
 -dontwarn com.k2fsa.sherpa.onnx.**
 
+# 端侧 NER（onnxruntime-android）：TensorInfo/OnnxTensor 等由 JNI NewObject 构造，
+# R8 在 Java 侧看不到引用的构造函数会被裁掉（真机 SIGABRT：
+# NoSuchMethodError: Lai/onnxruntime/TensorInfo;.<init>([J[Ljava/lang/String;I)V）
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
 
