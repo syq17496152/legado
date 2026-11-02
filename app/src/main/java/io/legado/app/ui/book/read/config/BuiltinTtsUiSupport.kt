@@ -3,6 +3,7 @@
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
+import io.legado.app.help.tts.builtin.VoiceAutoTagger
 import java.util.Locale
 
 /** 管理页纯逻辑（可单测）：导入档案推断 + 体积格式化 + 页签数量 */
@@ -65,6 +66,10 @@ internal object BuiltinTtsUiSupport {
     /** 打标结果文案（T6.2/T6.3）：处理数 + 三分类 + 本次新建池数 */
     fun autoTagMessage(processed: Int, male: Int, female: Int, unknown: Int, pooled: Int): String =
         "打标完成：处理 $processed · 男 $male / 女 $female / 未定 $unknown · 分组 $pooled"
+
+    /** 打标结果 → 文案（UI 只做接线，池数口径来自打标自身的池同步结果，避免调用方再算一遍） */
+    fun autoTagMessage(result: VoiceAutoTagger.Result): String =
+        autoTagMessage(result.processed, result.male, result.female, result.unknown, result.pooled)
 
     /** 池筛选 chips 显示哪些池（T8.16）：去重 + 上限，避免 chips 行溢出 */
     fun visiblePoolNames(voices: List<BuiltinVoice>, limit: Int = 4): List<String> =

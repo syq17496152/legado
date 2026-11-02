@@ -60,6 +60,10 @@ class VoiceAutoTaggerTest {
         assertEquals(2, result.processed)
         assertEquals("male", store.findById("low")?.gender)
         assertEquals("female", store.findById("high")?.gender)
+        // 打标内部完成池回写：结果里带池数，groupId 已按 tag 聚合
+        assertEquals(2, result.pooled)
+        assertEquals("male", store.findById("low")?.groupId)
+        assertEquals("female", store.findById("high")?.groupId)
 
         // 断点续：已打标的不再处理
         val second = kotlinx.coroutines.runBlocking { VoiceAutoTagger.tagAll(store) }
@@ -103,6 +107,9 @@ class VoiceAutoTaggerTest {
         assertEquals(1, aborted.processed)
         assertEquals("male", store.findById("v1")?.gender)
         assertEquals("", store.findById("v2")?.gender.orEmpty())
+        // 中断后仍把已完成项回写池
+        assertEquals(1, aborted.pooled)
+        assertEquals("male", store.findById("v1")?.groupId)
         // 续跑：只处理剩余（断点续）
         val rest = kotlinx.coroutines.runBlocking { VoiceAutoTagger.tagAll(store) }
         assertEquals(1, rest.processed)

@@ -134,6 +134,17 @@ class BuiltinTtsActivityTest {
     }
 
     @Test
+    fun `打标结果直接映射到提示文案且池数取自打标自身`() {
+        val result = io.legado.app.help.tts.builtin.VoiceAutoTagger.Result(
+            processed = 6, male = 3, female = 3, unknown = 0, pooled = 4
+        )
+        assertEquals(
+            "打标完成：处理 6 · 男 3 / 女 3 / 未定 0 · 分组 4",
+            BuiltinTtsUiSupport.autoTagMessage(result)
+        )
+    }
+
+    @Test
     fun `池 chips 只显示去重后的前四个池`() {
         fun voice(id: String, pool: String) = io.legado.app.help.tts.builtin.BuiltinVoice(
             id = id, name = id, groupId = pool

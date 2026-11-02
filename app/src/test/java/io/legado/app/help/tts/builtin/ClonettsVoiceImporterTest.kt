@@ -80,4 +80,58 @@ class ClonettsVoiceImporterTest {
         assertTrue(report.imported == 0)
         assertTrue(store.list().isEmpty())
     }
+
+    /** 两条不同音频的音色包（批量入库路径：整批一次写索引） */
+    private fun buildMultiZip(): File {
+        val file = File(temp.newFolder("zip-multi-${System.nanoTime()}"), "multi.zip")
+        val profiles = listOf("m-1" to "旁白男", "m-2" to "旁白女")
+        ZipOutputStream(file.outputStream()).use { zip ->
+            val list = profiles.joinToString(",") {
+                """{"id":"${it.first}","name":"${it.second}","promptText":"稿-${it.first}","roleTags":["旁白"],"numSteps":4}"""
+            }
+            val prefs = """
+                <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+                <map>
+                  <string name="profiles_list">[$list]</string>
+                </map>
+            """.trimIndent()
+            zip.putNextEntry(ZipEntry("shared_prefs/voice_profiles_prefs.xml"))
+            zip.write(prefs.toByteArray())
+            zip.closeEntry()
+            profiles.forEachIndexed { index, (id, _) ->
+                zip.putNextEntry(ZipEntry("files/profiles/$id/prompt.wav"))
+                // 音频填不同样值，避免 md5 去重把第二条吞掉
+                zip.write(PcmAudioUtils.wavBytes(ByteArray(128) { (7 + index).toByte() }, 16000))
+                zip.closeEntry()
+            }
+        }
+        return file
+    }
+
+    @Test
+    fun `重复导入同一备份包按稳定 id 全量去重`() {
+        val store = BuiltinVoiceStore(temp.newFolder("store-reimport"))
+        val zip = buildMultiZip()
+        kotlinx.coroutines.runBlocking { ClonettsVoiceImporter(store).importZip(zip) }
+        val second = kotlinx.coroutines.runBlocking { ClonettsVoiceImporter(store).importZip(zip) }
+        assertEquals(2, second.total)
+        assertEquals(0, second.imported)
+        assertEquals(2, second.duplicates)
+        assertEquals(2, store.list().size)
+    }
+
+    @Test
+    fun `多音色备份包整批导入且索引完整`() {
+        val store = BuiltinVoiceStore(temp.newFolder("store-multi"))
+        val report = kotlinx.coroutines.runBlocking {
+            ClonettsVoiceImporter(store).importZip(buildMultiZip())
+        }
+        assertEquals(2, report.total)
+        assertEquals(2, report.imported)
+        assertEquals(0, report.skipped)
+        assertEquals(2, store.list().size)
+        assertEquals(listOf("旁白女", "旁白男"), store.list().map { it.name }.sorted())
+        // 导入内部完成池聚合：roleTags=旁白 ⇒ groupId 已回写
+        assertEquals(listOf("旁白", "旁白"), store.list().map { it.groupId })
+    }
 }

@@ -89,22 +89,71 @@ class BuiltinVoiceStore(private val root: File) {
 
     /** 新增/更新（重名自动消歧 `_2`；id 为稳定键，重复 id 覆盖） */
     @Synchronized
-    fun upsert(voice: BuiltinVoice): BuiltinVoice {
+    fun upsert(voice: BuiltinVoice): BuiltinVoice = upsertAll(listOf(voice)).first()
+
+    /**
+     * 批量新增/更新（**整批只写盘一次**）：500 级音色逐条 upsert 会把整份索引写 O(n²) 次，
+     * 导入耗时暴涨且调用方在主线程时直接 ANR；重名消歧仍按入参顺序逐条判定。
+     */
+    @Synchronized
+    fun upsertAll(voices: List<BuiltinVoice>): List<BuiltinVoice> {
+        if (voices.isEmpty()) return emptyList()
         val current = list().toMutableList()
-        val normalizedName = normalizeName(voice.name, voice.id, current)
-        val stored = voice.copy(name = normalizedName, createdAt = voice.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis())
-        val index = current.indexOfFirst { it.id == stored.id }
-        if (index >= 0) current[index] = stored else current.add(stored)
+        val stored = ArrayList<BuiltinVoice>(voices.size)
+        voices.forEach { voice ->
+            val normalizedName = normalizeName(voice.name, voice.id, current)
+            val item = voice.copy(
+                name = normalizedName,
+                createdAt = voice.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis()
+            )
+            val index = current.indexOfFirst { it.id == item.id }
+            if (index >= 0) current[index] = item else current.add(item)
+            stored.add(item)
+        }
         save(current)
         return stored
     }
 
     /**
-     * 新增音色（写入参考音频）。
+     * 新增音色（写入参考音频并落索引）。
      * @return 成功返回条目；音频为空/写入失败返回 null
      */
-    @Synchronized
     fun addVoice(
+        name: String,
+        pcmWavBytes: ByteArray?,
+        sourceFile: File? = null,
+        refText: String,
+        tags: List<String>,
+        origin: String,
+        profileId: String,
+        gender: String = "",
+        age: String = "",
+        numSteps: Int = 0,
+        durationMs: Long = 0,
+        readOnly: Boolean = false,
+        id: String = ""
+    ): BuiltinVoice? = prepareVoice(
+        name = name,
+        pcmWavBytes = pcmWavBytes,
+        sourceFile = sourceFile,
+        refText = refText,
+        tags = tags,
+        origin = origin,
+        profileId = profileId,
+        gender = gender,
+        age = age,
+        numSteps = numSteps,
+        durationMs = durationMs,
+        readOnly = readOnly,
+        id = id
+    )?.let { upsert(it) }
+
+    /**
+     * 只落盘参考音频并构建音色条目，**不写索引**（批量导入时配合 [upsertAll] 一次写盘）。
+     * @return 音频为空/写入失败返回 null
+     */
+    @Synchronized
+    internal fun prepareVoice(
         name: String,
         pcmWavBytes: ByteArray?,
         sourceFile: File? = null,
@@ -148,7 +197,7 @@ class BuiltinVoiceStore(private val root: File) {
             readOnly = readOnly,
             profileId = profileId
         )
-        return upsert(voice)
+        return voice
     }
 
     @Synchronized

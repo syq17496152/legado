@@ -39,14 +39,13 @@ object BuiltinVoicePools {
      * 用途：导入 653 音色后一次同步，列表按池筛选才有数据。
      */
     fun sync(store: BuiltinVoiceStore): Int {
-        var updated = 0
-        store.list().forEach { voice ->
+        val changed = store.list().mapNotNull { voice ->
             val pool = poolOf(voice)
-            if (voice.groupId != pool) {
-                store.upsert(voice.copy(groupId = pool))
-                updated++
-            }
+            if (voice.groupId == pool) null else voice.copy(groupId = pool)
         }
-        return updated
+        if (changed.isEmpty()) return 0
+        // 整批一次写盘：500 级音色逐条 upsert 会写 500 次全量索引
+        store.upsertAll(changed)
+        return changed.size
     }
 }

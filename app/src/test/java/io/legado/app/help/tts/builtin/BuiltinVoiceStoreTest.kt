@@ -67,6 +67,40 @@ class BuiltinVoiceStoreTest {
     }
 
     @Test
+    fun `批量入库只写一次索引且批量内重名按顺序消歧`() {
+        val store = BuiltinVoiceStore(temp.newFolder("batch"))
+        val prepared = listOf("同名", "同名", "另一").mapIndexed { index, name ->
+            store.prepareVoice(
+                name = name,
+                pcmWavBytes = wav(),
+                refText = "稿$index",
+                tags = emptyList(),
+                origin = BuiltinVoice.ORIGIN_ZIP,
+                profileId = "clone",
+                id = "batch-$index"
+            )!!
+        }
+        // prepareVoice 只落音频、不写索引
+        assertTrue(store.list().isEmpty())
+        val stored = store.upsertAll(prepared)
+        assertEquals(3, stored.size)
+        assertEquals(listOf("同名", "同名_2", "另一"), stored.map { it.name })
+        assertEquals(3, store.list().size)
+        assertTrue(store.indexFile().isFile)
+    }
+
+    @Test
+    fun `批量 upsert 按 id 覆盖既有条目`() {
+        val store = BuiltinVoiceStore(temp.newFolder("batch-overwrite"))
+        val first = store.addVoice("原名", wav(), refText = "稿", tags = emptyList(),
+            origin = BuiltinVoice.ORIGIN_ZIP, profileId = "clone")!!
+        val overwritten = store.upsertAll(listOf(first.copy(name = "改名", tags = listOf("male"))))
+        assertEquals(1, overwritten.size)
+        assertEquals(1, store.list().size)
+        assertEquals("改名", store.findById(first.id)?.name)
+    }
+
+    @Test
     fun `损坏索引自愈为空索引`() {
         val root = temp.newFolder("broken")
         java.io.File(root, "index.json").writeText("{bad-json")

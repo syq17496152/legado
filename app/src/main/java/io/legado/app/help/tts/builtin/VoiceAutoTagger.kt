@@ -13,7 +13,9 @@ object VoiceAutoTagger {
         val processed: Int = 0,
         val male: Int = 0,
         val female: Int = 0,
-        val unknown: Int = 0
+        val unknown: Int = 0,
+        /** 本次按 tag 回写声音池的条目数（池同步在打标内部完成，调用方无需再同步） */
+        val pooled: Int = 0
     )
 
     suspend fun tagAll(
@@ -21,15 +23,25 @@ object VoiceAutoTagger {
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
         shouldAbort: () -> Boolean = { false }
     ): Result = withContext(Dispatchers.IO) {
+        val result = tagVoices(store, onProgress, shouldAbort)
+        // 池聚合紧随打标完成（仍在 IO 线程）：500 级音色在主线程整批写索引会 ANR
+        result.copy(pooled = runCatching { BuiltinVoicePools.sync(store) }.getOrDefault(0))
+    }
+
+    private fun tagVoices(
+        store: BuiltinVoiceStore,
+        onProgress: (done: Int, total: Int) -> Unit,
+        shouldAbort: () -> Boolean
+    ): Result {
         val voices = store.list().filter { it.gender.isBlank() }
-        if (voices.isEmpty()) return@withContext Result()
+        if (voices.isEmpty()) return Result()
         var male = 0
         var female = 0
         var unknown = 0
         var processed = 0
         voices.forEachIndexed { index, voice ->
             // T6.3：可中断——已完成的音色已落库，下次从剩余继续（天然断点续）
-            if (shouldAbort()) return@withContext Result(processed, male, female, unknown)
+            if (shouldAbort()) return Result(processed, male, female, unknown)
             val file = store.audioFile(voice)
             val f0 = runCatching {
                 val audio = PcmAudioUtils.readWav(file)
@@ -56,7 +68,7 @@ object VoiceAutoTagger {
             processed = index + 1
             onProgress(index + 1, voices.size)
         }
-        Result(processed, male, female, unknown)
+        return Result(processed, male, female, unknown)
     }
 
     fun inferAge(name: String): String = when {

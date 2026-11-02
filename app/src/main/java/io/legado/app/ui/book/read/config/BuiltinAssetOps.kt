@@ -2,7 +2,6 @@ package io.legado.app.ui.book.read.config
 
 import io.legado.app.constant.AppLog
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
-import io.legado.app.help.tts.builtin.BuiltinVoicePools
 import io.legado.app.help.tts.builtin.ClonettsVoiceImporter
 import java.io.File
 
@@ -41,7 +40,6 @@ internal object BuiltinAssetOps {
         }.onFailure {
             AppLog.put("音色包导入失败：${it.message}", it)
         }.getOrNull()
-        runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
         return report?.message ?: "音色包导入失败"
     }
 }

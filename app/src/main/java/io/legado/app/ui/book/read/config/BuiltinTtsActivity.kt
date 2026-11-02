@@ -355,18 +355,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                         },
                         shouldAbort = { tagCancelRequested }
                     )
-                    // T8.16：打标后按 tag 自动聚合声音池（幂等）
-                    val pooled = runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
-                        .getOrDefault(0)
+                    // T8.16：池聚合同步已在 VoiceAutoTagger 内完成，直接使用返回的池数
                     pageState.value = pageState.value.copy(
                         busy = false,
-                        message = BuiltinTtsUiSupport.autoTagMessage(
-                            processed = result.processed,
-                            male = result.male,
-                            female = result.female,
-                            unknown = result.unknown,
-                            pooled = pooled
-                        )
+                        message = BuiltinTtsUiSupport.autoTagMessage(result)
                     )
                 }
                 is PageAction.DeleteVoice -> {

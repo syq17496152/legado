@@ -60,4 +60,25 @@ class BuiltinVoicePoolsTest {
         // 幂等：再次同步不再写盘
         assertEquals(0, BuiltinVoicePools.sync(store))
     }
+
+    @Test
+    fun `多音色整批同步只更新命中池的条目`() {
+        val store = BuiltinVoiceStore(temp.newFolder("pool-batch"))
+        listOf("v1" to "旁白", "v2" to "male", "v3" to "zip").forEach { (id, tag) ->
+            store.addVoice(
+                name = id,
+                pcmWavBytes = PcmAudioUtils.wavBytes(ByteArray(64) { 5 }, 16000),
+                refText = "稿",
+                tags = listOf(tag),
+                origin = BuiltinVoice.ORIGIN_ZIP,
+                profileId = "clone",
+                id = id
+            )
+        }
+        assertEquals(2, BuiltinVoicePools.sync(store))
+        assertEquals("旁白", store.findById("v1")?.groupId)
+        assertEquals("male", store.findById("v2")?.groupId)
+        assertEquals("", store.findById("v3")?.groupId)
+        assertEquals(0, BuiltinVoicePools.sync(store))
+    }
 }

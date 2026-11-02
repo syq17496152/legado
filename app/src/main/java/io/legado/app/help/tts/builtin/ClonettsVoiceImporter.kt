@@ -67,10 +67,12 @@ class ClonettsVoiceImporter(
         withContext(Dispatchers.IO) {
             if (!zipFile.isFile) return@withContext Report(message = "文件不存在")
             var total = 0
-            var imported = 0
             var skipped = 0
             var duplicates = 0
             var missingAudio = 0
+            var failureMessage = ""
+            // 批量入库缓冲：整批只写一次索引（顺序 upsert 会把全量索引写 500 次，导入拖到分钟级）
+            val pending = ArrayList<BuiltinVoice>()
             val seenHashes = existingAudioHashes().toMutableSet()
             runCatching {
                 ZipFile(zipFile).use { zip ->
@@ -79,13 +81,20 @@ class ClonettsVoiceImporter(
                     val profiles = readProfiles(zip)
                     total = profiles.size
                     if (total == 0) {
-                        return@use Report(message = "备份包内未找到音色清单（profiles_list）")
+                        failureMessage = "备份包内未找到音色清单（profiles_list）"
+                        return@use
                     }
                     profiles.forEach { profile ->
                         val id = profile.id
-                        val name = profile.name.ifBlank { "音色${imported + 1}" }
+                        val name = profile.name.ifBlank { "音色${pending.size + 1}" }
                         val refText = profile.promptText.trim()
                         if (id.isBlank() || refText.isBlank()) {
+                            skipped++
+                            return@forEach
+                        }
+                        // 重导入幂等：zip 内 profile 的 id（UUID）就是稳定身份，已入库直接算重复
+                        if (store.findById(id) != null) {
+                            duplicates++
                             skipped++
                             return@forEach
                         }
@@ -102,12 +111,6 @@ class ClonettsVoiceImporter(
                             skipped++
                             return@forEach
                         }
-                        val audioHash = BuiltinHash.md5Hex(wavBytes)
-                        if (audioHash in seenHashes) {
-                            duplicates++
-                            skipped++
-                            return@forEach
-                        }
                         val packEntry = packById[id]
                         // T2.2：入库前统一加工（下混/裁静音/重采样/峰值归一/时长校验）；
                         // 加工失败保留原始音频（不能因为"太短/太长"就让整包导入失败）
@@ -116,10 +119,17 @@ class ClonettsVoiceImporter(
                             ?.wavBytes ?: wavBytes
                         val durationMs = (processed as? ReferenceAudioProcessor.Result.Success)
                             ?.durationMs ?: (packEntry?.dur ?: 0f).toLong() * 1000
+                        // 去重必须用**入库后的音频**指纹：库内存的是加工后的 wav，拿原始字节比对永远不命中
+                        val audioHash = BuiltinHash.md5Hex(audioBytes)
+                        if (audioHash in seenHashes) {
+                            duplicates++
+                            skipped++
+                            return@forEach
+                        }
                         val gender = packEntry?.gender.orEmpty()
                         val age = packEntry?.ageByName.orEmpty()
                         val tags = (packEntry?.tags.orEmpty() + profile.roleTags).filter { it.isNotBlank() }
-                        val voice = store.addVoice(
+                        val voice = store.prepareVoice(
                             name = name,
                             pcmWavBytes = audioBytes,
                             refText = refText,
@@ -129,19 +139,30 @@ class ClonettsVoiceImporter(
                             gender = gender,
                             age = age,
                             numSteps = (packEntry?.numSteps ?: 0).takeIf { it > 0 } ?: profile.numSteps,
-                            durationMs = durationMs
+                            durationMs = durationMs,
+                            id = id
                         )
                         if (voice == null) {
                             skipped++
                         } else {
+                            pending.add(voice)
                             seenHashes.add(audioHash)
-                            imported++
                         }
                     }
                 }
             }.onFailure {
                 LogUtils.e(TAG, "备份包导入失败：${it.message}")
-                return@withContext Report(total = total, imported = imported, skipped = skipped, message = "导入失败：${it.message}")
+                failureMessage = "导入失败：${it.message}"
+            }
+            // 音频已落盘、索引整批写一次；写失败按 0 条计（不能把已成功的条目谎报成失败）
+            val saved = runCatching { store.upsertAll(pending) }
+                .onFailure { LogUtils.e(TAG, "音色索引批量写入失败：${it.message}") }
+                .getOrDefault(emptyList())
+            val imported = saved.size
+            // 池聚合放在导入内部完成（仍在 IO 线程）：调用方无需记得再同步，也不会在主线程写索引
+            if (saved.isNotEmpty()) {
+                runCatching { BuiltinVoicePools.sync(store) }
+                    .onFailure { LogUtils.e(TAG, "声音池同步失败：${it.message}") }
             }
             Report(
                 total = total,
@@ -149,7 +170,9 @@ class ClonettsVoiceImporter(
                 skipped = skipped,
                 duplicates = duplicates,
                 missingAudio = missingAudio,
-                message = "导入 $imported，跳过 $skipped（重复 $duplicates，缺音频 $missingAudio）"
+                message = failureMessage.ifBlank {
+                    "导入 $imported，跳过 $skipped（重复 $duplicates，缺音频 $missingAudio）"
+                }
             )
         }
 
