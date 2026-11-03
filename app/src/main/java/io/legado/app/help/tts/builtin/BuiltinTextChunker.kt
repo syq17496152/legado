@@ -16,6 +16,13 @@ object BuiltinTextChunker {
     const val PAUSE_SENTENCE_MS = 280
     const val PAUSE_COMMA_MS = 120
     const val PAUSE_OTHER_MS = 100
+    // 「好听度」A1（offline-tts-llm-productization 3.8）：语义停顿。
+    // 旧实现只按「句末/逗号」二分，省略号与破折号被当成普通停顿 ⇒ 该有余味的地方被念得太赶、
+    // 该"打断"的地方没有中断感。三档取值来自朗读节奏经验（非拍脑袋：均与 CloneTTS 实测的
+    // 四档基线保持同量级，只在语义更强的位置延长 40~80ms）。
+    const val PAUSE_ELLIPSIS_MS = 360
+    const val PAUSE_DASH_MS = 340
+    const val PAUSE_DIALOGUE_END_MS = 220
 
     const val MIN_CHUNK_CHARS = 10
     const val MAX_CHARS_WITHOUT_QUOTE = 50
@@ -53,7 +60,9 @@ object BuiltinTextChunker {
     private val sentenceEndChars = setOf('。', '！', '？', '!', '?', '；', ';')
     private val commaChars = setOf('，', ',', '、', '：', ':')
     private val quoteChars = setOf('“', '”', '"', '「', '」', '『', '』', '\'')
-    private val innerBreakChars = setOf('，', ',', '、', '；', ';', '：', ':', '。', '！', '？', '!', '?')
+    /** 对白收束引号（A1：对白结束 = 换人，需要一点间隔） */
+    private val closingQuoteChars = setOf('”', '」', '』')
+    private val innerBreakChars = setOf('，', ',', '、', '；', ';', '：', ':', '。', '！', '？', '!', '?', '…', '—')
 
     fun split(
         text: String,
@@ -84,10 +93,19 @@ object BuiltinTextChunker {
         }
     }
 
-    /** 单块停顿（按块末字符判定） */
-    fun pauseOf(chunk: String): Int {
-        if (chunk.endsWith("\n")) return PAUSE_NEWLINE_MS
-        val last = chunk.trimEnd().lastOrNull() ?: return PAUSE_OTHER_MS
+    /**
+     * 语义停顿（A1）：按块末字符判定。
+     * 优先级 = 省略号（余味）> 破折号（打断）> 对白收束引号（换人）> 句末 > 逗号 > 其他。
+     * 说明：块末是收束引号时一律取对白档 —— 对白结束的核心语义是「换人」，
+     * 引号内的句号/省略号已被切分成内层块，不应再把换人停顿拉长到省略号档。
+     */
+    fun semanticPause(text: String): Int {
+        val trimmed = text.trimEnd()
+        if (trimmed.isEmpty()) return PAUSE_OTHER_MS
+        if (trimmed.endsWith("…") || trimmed.endsWith("...")) return PAUSE_ELLIPSIS_MS
+        if (trimmed.endsWith("—")) return PAUSE_DASH_MS
+        val last = trimmed.last()
+        if (last in closingQuoteChars) return PAUSE_DIALOGUE_END_MS
         return when {
             last in sentenceEndChars -> PAUSE_SENTENCE_MS
             last in commaChars -> PAUSE_COMMA_MS
@@ -95,14 +113,13 @@ object BuiltinTextChunker {
         }
     }
 
-    private fun innerPauseOf(chunk: String): Int {
-        val last = chunk.trimEnd().lastOrNull() ?: return PAUSE_OTHER_MS
-        return when {
-            last in sentenceEndChars -> PAUSE_SENTENCE_MS
-            last in commaChars -> PAUSE_COMMA_MS
-            else -> PAUSE_OTHER_MS
-        }
+    /** 单块停顿（按块末字符判定；换行单独一档） */
+    fun pauseOf(chunk: String): Int {
+        if (chunk.endsWith("\n")) return PAUSE_NEWLINE_MS
+        return semanticPause(chunk)
     }
+
+    private fun innerPauseOf(chunk: String): Int = semanticPause(chunk)
 
     private fun rawSplit(text: String): List<String> {
         val result = ArrayList<String>()
@@ -112,6 +129,8 @@ object BuiltinTextChunker {
             val breakHere = when {
                 c in lineBreakChars -> true
                 c in sentenceEndChars -> true
+                // A1 语义断点：省略号（余味）与破折号（打断）也是真实朗读停顿点
+                c == '…' || c == '—' -> true
                 c == '.' -> !isAsciiAlnum(text.getOrNull(index - 1)) && !isAsciiAlnum(text.getOrNull(index + 1))
                 else -> false
             }
