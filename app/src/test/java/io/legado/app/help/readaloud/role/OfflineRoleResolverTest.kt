@@ -361,6 +361,86 @@ class OfflineRoleResolverTest {
         assertEquals("ner-cue", result.segments[0].reason)
     }
 
+    /** 模型 cue 带称谓后缀（"张三大人"）应剥壳后命中角色，而不是当未识别 */
+    @Test
+    fun `模型 cue 带称谓后缀仍能命中`() {
+        val paragraphs = listOf("“退下吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("张三大人")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    cues = listOf(NerTextEngine.Mention("张三大人", at, at + 4))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 0, 6, cueBefore = "张三大人说：")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
+
+    /** 模型 cue 命中角色别名（称谓以外的同义称呼） */
+    @Test
+    fun `模型 cue 命中角色别名`() {
+        val withAlias = listOf(
+            OfflineRoleResolver.RoleCharacter(id = 3L, name = "萧宏律", aliases = listOf("宏律"), gender = "male")
+        )
+        val paragraphs = listOf("“走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("宏律")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    cues = listOf(NerTextEngine.Mention("宏律", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 0, 6, cueBefore = "宏律道：")),
+            withAlias,
+            emptyMap(),
+            signals
+        )
+        assertEquals("萧宏律", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
+
+    /** 不做"任意包含"：张三丰不得被错配给张三 */
+    @Test
+    fun `近似长名不错配给短名`() {
+        val paragraphs = listOf("“你说什么？”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("张三丰")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    cues = listOf(NerTextEngine.Mention("张三丰", at, at + 3))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 0, 0, 7, cueBefore = "张三丰道：")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertTrue("张三丰不是张三", result.segments[0].characterName.isBlank())
+    }
+
     /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
     @Test
     fun `无模型时正则 cue 兜底`() {

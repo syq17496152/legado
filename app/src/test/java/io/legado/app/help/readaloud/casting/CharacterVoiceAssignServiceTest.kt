@@ -15,10 +15,16 @@ class CharacterVoiceAssignServiceTest {
     private fun character(id: Long, name: String, gender: String, level: Int = BookCharacter.ROLE_NORMAL) =
         BookCharacter(id = id, name = name, gender = gender, roleLevel = level, identity = "")
 
-    private fun voice(id: String, gender: String, age: String, tags: List<String> = emptyList()) =
+    private fun voice(
+        id: String,
+        gender: String,
+        age: String,
+        tags: List<String> = emptyList(),
+        name: String = "内置·${if (gender == "male") "男" else "女"}·$age"
+    ) =
         BuiltinVoice(
             id = id,
-            name = "内置·${if (gender == "male") "男" else "女"}·$age",
+            name = name,
             refAudio = "$id/prompt.wav",
             refText = "稿",
             tags = tags,
@@ -128,6 +134,54 @@ class CharacterVoiceAssignServiceTest {
         assertFalse(byName.getValue("男主·陆沉").conflict)
         // 撞音避让：配角不得复用主角刚拿到的音色
         assertTrue(byName.getValue("张三").voiceName != byName.getValue("男主·陆沉").voiceName)
+    }
+
+    /** 导入包（506 音色）常见：gender 写英文、名字里没有「男/女」⇒ 也必须按性别分配 */
+    @Test
+    fun `英文性别元数据下仍按性别分配`() {
+        val imported = listOf(
+            voice("v_narr", "male", "youth", listOf("narration"), name = "旁白"),
+            voice("v_m1", "male", "youth", name = "低沉"),
+            voice("v_f1", "female", "youth", name = "清亮"),
+            voice("v_f2", "female", "aged", name = "温柔")
+        )
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(
+                character(1, "林凡", BookCharacter.GENDER_MALE, BookCharacter.ROLE_MAIN),
+                character(2, "苏婉", BookCharacter.GENDER_FEMALE, BookCharacter.ROLE_MAIN)
+            ),
+            voices = imported
+        )
+        val byName = result.assignments.associateBy { it.characterName }
+        assertEquals("v_m1|低沉", byName.getValue("林凡").voiceName)
+        assertEquals("v_f1|清亮", byName.getValue("苏婉").voiceName)
+        assertTrue(byName.getValue("苏婉").reason.contains("性别一致"))
+    }
+
+    /** 音色元数据归一化：中英文与 tags 统一到 male/female + teen/youth/middle/aged */
+    @Test
+    fun `音色性别年龄归一化兼容中英文与标签`() {
+        assertEquals("male", CharacterVoiceAssignService.voiceTraitsOf(voice("a", "male", "youth")).gender)
+        assertEquals("female", CharacterVoiceAssignService.voiceTraitsOf(voice("b", "Female", "")).gender)
+        assertEquals("male", CharacterVoiceAssignService.voiceTraitsOf(voice("c", "", "", listOf("male"), name = "嗓音")).gender)
+        assertEquals("female", CharacterVoiceAssignService.voiceTraitsOf(voice("d", "女声", "")).gender)
+        assertEquals("teen", CharacterVoiceAssignService.voiceTraitsOf(voice("e", "male", "少年")).age)
+        assertEquals("youth", CharacterVoiceAssignService.voiceTraitsOf(voice("f", "female", "青年")).age)
+        assertEquals("middle", CharacterVoiceAssignService.voiceTraitsOf(voice("g", "male", "中年")).age)
+        assertEquals("aged", CharacterVoiceAssignService.voiceTraitsOf(voice("h", "female", "老年")).age)
+    }
+
+    /** 年龄明确冲突要扣分：老年角色不得优先拿到少年音色（即使性别相同） */
+    @Test
+    fun `年龄冲突扣分避免老年角色配少年音`() {
+        val agedVoice = voice("v_aged", "male", "老年", name = "苍老")
+        val teenVoice = voice("v_teen", "male", "少年", name = "清越")
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character(1, "老者", BookCharacter.GENDER_MALE)),
+            voices = listOf(teenVoice, agedVoice)
+        )
+        assertEquals(1, result.assignments.size)
+        assertEquals("v_aged|苍老", result.assignments.first().voiceName)
     }
 
     @Test

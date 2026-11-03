@@ -2520,7 +2520,19 @@ private fun FluidBackdropLayer(
     } else {
         0f
     }
-    Canvas(modifier = Modifier.fillMaxSize()) {
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                // 性能要点（2026-11-03 真机：播放中 janky 92%、50th 22ms；暂停 0 帧）：
+                // 渐变只画一次，每帧仅更新合成层的平移/缩放，不再全屏重绘 linearGradient + 3 个大半径 radialGradient。
+                translationX = ImmersiveStagePolicy.fluidTranslationPx(shift, size.width)
+                scaleX = ImmersiveStagePolicy.FLUID_LAYER_SCALE
+                scaleY = ImmersiveStagePolicy.FLUID_LAYER_SCALE
+            }
+    ) {
+        // 绘制坐标固定为 0 位移；视觉位移由上面的 graphicsLayer 承担
+        val drawShift = 0f
         drawRect(
             brush = Brush.linearGradient(
                 colors = listOf(
@@ -2528,36 +2540,36 @@ private fun FluidBackdropLayer(
                     Color.Transparent,
                     colors.fluidB.copy(alpha = 0.22f)
                 ),
-                start = Offset(size.width * (0.05f + shift), 0f),
+                start = Offset(size.width * (0.05f + drawShift), 0f),
                 end = Offset(size.width, size.height)
             )
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(colors.fluidA.copy(alpha = 0.30f), Color.Transparent),
-                center = Offset(size.width * (0.20f + shift), size.height * 0.06f),
+                center = Offset(size.width * (0.20f + drawShift), size.height * 0.06f),
                 radius = size.maxDimension * 0.70f
             ),
             radius = size.maxDimension * 0.70f,
-            center = Offset(size.width * (0.20f + shift), size.height * 0.06f)
+            center = Offset(size.width * (0.20f + drawShift), size.height * 0.06f)
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(colors.fluidB.copy(alpha = 0.26f), Color.Transparent),
-                center = Offset(size.width * (0.78f - shift), size.height * 0.50f),
+                center = Offset(size.width * (0.78f - drawShift), size.height * 0.50f),
                 radius = size.maxDimension * 0.58f
             ),
             radius = size.maxDimension * 0.58f,
-            center = Offset(size.width * (0.78f - shift), size.height * 0.50f)
+            center = Offset(size.width * (0.78f - drawShift), size.height * 0.50f)
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(colors.fluidC.copy(alpha = 0.22f), Color.Transparent),
-                center = Offset(size.width * (0.34f + shift * 0.5f), size.height * 0.98f),
+                center = Offset(size.width * (0.34f + drawShift * 0.5f), size.height * 0.98f),
                 radius = size.maxDimension * 0.62f
             ),
             radius = size.maxDimension * 0.62f,
-            center = Offset(size.width * (0.34f + shift * 0.5f), size.height * 0.98f)
+            center = Offset(size.width * (0.34f + drawShift * 0.5f), size.height * 0.98f)
         )
     }
 }

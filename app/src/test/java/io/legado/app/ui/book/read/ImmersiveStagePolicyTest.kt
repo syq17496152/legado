@@ -147,4 +147,32 @@ class ImmersiveStagePolicyTest {
         val b = ImmersiveStagePolicy.particlePhase(seed = 12, index = 3)
         assertFalse(a == b)
     }
+
+    /** 卡顿修复（2026-11-03）：流体层改为合成层平移，位移必须是「分数 × 宽度」且放大够覆盖边缘 */
+    @Test
+    fun `流体层位移按宽度换算且放大可覆盖平移量`() {
+        assertEquals(108f, ImmersiveStagePolicy.fluidTranslationPx(0.1f, 1080f), 0.01f)
+        assertEquals(-108f, ImmersiveStagePolicy.fluidTranslationPx(-0.1f, 1080f), 0.01f)
+        assertEquals(0f, ImmersiveStagePolicy.fluidTranslationPx(0f, 1080f), 0.01f)
+        // 最大平移 ±10%，放大 1.25 ⇒ 每边多出 12.5% 边距，不会露底色
+        assertTrue(ImmersiveStagePolicy.FLUID_LAYER_SCALE >= 1.2f)
+    }
+
+    /** 粒子层改为双层平移：两层间距恒等于一屏高度 ⇒ 循环处无跳变、无重叠 */
+    @Test
+    fun `粒子双层位移首尾相接且间距等于屏高`() {
+        val height = 2340f
+        val first = ImmersiveStagePolicy.particleLayerTranslationPx(0.3f, height, secondLayer = false)
+        val second = ImmersiveStagePolicy.particleLayerTranslationPx(0.3f, height, secondLayer = true)
+        assertEquals(702f, first, 0.01f)
+        assertEquals(-1638f, second, 0.01f)
+        assertEquals(height, first - second, 0.01f)
+    }
+
+    @Test
+    fun `粒子起始帧下半层恰好位于屏幕上方一屏`() {
+        val height = 900f
+        assertEquals(0f, ImmersiveStagePolicy.particleLayerTranslationPx(0f, height, false), 0.01f)
+        assertEquals(-900f, ImmersiveStagePolicy.particleLayerTranslationPx(0f, height, true), 0.01f)
+    }
 }

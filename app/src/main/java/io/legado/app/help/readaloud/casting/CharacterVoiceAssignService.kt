@@ -38,6 +38,56 @@ object CharacterVoiceAssignService {
     )
 
     /**
+     * 音色元数据（归一化后）：
+     * 导入包（506 音色）里 `gender`/`age` 可能是英文（male/female/teen）、中文（男声/中年）或只写在 tags 里，
+     * 打分前必须先归一化，否则「性别优先」会全部失效 ⇒ 分配看起来"不分性别"（2026-11-03 用户反馈）。
+     */
+    internal data class VoiceTraits(val gender: String, val age: String)
+
+    /** 性别归一化：中文（男/男声/男性）、英文（male/m/man）、tags、名字都能识别 */
+    internal fun voiceTraitsOf(voice: BuiltinVoice): VoiceTraits =
+        VoiceTraits(gender = normalizeVoiceGender(voice), age = normalizeVoiceAge(voice))
+
+    private fun normalizeVoiceGender(voice: BuiltinVoice): String {
+        val own = voice.gender.trim().lowercase()
+        if (own.isNotBlank()) {
+            genderFromText(own)?.let { return it }
+        }
+        return genderFromText(
+            listOf(voice.tags.joinToString(" "), voice.name).joinToString(" ").lowercase()
+        ).orEmpty()
+    }
+
+    private fun genderFromText(text: String): String? = when {
+        text.contains("男") || text.contains("男性") || text.contains("男声") -> "male"
+        text.contains("女") || text.contains("女性") || text.contains("女声") -> "female"
+        Regex("(^|[^a-z])male([^a-z]|$)").containsMatchIn(text) -> "male"
+        Regex("(^|[^a-z])female([^a-z]|$)").containsMatchIn(text) -> "female"
+        Regex("(^|[^a-z])m([^a-z]|$)").containsMatchIn(text) -> "male"
+        Regex("(^|[^a-z])f([^a-z]|$)").containsMatchIn(text) -> "female"
+        else -> null
+    }
+
+    /** 年龄归一化：把英文 teen/youth/aged 与中文 童/少年/青年/中年/老年 统一到同一套取值 */
+    private fun normalizeVoiceAge(voice: BuiltinVoice): String {
+        val text = listOf(voice.age, voice.tags.joinToString(" "), voice.name)
+            .joinToString(" ")
+            .lowercase()
+        return ageFromText(text)
+    }
+
+    internal fun ageFromText(text: String): String = when {
+        text.contains("儿童") || text.contains("童") || text.contains("少年") || text.contains("少女") ||
+            text.contains("child") || text.contains("teen") -> "teen"
+        text.contains("青年") || text.contains("年轻") || text.contains("youth") -> "youth"
+        text.contains("中年") || text.contains("middle") -> "middle"
+        text.contains("老年") || text.contains("年迈") || text.contains("长辈") ||
+            text.contains("老") || text.contains("父") || text.contains("母") ||
+            text.contains("aged") || text.contains("elder") || text.contains("old") -> "aged"
+        else -> ""
+    }
+
+    /**
      * 纯函数配声（可单测）：不读写数据库。
      * 优先级（T8.17）：固定绑定（fixed_roles：角色名→音色）> 性别/年龄打分 > 撞音避让 > 兜底。
      */
@@ -50,7 +100,9 @@ object CharacterVoiceAssignService {
         if (voices.isEmpty()) return AssignResult(emptyList())
         val used = HashSet<String>()
         val assignments = mutableListOf<Assignment>()
-        val narrator = pickNarrator(voices, narratorHint)?.also { used.add(it.voiceName) }
+        // 预计算音色元数据（归一化一次，避免每个角色 × 每个音色重复做字符串解析）
+        val traits = voices.associate { it.voiceName to voiceTraitsOf(it) }
+        val narrator = pickNarrator(voices, traits, narratorHint)?.also { used.add(it.voiceName) }
         // 主角优先（T8.13）：名字/身份含"主角/男主/女主"的角色先挑音色，避免被配角先占走最佳匹配
         val ordered = characters.sortedWith(
             compareByDescending<BookCharacter> { if (isLeadLike(it)) 1 else 0 }
@@ -80,7 +132,9 @@ object CharacterVoiceAssignService {
                 BookCharacter.inferGender(listOf(character.name, character.identity, character.biography).joinToString(" "))
             }
             val ageText = listOf(character.name, character.identity, character.biography).joinToString(" ")
-            val ranked = voices.sortedByDescending { score(it, gender, ageText) }
+            val ranked = voices.sortedByDescending {
+                score(it, traits.getValue(it.voiceName), gender, ageText)
+            }
             val preferred = ranked.firstOrNull { it.voiceName !in used }
                 ?: ranked.firstOrNull()
                 ?: return@forEach
@@ -92,7 +146,7 @@ object CharacterVoiceAssignService {
                     characterName = character.name,
                     voiceName = preferred.voiceName,
                     voiceDisplayName = preferred.displayName,
-                    reason = reasonOf(preferred, gender, ageText),
+                    reason = reasonOf(preferred, traits.getValue(preferred.voiceName), gender, ageText),
                     conflict = conflict
                 )
             )
@@ -259,47 +313,44 @@ object CharacterVoiceAssignService {
         return LEAD_KEYWORDS.any { text.contains(it) }
     }
 
-    private fun pickNarrator(voices: List<BuiltinVoice>, hint: String): BuiltinVoice? {
+    private fun pickNarrator(
+        voices: List<BuiltinVoice>,
+        traits: Map<String, VoiceTraits>,
+        hint: String
+    ): BuiltinVoice? {
         voices.firstOrNull { it.voiceName == hint || it.name == hint || it.id == hint }?.let { return it }
         return voices.firstOrNull { it.tags.contains("narration") }
-            ?: voices.firstOrNull { it.gender == "female" && it.age == "youth" }
+            ?: voices.firstOrNull {
+                traits[it.voiceName]?.gender == "female" && traits[it.voiceName]?.age == "youth"
+            }
             ?: voices.firstOrNull()
     }
 
-    private fun score(voice: BuiltinVoice, gender: String, ageText: String): Int {
+    private fun score(voice: BuiltinVoice, traits: VoiceTraits, gender: String, ageText: String): Int {
         var score = 0
-        val voiceGender = when {
-            voice.gender.contains("男") || voice.tags.contains("male") -> "male"
-            voice.gender.contains("女") || voice.tags.contains("female") -> "female"
-            voice.name.contains("男") -> "male"
-            voice.name.contains("女") -> "female"
-            else -> ""
-        }
+        val voiceGender = traits.gender
         if (gender.isNotBlank() && voiceGender == gender) score += 4
         if (gender.isNotBlank() && voiceGender.isNotBlank() && voiceGender != gender) score -= 3
-        val ageTag = when {
-            voice.age == "teen" || voice.tags.contains("teen") || voice.name.contains("少年") -> "teen"
-            voice.age == "aged" || voice.tags.contains("aged") || voice.name.contains("老年") || voice.name.contains("老") -> "aged"
-            voice.age == "youth" || voice.tags.contains("youth") || voice.name.contains("青年") -> "youth"
-            else -> ""
-        }
-        val characterAge = when {
-            ageText.contains("少年") || ageText.contains("少女") || ageText.contains("童") -> "teen"
-            ageText.contains("老") || ageText.contains("年迈") || ageText.contains("长辈") || ageText.contains("父") || ageText.contains("母") -> "aged"
-            ageText.contains("青年") || ageText.contains("年轻") -> "youth"
-            else -> ""
-        }
+        val ageTag = traits.age
+        val characterAge = ageFromText(ageText)
         if (characterAge.isNotBlank() && ageTag == characterAge) score += 3
+        // 明确年龄冲突（如老年角色配少年音色）要扣分，避免只靠"性别对"就抢到最佳
+        if (characterAge.isNotBlank() && ageTag.isNotBlank() && ageTag != characterAge) score -= 1
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) score += 1
         return score
     }
 
-    private fun reasonOf(voice: BuiltinVoice, gender: String, ageText: String): String {
+    private fun reasonOf(
+        voice: BuiltinVoice,
+        traits: VoiceTraits,
+        gender: String,
+        ageText: String
+    ): String {
         val parts = mutableListOf<String>()
-        if (gender.isNotBlank() && (voice.gender.contains("男") || voice.gender.contains("女") ||
-                    voice.tags.contains("male") || voice.tags.contains("female"))
-        ) parts.add("性别一致")
-        if (ageText.isNotBlank()) parts.add("年龄适配")
+        if (gender.isNotBlank() && traits.gender == gender) parts.add("性别一致")
+        if (ageText.isNotBlank() && traits.age.isNotBlank() && ageFromText(ageText) == traits.age) {
+            parts.add("年龄适配")
+        }
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) parts.add("内置")
         return parts.joinToString("·").ifBlank { "默认分配" }
     }

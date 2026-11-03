@@ -203,20 +203,20 @@ object OfflineRoleResolver {
     }
 
     /**
-     * 跨段 cue 的模型判定：对近场窗口（引号前 24 字 + 引号后 24 字）再跑一次短推理，
-     * 取**最靠近引号**且能匹配到已登记角色的模型 cue（窗口越靠后越接近引号 ⇒ 从后往前找）。
+     * 跨段 cue 的模型判定：对近场窗口再跑一次短推理，取**最靠近引号**的模型 cue 人名
+     * （窗口越靠后越接近引号 ⇒ 从后往前取第一个）。
+     *
+     * 只返回名字、不在这里做匹配：调用方需要区分"没有 cue"与"有 cue 但不是已登记角色"
+     * （后者必须判未识别，不能回落字典子串猜测）。
      */
-    private fun cueWindowName(
+    private fun nearestWindowCue(
         window: String,
-        nameMap: Map<String, RoleCharacter>,
         signals: (String) -> NerTextEngine.ParagraphSignals
-    ): RoleCharacter? {
+    ): String? {
         if (window.isBlank()) return null
         val windowSignal = signals(window)
         if (!windowSignal.modelReady) return null
-        return windowSignal.cues.asReversed().firstNotNullOfOrNull { mention ->
-            matchName(mention.name, nameMap)
-        }
+        return windowSignal.cues.asReversed().firstOrNull()?.name
     }
 
     private fun assign(
@@ -256,16 +256,25 @@ object OfflineRoleResolver {
 
         // ③ 端侧 NER cue（AD-16 主路径）：模型分词+词性判出的"名词性词元 + 说话动词 + 冒号/引号"，
         //    取离引号最近的角色名；这是模型判定，不是正则穷举。
+        //    模型明确给出了"人名 cue"却不属于已登记角色（张三丰 vs 张三）⇒ 必须判未识别，
+        //    禁止回落到字典子串匹配（2026-11-03：这正是"近似长名被错配"的来源）。
+        var modelCueRejected = false
         if (signal.modelReady) {
             nearestMention(signal.cues, range.start, range.end)?.let { name ->
-                matchName(name, nameMap)?.let {
-                    return Assigned(it.name, it.id, "ner-cue", CONF_NER_CUE)
+                val matched = matchName(name, nameMap)
+                if (matched != null) {
+                    return Assigned(matched.name, matched.id, "ner-cue", CONF_NER_CUE)
                 }
+                modelCueRejected = true
             }
             // 跨段 cue：preprocessor 的 cueBefore 会带上上一段结尾（"…张三说："），短片段的模型推理很便宜，
             // 用近场窗口再判一次，覆盖"本段没有 cue、cue 落在上一段"的对白（真机 ch=67 这类模型 cue=0 的主因）
-            cueWindowName(nearCue, nameMap, signals)?.let {
-                return Assigned(it.name, it.id, "ner-cue", CONF_NER_CUE)
+            nearestWindowCue(nearCue, signals)?.let { name ->
+                val matched = matchName(name, nameMap)
+                if (matched != null) {
+                    return Assigned(matched.name, matched.id, "ner-cue", CONF_NER_CUE)
+                }
+                modelCueRejected = true
             }
         }
 
@@ -275,7 +284,7 @@ object OfflineRoleResolver {
         // 有 4 处最近名来自上一段，观感就是"张冠李戴"）。
         // 不能用"cue 文本里任意包含"：preprocessor 的 cueBefore 会带上跨段上下文，
         // 上一段的角色名会抢先命中（2026-10-31 回归集实证：s01 第二句被判给张三）
-        if (cueText.isNotBlank()) {
+        if (cueText.isNotBlank() && !modelCueRejected) {
             val sameParagraphBefore = unit.cueBefore.substringAfterLast('\n')
             val sameParagraphAfter = unit.cueAfter.substringBefore('\n')
             nearestKnownName(sameParagraphBefore, sameParagraphAfter, knownNames)?.let { name ->
@@ -373,11 +382,37 @@ object OfflineRoleResolver {
         }
     }
 
+    /**
+     * 名字匹配（模型 cue / 字典命中统一入口）：
+     * ① 正名/别名精确命中；
+     * ② 剥掉常见称谓后缀再命中（"张三大人/李四姐姐/王五前辈" ⇒ 张三/李四/王五）——
+     *    模型常把"人名+称谓"并成一个词元，不剥就永远匹配不到已登记角色（模型占比上不去的主因之一）；
+     * ③ 昵称前缀（"小张三/老李四"）只在剥离后仍能精确命中时接受。
+     * 不做"任意包含"：避免 `张三丰` 被错配给 `张三`。
+     */
     private fun matchName(value: String, nameMap: Map<String, RoleCharacter>): RoleCharacter? {
         val key = normalizeName(value)
         if (key.isBlank()) return null
-        return nameMap[key]
+        nameMap[key]?.let { return it }
+        if (key.length <= 2) return null
+        ADDRESS_SUFFIXES.firstNotNullOfOrNull { suffix ->
+            if (key.endsWith(suffix)) key.removeSuffix(suffix).takeIf { it.length >= 2 } else null
+        }?.let { trimmed -> nameMap[trimmed]?.let { return it } }
+        NICKNAME_PREFIXES.firstNotNullOfOrNull { prefix ->
+            if (key.startsWith(prefix)) key.removePrefix(prefix).takeIf { it.length >= 2 } else null
+        }?.let { trimmed -> nameMap[trimmed]?.let { return it } }
+        return null
     }
+
+    /** 常见称谓后缀（长的在前，避免"姐姐"被"姐"抢先剥成单字） */
+    private val ADDRESS_SUFFIXES = listOf(
+        "大人", "先生", "小姐", "前辈", "老师", "师傅", "同学", "将军", "少爷", "姑娘",
+        "姐姐", "妹妹", "哥哥", "弟弟", "叔叔", "阿姨", "婶婶", "爷爷", "奶奶", "夫人",
+        "姐", "妹", "哥", "弟", "叔", "姨", "婶", "爷", "奶", "兄", "总"
+    )
+
+    /** 昵称前缀（中文口语常见"小X/老X/阿X"） */
+    private val NICKNAME_PREFIXES = listOf("小", "老", "阿")
 
     /** 构建归一化名索引：正名 + 书名号剥离 + 别名（显式循环，避免运算符优先级歧义） */
     fun buildNameIndex(characters: List<RoleCharacter>): Map<String, RoleCharacter> {
