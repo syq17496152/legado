@@ -125,8 +125,10 @@ class ImmersiveStagePolicyTest {
     @Test
     fun `低配闸门覆盖低内存与旧系统`() {
         assertTrue(ImmersiveStagePolicy.shouldReduceMotion(lowRam = true, sdkInt = 33))
-        assertTrue(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 25))
-        assertFalse(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 26))
+        // API ≤28（2018 年及更早机型）也按低配降级：真机 A7x（API 28）播放期 GPU 合成吃紧
+        assertTrue(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 28))
+        assertTrue(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 26))
+        assertFalse(ImmersiveStagePolicy.shouldReduceMotion(lowRam = false, sdkInt = 29))
     }
 
     @Test

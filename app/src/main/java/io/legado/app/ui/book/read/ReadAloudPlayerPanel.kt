@@ -2504,7 +2504,9 @@ private fun FluidBackdropLayer(
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors
 ) {
-    val visualActive = state.foregroundActive && state.playing
+    /** 低配机（低内存或 API≤28）关闭流体动画：GPU 全屏层合成是播放期卡顿主因 */
+    val reducedMotion = remember { isReducedMotionDevice() }
+    val visualActive = state.foregroundActive && state.playing && !reducedMotion
     val shift = if (visualActive) {
         val transition = rememberInfiniteTransition(label = "readAloudFluid")
         val value by transition.animateFloat(

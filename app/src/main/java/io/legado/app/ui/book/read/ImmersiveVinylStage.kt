@@ -97,10 +97,13 @@ internal object ImmersiveStagePolicy {
     fun vinylGrooveCount(lowRam: Boolean): Int = if (lowRam) 7 else 14
 
     /**
-     * 低配闸门：低内存设备或 API < 26（本项目 minSdk 23，老机 GPU 余量更少）统一降级。
-     * 降级动作 = 关粒子 + 纹理环减半，但保留唱片旋转（核心视觉不丢）。
+     * 低配闸门：低内存设备或 API ≤28（2018 年及更早机型 GPU 余量不足）统一降级。
+     * 降级动作 = 关粒子 + 关流体动画 + 纹理环减半，但保留唱片旋转（核心视觉不丢）。
+     *
+     * 2026-11-03 真机取证：OPPO A7x（API 28）播放时 50th 22ms、janky 92%~99%，
+     * 而 `Slow UI thread` 很低 ⇒ 瓶颈是 GPU 全屏层合成；把动画层数压下来是唯一有效手段。
      */
-    fun shouldReduceMotion(lowRam: Boolean, sdkInt: Int): Boolean = lowRam || sdkInt < 26
+    fun shouldReduceMotion(lowRam: Boolean, sdkInt: Int): Boolean = lowRam || sdkInt <= 28
 
     /**
      * 封面缺失时的中心占位字：取书名首个非空白字符，书名也空则用「书」。
@@ -141,7 +144,8 @@ internal object ImmersiveStagePolicy {
     }
 }
 
-private fun isReducedMotionDevice(): Boolean {
+/** 低配判定（供粒子层与流体层共用；`internal` 让同模块的播放面板也能读到同一口径） */
+internal fun isReducedMotionDevice(): Boolean {
     val am = appCtx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
     val lowRam = am?.isLowRamDevice == true
     return ImmersiveStagePolicy.shouldReduceMotion(lowRam, Build.VERSION.SDK_INT)
