@@ -55,6 +55,39 @@ object CharacterVoiceAssignService {
         val moods: Set<String> = emptySet()
     )
 
+    /**
+     * 音色画像（5.1）：把归一化结果对上层暴露，并标记「是否有字段是推断来的」。
+     * 之所以要 [VoiceProfile.inferred]：导入包的 gender/age 常常缺失，只能从 tags/名字猜；
+     * UI 与报告必须能区分「确定的」与「猜的」，否则用户会以为配声性别 100% 可靠。
+     */
+    data class VoiceProfile(
+        val voiceName: String,
+        val gender: String,
+        val age: String,
+        val moods: Set<String>,
+        val inferred: Boolean
+    )
+
+    /** 覆盖率（5.1）：这份音色库能支撑多准的配声（性别/年龄标注比例） */
+    data class VoiceCoverage(val total: Int, val genderKnown: Int, val ageKnown: Int) {
+        val genderPercent: Int get() = percent(genderKnown)
+        val agePercent: Int get() = percent(ageKnown)
+        private fun percent(n: Int): Int = if (total <= 0) 0 else n * 100 / total
+    }
+
+    fun profileOf(voice: BuiltinVoice): VoiceProfile {
+        val traits = voiceTraitsOf(voice)
+        val inferred = (voice.gender.isBlank() && traits.gender.isNotBlank()) ||
+                (voice.age.isBlank() && traits.age.isNotBlank())
+        return VoiceProfile(voice.voiceName, traits.gender, traits.age, traits.moods, inferred)
+    }
+
+    fun coverage(voices: List<BuiltinVoice>): VoiceCoverage = VoiceCoverage(
+        total = voices.size,
+        genderKnown = voices.count { voiceTraitsOf(it).gender.isNotBlank() },
+        ageKnown = voices.count { voiceTraitsOf(it).age.isNotBlank() }
+    )
+
     /** 性别归一化：中文（男/男声/男性）、英文（male/m/man）、tags、名字都能识别 */
     internal fun voiceTraitsOf(voice: BuiltinVoice): VoiceTraits = VoiceTraits(
         gender = normalizeVoiceGender(voice),

@@ -360,6 +360,44 @@ class CharacterVoiceAssignServiceTest {
         assertEquals(unknown.voiceName, result.assignments.first().voiceName)
     }
 
+    /** 5.1 音色画像：显式字段优先；只有靠 tags/名字猜出来的才算 inferred */
+    @Test
+    fun `音色画像区分显式字段与推断`() {
+        val explicit = CharacterVoiceAssignService.profileOf(voice("e1", "male", "youth", name = "显式"))
+        assertFalse(explicit.inferred)
+        assertEquals("male", explicit.gender)
+        assertEquals("youth", explicit.age)
+
+        val inferred = CharacterVoiceAssignService.profileOf(
+            BuiltinVoice(
+                id = "i1", name = "温柔女声·青年", refAudio = "i1/prompt.wav", refText = "稿",
+                origin = BuiltinVoice.ORIGIN_ZIP, tags = listOf("gentle")
+            )
+        )
+        assertTrue(inferred.inferred)
+        assertTrue(inferred.gender.isNotBlank())
+        assertTrue(inferred.age.isNotBlank())
+    }
+
+    /** 5.1 覆盖率：性别/年龄标注比例（四舍五入前按整数百分比） */
+    @Test
+    fun `音色覆盖率按标注数量计算`() {
+        val pool = listOf(
+            voice("a", "male", "youth"),
+            voice("b", "female", ""),
+            BuiltinVoice(
+                id = "c", name = "未知标注", refAudio = "c/prompt.wav", refText = "稿",
+                origin = BuiltinVoice.ORIGIN_ZIP
+            )
+        )
+        val coverage = CharacterVoiceAssignService.coverage(pool)
+        assertEquals(3, coverage.total)
+        assertEquals(2, coverage.genderKnown)
+        assertEquals(1, coverage.ageKnown)
+        assertEquals(66, coverage.genderPercent)
+        assertEquals(33, coverage.agePercent)
+    }
+
     /** 分池标签必须与角色定位一致（报告/排查依赖它） */
     @Test
     fun `分池按主角配角龙套标注`() {

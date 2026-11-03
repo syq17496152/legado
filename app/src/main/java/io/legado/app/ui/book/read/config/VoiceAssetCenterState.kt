@@ -52,7 +52,10 @@ data class AssetFacts(
     val splitRulesReady: Boolean = false,
     val modelBytes: Long = 0L,
     val voiceBytes: Long = 0L,
-    val cacheBytes: Long = 0L
+    val cacheBytes: Long = 0L,
+    /** 音色画像覆盖率（5.1）：性别/年龄有标注的比例，决定配声"性别硬约束"能起多大作用 */
+    val voiceGenderPercent: Int = 0,
+    val voiceAgePercent: Int = 0
 ) {
     val totalBytes: Long get() = modelBytes + voiceBytes + cacheBytes
 }
@@ -84,7 +87,8 @@ object VoiceAssetCenterState {
                 id = "voice",
                 title = "音色库",
                 summary = if (facts.voiceCount > 0) {
-                    "共 ${facts.voiceCount} 个（导入 ${facts.importedVoiceCount} 个）"
+                    "共 ${facts.voiceCount} 个（导入 ${facts.importedVoiceCount} 个）" +
+                            " · 性别标注 ${facts.voiceGenderPercent}% · 年龄标注 ${facts.voiceAgePercent}%"
                 } else {
                     "还没有可用音色：可导入音色包或录制"
                 },

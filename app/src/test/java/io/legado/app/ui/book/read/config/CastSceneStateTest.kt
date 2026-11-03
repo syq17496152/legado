@@ -31,7 +31,8 @@ class CastSceneStateTest {
             storyboardSegments = 0,
             activeTemplateId = CastSceneState.TEMPLATE_MULTI
         )
-        assertEquals("启用离线朗读", snapshot.primaryLabel)
+        // 4.11 开箱即用：未就绪不再把主按钮变成"去启用"，而是直接可听（回落系统语音）
+        assertEquals("开始听书（系统语音）", snapshot.primaryLabel)
         assertTrue(snapshot.statusLine.contains("未就绪"))
         assertFalse(snapshot.engineReady)
         // 多角色卡始终标"推荐"，即使引擎未就绪（引导用户去启用）
@@ -137,6 +138,75 @@ class CastSceneStateTest {
         assertTrue(tips[0].contains("普通朗读"))
         assertTrue(tips[1].contains("沉浸多角色"))
         assertTrue(tips[2].contains("侧拉菜单"))
+    }
+
+    @Test
+    fun `三步引导按引擎音色与开书推进且不阻塞`() {
+        val none = CastSceneState.guideSteps(engineReady = false, voiceCount = 0, hasBook = false)
+        assertEquals(3, none.size)
+        assertTrue(none.none { it.done })
+
+        val noVoice = CastSceneState.guideSteps(engineReady = true, voiceCount = 0, hasBook = true)
+        assertTrue(noVoice[0].done)
+        assertFalse(noVoice[1].done)
+        assertFalse(noVoice[2].done)
+
+        val allReady = CastSceneState.guideSteps(engineReady = true, voiceCount = 174, hasBook = true)
+        assertTrue(allReady.all { it.done })
+    }
+
+    @Test
+    fun `资源概览行包含音色模板配乐与占用`() {
+        assertEquals(
+            "音色 12 · 模板 3 · 配乐 2 · 离线资产 45MB",
+            CastSceneState.resourceLine(12, 3, 2, 45L * 1024 * 1024)
+        )
+    }
+
+    @Test
+    fun `快照按入参产出引导与资源行`() {
+        val snapshot = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 2,
+            assignedCount = 2,
+            storyboardSegments = 8,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            voiceCount = 6,
+            templateCount = 4,
+            bgmCount = 1,
+            storageBytes = 30L * 1024 * 1024
+        )
+        assertTrue(snapshot.guideSteps.all { it.done })
+        assertEquals(
+            "音色 6 · 模板 4 · 配乐 1 · 离线资产 30MB",
+            snapshot.resourceLine
+        )
+    }
+
+    @Test
+    fun `资源行与声音资源中心的 MB 口径一致`() {
+        // 两个页面（听书中心资源行 / 声音资源页头部）对同一份占用必须显示同一个数字，
+        // 否则用户会看到"45MB"与"46MB"两种答案（口径漂移是资源类页面最容易被投诉的点）
+        val bytes = 45L * 1024 * 1024
+        assertEquals(45L, VoiceAssetCenterState.mb(bytes))
+        assertTrue(CastSceneState.resourceLine(1, 1, 1, bytes).contains("离线资产 45MB"))
+    }
+
+    @Test
+    fun `声音资源页音色分区显示画像覆盖率`() {
+        // 5.1：用户要能看出"这份音色库的性别/年龄标注够不够"，否则会误以为性别硬约束 100% 生效
+        val ui = VoiceAssetCenterState.build(
+            AssetFacts(
+                voiceCount = 10,
+                importedVoiceCount = 10,
+                voiceGenderPercent = 95,
+                voiceAgePercent = 60
+            )
+        )
+        val voiceGroup = ui.groups.first { it.id == "voice" }
+        assertTrue(voiceGroup.summary.contains("共 10 个"))
+        assertTrue(voiceGroup.summary.contains("性别标注 95%"))
+        assertTrue(voiceGroup.summary.contains("年龄标注 60%"))
     }
 
     @Test

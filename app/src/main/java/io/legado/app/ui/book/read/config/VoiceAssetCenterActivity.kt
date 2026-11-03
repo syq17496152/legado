@@ -26,6 +26,7 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadAloudBgmTrack
+import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.role.ner.NerModelManager
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
@@ -92,6 +93,9 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
             }.getOrDefault(0)
         }
         val paths = runCatching { BuiltinTtsRuntime.paths() }.getOrNull()
+        // 5.1 覆盖率：性别/年龄有标注的比例（决定性别硬约束的实际效果，用户需要知道）
+        val coverage = runCatching { CharacterVoiceAssignService.coverage(voices) }
+            .getOrDefault(CharacterVoiceAssignService.VoiceCoverage(0, 0, 0))
         return AssetFacts(
             engineReady = profile != null && runCatching { BuiltinTtsRuntime.isReady() }.getOrDefault(false),
             profileTitle = profile?.title.orEmpty(),
@@ -108,7 +112,9 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
             splitRulesReady = paths?.splitRulesFile?.isFile == true,
             modelBytes = storage.modelBytes,
             voiceBytes = storage.voiceBytes,
-            cacheBytes = storage.cacheBytes
+            cacheBytes = storage.cacheBytes,
+            voiceGenderPercent = coverage.genderPercent,
+            voiceAgePercent = coverage.agePercent
         )
     }
 
