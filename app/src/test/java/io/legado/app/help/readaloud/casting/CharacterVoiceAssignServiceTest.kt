@@ -247,4 +247,37 @@ class CharacterVoiceAssignServiceTest {
         assertEquals("v_cold|冷月", result.assignments.first().voiceName)
         assertTrue(result.assignments.first().reason.contains("性格契合"))
     }
+
+    /** 性格 → 年龄倾向兜底：导入包缺气质标签时，至少让「性格」对年龄档位有弱影响 */
+    @Test
+    fun `性格倾向映射到年龄档位`() {
+        assertEquals("youth", CharacterVoiceAssignService.moodAgeAffinity(setOf("lively")))
+        assertEquals("youth", CharacterVoiceAssignService.moodAgeAffinity(setOf("cool")))
+        assertEquals("middle", CharacterVoiceAssignService.moodAgeAffinity(setOf("calm")))
+        assertEquals("aged", CharacterVoiceAssignService.moodAgeAffinity(setOf("majestic")))
+        assertEquals("", CharacterVoiceAssignService.moodAgeAffinity(emptySet()))
+    }
+
+    /** 角色年龄未知 + 性格威严 → 偏向老年档音色（同性别同时长优先级不变，仅弱加分区分） */
+    @Test
+    fun `年龄未知时性格威严偏向成熟音色`() {
+        val narrator = voice(
+            "v_narr", "male", "youth", listOf("male", "youth", "narration"), name = "旁白"
+        )
+        val youthVoice = voice("v_y", "male", "youth", name = "清越")
+        val agedVoice = voice("v_a", "male", "aged", name = "苍劲")
+        val character = BookCharacter(
+            id = 1,
+            name = "陆沉",
+            gender = BookCharacter.GENDER_MALE,
+            roleLevel = BookCharacter.ROLE_MAIN,
+            personality = "威严庄重"
+        )
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character),
+            voices = listOf(narrator, youthVoice, agedVoice)
+        )
+        assertEquals(1, result.assignments.size)
+        assertEquals("v_a|苍劲", result.assignments.first().voiceName)
+    }
 }

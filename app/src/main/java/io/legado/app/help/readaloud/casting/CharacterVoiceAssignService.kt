@@ -79,6 +79,18 @@ object CharacterVoiceAssignService {
         "childish" to listOf("稚嫩", "童声", "奶声", "幼态")
     )
 
+    /**
+     * 性格 → 年龄倾向兜底（纯函数可单测）：
+     * 506 音色导入包只有性别/年龄标签、几乎无气质标注（真机统计 512 音色中仅 6 条含气质词），
+     * 仅靠 tags 契合会让「性格」对配声完全失效 ⇒ 角色年龄未知时按性格倾向做一档弱加分（+1）。
+     */
+    internal fun moodAgeAffinity(moods: Set<String>): String = when {
+        moods.any { it in setOf("childish", "lively", "cool", "gentle") } -> "youth"
+        moods.any { it in setOf("majestic", "husky") } -> "aged"
+        moods.any { it == "calm" } -> "middle"
+        else -> ""
+    }
+
     private fun normalizeVoiceGender(voice: BuiltinVoice): String {
         val own = voice.gender.trim().lowercase()
         if (own.isNotBlank()) {
@@ -392,6 +404,9 @@ object CharacterVoiceAssignService {
         if (characterAge.isNotBlank() && ageTag.isNotBlank() && ageTag != characterAge) score -= 1
         // 性格/气质契合：性别与年龄已相同时，用气质区分（2026-11-03 用户要求"性格"也参与）
         if (characterMoods.isNotEmpty() && traits.moods.any { it in characterMoods }) score += 2
+        // 音色库缺气质标签时的兜底：角色年龄未知时，按性格倾向偏年轻/偏成熟弱加分（+1）
+        val moodAge = moodAgeAffinity(characterMoods)
+        if (characterAge.isBlank() && moodAge.isNotBlank() && ageTag == moodAge) score += 1
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) score += 1
         return score
     }
