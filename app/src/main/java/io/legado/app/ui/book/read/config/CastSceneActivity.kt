@@ -101,6 +101,7 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                         onOpenBgm = { startActivity<ReadAloudBgmManageActivity>() },
                         onOpenTemplates = { showDialogFragment(TtsCastingManageFragment.newInstance()) },
                         onOpenPrebuild = { showDialogFragment(TtsPrebuildDialog.newInstance()) },
+                        onOpenAssets = { startActivity<VoiceAssetCenterActivity>() },
                         onPrimary = ::primaryAction
                     )
                 }
@@ -343,6 +344,7 @@ private fun CastSceneScreen(
     onOpenBgm: () -> Unit,
     onOpenTemplates: () -> Unit,
     onOpenPrebuild: () -> Unit,
+    onOpenAssets: () -> Unit,
     onPrimary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -419,14 +421,25 @@ private fun CastSceneScreen(
                     SceneStat("${snapshot.assignedCount}", "已配音色", Modifier.weight(1f))
                     SceneStat("${snapshot.storyboardSegments}", "本章分镜", Modifier.weight(1f))
                 }
-                // 资源概览：让用户在本页就知道"有什么、占多少"，不必翻到设置里逐项找
+                // 资源概览：让用户在本页就知道"有什么、占多少"，并可一键进「声音资源」看清来源分类
                 if (snapshot.resourceLine.isNotBlank()) {
-                    Text(
-                        text = snapshot.resourceLine,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = snapshot.resourceLine,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AssistChip(
+                            onClick = onOpenAssets,
+                            label = { Text("声音资源") }
+                        )
+                    }
                 }
             }
             // 使用提示：把首次使用要知道的三条说完，页面不至于下半屏全空

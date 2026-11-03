@@ -903,6 +903,12 @@
             android:name=".ui.book.read.config.ReadAloudBgmManageActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false" />
+
+        <!-- 声音资源中心（offline-tts-llm-productization 4.9）：资产来源与占用一页看清 -->
+        <activity
+            android:name=".ui.book.read.config.VoiceAssetCenterActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
         <!-- 朗读用量记录 -->
         <activity
             android:name=".ui.book.read.config.AiReadAloudUsageRecordActivity"
