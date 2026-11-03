@@ -441,6 +441,24 @@ class OfflineRoleResolverTest {
         assertTrue("张三丰不是张三", result.segments[0].characterName.isBlank())
     }
 
+    /** 有模型时，同段只有名字、没有"人名+说话动词"结构 ⇒ 一律不猜（消除正则时代的邻近猜测） */
+    @Test
+    fun `有模型时同段裸名字不参与字典归因`() {
+        val paragraphs = listOf("张三站在门口。", "“你是谁？”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(modelReady = true)
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 6, cueBefore = "张三站在门口。")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertTrue("没有说话动词不得猜说话人", result.segments[0].characterName.isBlank())
+        assertEquals("unknown", result.segments[0].reason)
+    }
+
     /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
     @Test
     fun `无模型时正则 cue 兜底`() {
