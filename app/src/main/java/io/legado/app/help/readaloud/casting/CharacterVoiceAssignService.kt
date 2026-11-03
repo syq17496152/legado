@@ -42,11 +42,42 @@ object CharacterVoiceAssignService {
      * 导入包（506 音色）里 `gender`/`age` 可能是英文（male/female/teen）、中文（男声/中年）或只写在 tags 里，
      * 打分前必须先归一化，否则「性别优先」会全部失效 ⇒ 分配看起来"不分性别"（2026-11-03 用户反馈）。
      */
-    internal data class VoiceTraits(val gender: String, val age: String)
+    internal data class VoiceTraits(
+        val gender: String,
+        val age: String,
+        /** 音色气质（温柔/清冷/沉稳/活泼…），用于与角色性格做契合度加分 */
+        val moods: Set<String> = emptySet()
+    )
 
     /** 性别归一化：中文（男/男声/男性）、英文（male/m/man）、tags、名字都能识别 */
-    internal fun voiceTraitsOf(voice: BuiltinVoice): VoiceTraits =
-        VoiceTraits(gender = normalizeVoiceGender(voice), age = normalizeVoiceAge(voice))
+    internal fun voiceTraitsOf(voice: BuiltinVoice): VoiceTraits = VoiceTraits(
+        gender = normalizeVoiceGender(voice),
+        age = normalizeVoiceAge(voice),
+        moods = moodsFromText(listOf(voice.tags.joinToString(" "), voice.name).joinToString(" "))
+    )
+
+    /**
+     * 气质关键词归一化（性格匹配用）：角色 `personality` 与音色 tags/名字共用一套口径。
+     * 只做"同气质"加分，不做冲突扣分——音色库标注风格不统一，扣分容易把最合适的音色排掉。
+     */
+    internal fun moodsFromText(text: String): Set<String> {
+        if (text.isBlank()) return emptySet()
+        val value = text.lowercase()
+        return MOOD_GROUPS.mapNotNull { (mood, keywords) ->
+            mood.takeIf { keywords.any { keyword -> value.contains(keyword) } }
+        }.toSet()
+    }
+
+    /** 气质分组（key=归一化气质，value=中英文关键词） */
+    private val MOOD_GROUPS = listOf(
+        "gentle" to listOf("温柔", "柔和", "甜美", "软糯", "亲和"),
+        "cool" to listOf("清冷", "冷漠", "淡漠", "冰冷", "高冷"),
+        "calm" to listOf("沉稳", "稳重", "低沉", "成熟", "厚重", "冷静"),
+        "lively" to listOf("活泼", "元气", "俏皮", "灵动", "欢快", "开朗"),
+        "majestic" to listOf("威严", "浑厚", "庄重", "磁性"),
+        "husky" to listOf("沙哑", "烟嗓", "沧桑"),
+        "childish" to listOf("稚嫩", "童声", "奶声", "幼态")
+    )
 
     private fun normalizeVoiceGender(voice: BuiltinVoice): String {
         val own = voice.gender.trim().lowercase()
@@ -140,8 +171,12 @@ object CharacterVoiceAssignService {
                 BookCharacter.inferGender(listOf(character.name, character.identity, character.biography).joinToString(" "))
             }
             val ageText = listOf(character.name, character.identity, character.biography).joinToString(" ")
+            // 性格/气质文本（T8.17 扩展）：人物性格与传记描述用于和音色气质做契合度加分
+            val characterMoods = moodsFromText(
+                listOf(character.personality, character.biography).joinToString(" ")
+            )
             val ranked = voices.sortedByDescending {
-                score(it, traits.getValue(it.voiceName), gender, ageText)
+                score(it, traits.getValue(it.voiceName), gender, ageText, characterMoods)
             }
             val preferred = ranked.firstOrNull { it.voiceName !in used }
                 ?: ranked.firstOrNull()
@@ -154,7 +189,9 @@ object CharacterVoiceAssignService {
                     characterName = character.name,
                     voiceName = preferred.voiceName,
                     voiceDisplayName = preferred.displayName,
-                    reason = reasonOf(preferred, traits.getValue(preferred.voiceName), gender, ageText),
+                    reason = reasonOf(
+                        preferred, traits.getValue(preferred.voiceName), gender, ageText, characterMoods
+                    ),
                     conflict = conflict
                 )
             )
@@ -337,7 +374,13 @@ object CharacterVoiceAssignService {
             ?: voices.firstOrNull()
     }
 
-    private fun score(voice: BuiltinVoice, traits: VoiceTraits, gender: String, ageText: String): Int {
+    private fun score(
+        voice: BuiltinVoice,
+        traits: VoiceTraits,
+        gender: String,
+        ageText: String,
+        characterMoods: Set<String> = emptySet()
+    ): Int {
         var score = 0
         val voiceGender = traits.gender
         if (gender.isNotBlank() && voiceGender == gender) score += 4
@@ -347,6 +390,8 @@ object CharacterVoiceAssignService {
         if (characterAge.isNotBlank() && ageTag == characterAge) score += 3
         // 明确年龄冲突（如老年角色配少年音色）要扣分，避免只靠"性别对"就抢到最佳
         if (characterAge.isNotBlank() && ageTag.isNotBlank() && ageTag != characterAge) score -= 1
+        // 性格/气质契合：性别与年龄已相同时，用气质区分（2026-11-03 用户要求"性格"也参与）
+        if (characterMoods.isNotEmpty() && traits.moods.any { it in characterMoods }) score += 2
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) score += 1
         return score
     }
@@ -355,12 +400,16 @@ object CharacterVoiceAssignService {
         voice: BuiltinVoice,
         traits: VoiceTraits,
         gender: String,
-        ageText: String
+        ageText: String,
+        characterMoods: Set<String> = emptySet()
     ): String {
         val parts = mutableListOf<String>()
         if (gender.isNotBlank() && traits.gender == gender) parts.add("性别一致")
         if (ageText.isNotBlank() && traits.age.isNotBlank() && ageFromText(ageText) == traits.age) {
             parts.add("年龄适配")
+        }
+        if (characterMoods.isNotEmpty() && traits.moods.any { it in characterMoods }) {
+            parts.add("性格契合")
         }
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) parts.add("内置")
         return parts.joinToString("·").ifBlank { "默认分配" }

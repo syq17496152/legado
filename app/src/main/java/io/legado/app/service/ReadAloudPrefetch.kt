@@ -9,6 +9,7 @@ import io.legado.app.help.readaloud.casting.TtsTagSplitter
 import io.legado.app.help.readaloud.casting.TtsVoiceRef
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
+import kotlinx.coroutines.delay
 
 /**
  * AD-09 钩子②：下一段预取（从 `TTSReadAloudService` 抽出守住 G-38 行数门禁）。
@@ -21,8 +22,35 @@ import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
  */
 internal object ReadAloudPrefetch {
 
+    /**
+     * 等当前段"开始出声"的上限：引擎迟迟不回调 `onStart` 时也照常尝试预取（fail-open）。
+     * 取 5s 是为了覆盖冷启动首段的长合成（真机实测单段合成最长 5.4s）。
+     */
+    internal const val PLAYBACK_START_WAIT_MS = 5_000L
+
+    /** 轮询步进（毫秒）：足够细，且不产生可感知的额外开销 */
+    internal const val PLAYBACK_START_POLL_MS = 50L
+
+    /**
+     * 预取时机契约（纯函数可单测）：内置引擎激活时才预取。
+     *
+     * 2026-11-03 真机取证：旧实现等 `utterance()`（整段播完）才预取下一段 ⇒ 段间静默等 1~2s 合成，
+     * 用户听到"一顿一顿"；流水线化后当前段播放期间即可完成下一段合成。
+     */
+    internal fun shouldPrefetch(builtinActive: Boolean): Boolean = builtinActive
+
+    /**
+     * 预取让行契约（纯函数可单测）：当前段尚未出声时继续等待，超过上限后放弃等待直接预取。
+     *
+     * 为什么要等：合成是进程级串行的（[BuiltinTtsRuntime] `synthesisMutex`）；
+     * 若在 speak 提交前就抢锁合成下一段，当前段反而要排在后面 ⇒ 起播被推迟 1~2s。
+     */
+    internal fun shouldWaitForPlaybackStart(playbackStarted: Boolean, waitedMs: Long): Boolean =
+        !playbackStarted && waitedMs < PLAYBACK_START_WAIT_MS
+
     suspend fun prefetchNext(
         builtinActive: Boolean,
+        playbackStarted: () -> Boolean,
         paragraph: String,
         segments: List<CastingSegment>,
         segIndex: Int,
@@ -32,7 +60,12 @@ internal object ReadAloudPrefetch {
         ruleSet: CastingRuleSet,
         fallbackVoiceRef: TtsVoiceRef?
     ) {
-        if (!builtinActive) return
+        if (!shouldPrefetch(builtinActive)) return
+        var waitedMs = 0L
+        while (shouldWaitForPlaybackStart(playbackStarted(), waitedMs)) {
+            delay(PLAYBACK_START_POLL_MS)
+            waitedMs += PLAYBACK_START_POLL_MS
+        }
         val nextSegment = segments.getOrNull(segIndex + 1) ?: return
         val nextRaw = paragraph.substring(
             nextSegment.offsetInParagraph,

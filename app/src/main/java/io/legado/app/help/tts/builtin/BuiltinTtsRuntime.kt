@@ -351,14 +351,29 @@ object BuiltinTtsRuntime {
         }
     }
 
-    /** 预取（AD-09 ②）：实时请求占用时让行；失败静默 */
+    /** 实时请求让行上限：超过即放弃本次预取（绝不无限等待拖住后台） */
+    private const val PREFETCH_YIELD_TIMEOUT_MS = 3_000L
+
+    /**
+     * 预取（AD-09 ②）：实时请求占用时**等待让行**，而不是直接放弃。
+     *
+     * 2026-11-03 流水线化后预取在播放期间发起，但仍可能与当前段合成重叠；
+     * 直接放弃会让"提前发起的预取"落空 ⇒ 段尾仍需现合成，用户仍听到段间停顿。
+     * 等待窗口限 3s（真机单段合成最长 5.4s，超窗说明实时链路本身就慢，此时再抢锁只会更糟），
+     * 失败静默。
+     */
     suspend fun prefetch(
         text: String,
         voiceName: String,
         rate: Float,
         requestGeneration: Long = currentGeneration()
     ): Boolean {
-        if (realtimeBusy) return false
+        val deadline = System.currentTimeMillis() + PREFETCH_YIELD_TIMEOUT_MS
+        while (realtimeBusy) {
+            if (requestGeneration != currentGeneration()) return false
+            if (System.currentTimeMillis() >= deadline) return false
+            delay(50)
+        }
         if (requestGeneration != currentGeneration()) return false
         val audio = runCatching {
             synthesizeToPcm(text, voiceName, rate, requestGeneration)

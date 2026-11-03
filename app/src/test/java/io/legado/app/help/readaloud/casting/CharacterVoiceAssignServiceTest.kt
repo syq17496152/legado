@@ -209,4 +209,42 @@ class CharacterVoiceAssignServiceTest {
         // 空音色不参与撞音（未配声的角色不应被标红）
         assertFalse(CharacterVoiceAssignService.conflictingVoices(rows).contains(""))
     }
+
+    /** 气质归一化：角色性格与音色标签共用同一套分组，才能做"性格契合" */
+    @Test
+    fun `气质关键词归一化覆盖中英文与标签`() {
+        assertEquals(setOf("cool"), CharacterVoiceAssignService.moodsFromText("清冷孤傲"))
+        assertTrue(CharacterVoiceAssignService.moodsFromText("温柔体贴").contains("gentle"))
+        assertTrue(CharacterVoiceAssignService.moodsFromText("沉稳冷静").contains("calm"))
+        assertTrue(CharacterVoiceAssignService.moodsFromText("").isEmpty())
+    }
+
+    /** 性别年龄相同时，用性格气质区分：清冷角色优先拿清冷音色，而不是排在前面的普通音色 */
+    @Test
+    fun `性格契合优先于同性别同年龄音色`() {
+        val narratorVoice = voice(
+            "v_narr", "female", "youth", listOf("female", "youth", "narration"), name = "旁白"
+        )
+        val coldVoice = voice(
+            "v_cold", "female", "youth", listOf("female", "youth", "清冷"), name = "冷月"
+        )
+        val plainVoice = voice(
+            "v_plain", "female", "youth", listOf("female", "youth"), name = "清音"
+        )
+        val character = BookCharacter(
+            id = 1,
+            name = "苏婉",
+            gender = BookCharacter.GENDER_FEMALE,
+            roleLevel = BookCharacter.ROLE_MAIN,
+            personality = "清冷孤傲，言语淡漠"
+        )
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character),
+            voices = listOf(narratorVoice, plainVoice, coldVoice)
+        )
+        assertEquals(1, result.assignments.size)
+        // 旁白占用 narration 音色后，角色应在"普通女声"与"清冷女声"中选清冷那个
+        assertEquals("v_cold|冷月", result.assignments.first().voiceName)
+        assertTrue(result.assignments.first().reason.contains("性格契合"))
+    }
 }

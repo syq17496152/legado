@@ -531,4 +531,86 @@ class OfflineRoleResolverTest {
         assertEquals("张三", result.segments[0].characterName)
         assertEquals("cue-hit", result.segments[0].reason)
     }
+
+    /**
+     * 整段只有引号、无说话动词，线索在相邻旁白段落：
+     * 跨段近场窗口的模型 PER 应给出归属（ner-window），而不是退化为未识别。
+     */
+    @Test
+    fun `跨段近场模型 PER 判定无 cue 对白`() {
+        val paragraphs = listOf("张三靠墙站着，没有回头。", "“你终于来了。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("张三")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    persons = listOf(NerTextEngine.Mention("张三", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 8, cueBefore = "张三靠墙站着，没有回头。\n", roleType = "character")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("ner-window", result.segments[0].reason)
+    }
+
+    /** 跨段近场窗口内的名字若不是已登记角色，不得猜测（仍然是"不猜"原则） */
+    @Test
+    fun `跨段近场未登记名字不猜`() {
+        val paragraphs = listOf("王五靠墙站着。", "“你终于来了。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("王五")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    persons = listOf(NerTextEngine.Mention("王五", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 8, cueBefore = "王五靠墙站着。\n", roleType = "character")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertTrue("王五未登记不得归因", result.segments[0].characterName.isBlank())
+    }
+
+    /** 同段 cue 已命中时走 ner-cue，不被跨段 ner-window 抢判（置信更高者优先） */
+    @Test
+    fun `同段 cue 优先于跨段近场`() {
+        val paragraphs = listOf("张三在旁边。", "李四说：“走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            NerTextEngine.ParagraphSignals(
+                modelReady = true,
+                cues = if (text.contains("李四")) {
+                    val at = text.indexOf("李四")
+                    listOf(NerTextEngine.Mention("李四", at, at + 2))
+                } else emptyList(),
+                persons = if (text.contains("张三")) {
+                    val at = text.indexOf("张三")
+                    listOf(NerTextEngine.Mention("张三", at, at + 2))
+                } else emptyList()
+            )
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 3, 9, cueBefore = "张三在旁边。\n李四说：")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("李四", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
 }

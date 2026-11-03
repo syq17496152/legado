@@ -40,9 +40,14 @@ import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 
@@ -128,6 +133,20 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    /**
+     * 预取作用域（AD-09 ②）：**与当前段播放并行**起跑（由 [startedUtteranceId] 对齐播放起点）。
+     * 2026-11-03 真机取证：旧实现在 `utterance()` 返回后才预取下一段 ⇒ 每段说完再等 1~2s 合成，
+     * 用户感知就是"TTS 朗读一顿一顿"。每段合成均 1.9s、音频均 2.8s，流水线化后下一段可零等待衔接。
+     */
+    private val prefetchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * 多角色段"已开始播放"的 utteranceId（由 [TTSUtteranceListener.onStart] 写入）。
+     * 预取据此等到当前段真正出声后再合成下一段：既不抢占合成锁拖慢当前段起播，又能与播放并行。
+     */
+    @Volatile
+    private var startedUtteranceId = ""
+
     // init 看门狗（AD-03：约 8s）
     private val initWatchdog = Runnable {
         if (ttsInitFinish || fallbackInit) return@Runnable
@@ -168,6 +187,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     override fun onDestroy() {
         super.onDestroy()
         removeWatchdog()
+        prefetchScope.cancel()
         clearTTS()
         ReadAloudRoleBadge.clear()
         ReadAloudBgmPlayer.stop()
@@ -476,6 +496,8 @@ class TTSReadAloudService : BaseReadAloudService() {
                 BuiltinTtsRuntime.isActiveEngine(this, ReadAloud.currentRoute.engineValue)
         // T3.1/T3.3 量化埋点：新一轮朗读重置段间隔计时与首段预热标记
         ReadAloudTrace.reset()
+        // 跨章复用同一段落/偏移时 utteranceId 会重复 ⇒ 旧章残留的播放起点不得让新章预取提前起跑
+        startedUtteranceId = ""
         val chapterIndex = textChapter.chapter.index
         if (builtinActive) {
             runCatching {
@@ -632,6 +654,24 @@ class TTSReadAloudService : BaseReadAloudService() {
                     }
                     ReadAloudTrace.markWarmed()
                 }
+                // AD-09 钩子②（流水线化）：**先**起下一段预取任务（等当前段出声后再合成），再播当前段。
+                // 旧实现放在 utterance 之后 ⇒ 每段之间要等 1~2s 合成（TTS 朗读卡顿的根因）。
+                prefetchScope.launch {
+                    runCatching {
+                        ReadAloudPrefetch.prefetchNext(
+                            builtinActive = builtinActive,
+                            playbackStarted = { startedUtteranceId == utteranceId },
+                            paragraph = paragraph,
+                            segments = segments,
+                            segIndex = segIndex,
+                            roleBookKey = roleBookKey,
+                            chapterIndex = chapterIndex,
+                            paragraphIndex = p,
+                            ruleSet = ruleSet,
+                            fallbackVoiceRef = fallbackVoiceRef
+                        )
+                    }
+                }
                 val gapStart = ReadAloudTrace.begin()
                 val completed = source.utterance(
                     speechText,
@@ -649,18 +689,6 @@ class TTSReadAloudService : BaseReadAloudService() {
                     )
                     return
                 }
-                // AD-09 钩子②：下一段预取（内置引擎激活时；静默失败，不拖慢当前句）
-                ReadAloudPrefetch.prefetchNext(
-                    builtinActive = builtinActive,
-                    paragraph = paragraph,
-                    segments = segments,
-                    segIndex = segIndex,
-                    roleBookKey = roleBookKey,
-                    chapterIndex = chapterIndex,
-                    paragraphIndex = p,
-                    ruleSet = ruleSet,
-                    fallbackVoiceRef = fallbackVoiceRef
-                )
                 readAloudNumber += text.length
                 // 翻页判定（对齐原 onStart/onRangeStart 语义）
                 textChapter?.let {
@@ -779,8 +807,11 @@ class TTSReadAloudService : BaseReadAloudService() {
         private val TAG = "TTSUtteranceListener"
 
         override fun onStart(s: String) {
-            // 多角色段：翻页判定由 speakMultiRole 循环内处理，legacy onStart 逻辑不适用
-            if (utteranceSink.contains(s)) return
+            // 多角色段：记录播放起点供下一段预取对齐（不推进任何游标）
+            if (utteranceSink.contains(s)) {
+                startedUtteranceId = s
+                return
+            }
             LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
             textChapter?.let {
                 if (contentList[nowSpeak].matches(AppPattern.notReadAloudRegex)) {

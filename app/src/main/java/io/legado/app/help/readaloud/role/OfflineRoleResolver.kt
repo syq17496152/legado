@@ -49,6 +49,8 @@ object OfflineRoleResolver {
     private const val CONF_LEARNED_CUE = 0.92
     private const val CONF_NER_CUE = 0.90
     private const val CONF_NER = 0.78
+    /** 跨段近场 PER：证据比同段弱（名字可能在相邻段落里只是被提到），但强于对话锁 */
+    private const val CONF_NER_WINDOW = 0.72
     private const val CONF_LOCK = 0.70
     private const val CONF_TURN = 0.60
     private const val OVERLAP_THRESHOLD = 0.5
@@ -205,23 +207,6 @@ object OfflineRoleResolver {
         }.minByOrNull { it.second }?.first
     }
 
-    /**
-     * 跨段 cue 的模型判定：对近场窗口再跑一次短推理，取**最靠近引号**的模型 cue 人名
-     * （窗口越靠后越接近引号 ⇒ 从后往前取第一个）。
-     *
-     * 只返回名字、不在这里做匹配：调用方需要区分"没有 cue"与"有 cue 但不是已登记角色"
-     * （后者必须判未识别，不能回落字典子串猜测）。
-     */
-    private fun nearestWindowCue(
-        window: String,
-        signals: (String) -> NerTextEngine.ParagraphSignals
-    ): String? {
-        if (window.isBlank()) return null
-        val windowSignal = signals(window)
-        if (!windowSignal.modelReady) return null
-        return windowSignal.cues.asReversed().firstOrNull()?.name
-    }
-
     private fun assign(
         unit: ReadAloudRoleUnit,
         paragraph: String,
@@ -257,6 +242,16 @@ object OfflineRoleResolver {
             }
         }
 
+        // 跨段近场窗口（引号两侧各 40 字）的模型推理结果：③ cue 与 ④.5 PER 复用同一次推理。
+        // 延迟计算：同段 cue 已命中时无需再跑一次短推理（低配机每章几十次推理会拖慢章开始）。
+        val windowSignal by lazy {
+            if (signal.modelReady) {
+                runCatching { signals(nearCue) }.getOrNull()
+            } else null
+        }
+        // 引号在窗口中的位置（窗口 = cueBefore 末 40 字 + 空格 + cueAfter 前 40 字）
+        val windowQuoteIndex = unit.cueBefore.takeLast(40).length + 1
+
         // ③ 端侧 NER cue（AD-16 主路径）：模型分词+词性判出的"名词性词元 + 说话动词 + 冒号/引号"，
         //    取离引号最近的角色名；这是模型判定，不是正则穷举。
         //    模型明确给出了"人名 cue"却不属于已登记角色（张三丰 vs 张三）⇒ 必须判未识别，
@@ -272,7 +267,7 @@ object OfflineRoleResolver {
             }
             // 跨段 cue：preprocessor 的 cueBefore 会带上上一段结尾（"…张三说："），短片段的模型推理很便宜，
             // 用近场窗口再判一次，覆盖"本段没有 cue、cue 落在上一段"的对白（真机 ch=67 这类模型 cue=0 的主因）
-            nearestWindowCue(nearCue, signals)?.let { name ->
+            windowSignal?.takeIf { it.modelReady }?.cues?.asReversed()?.firstOrNull()?.name?.let { name ->
                 val matched = matchName(name, nameMap)
                 if (matched != null) {
                     return Assigned(matched.name, matched.id, "ner-cue", CONF_NER_CUE)
@@ -343,6 +338,19 @@ object OfflineRoleResolver {
         val hasExplicitCue = cueNames(cueText).isNotEmpty()
         if (sameParagraph && !hasExplicitCue && lastSpeaker != null && unit.roleType == "character") {
             return Assigned(lastSpeaker.name, lastSpeaker.id, "lock", CONF_LOCK)
+        }
+
+        // ⑥.5 模型 PER 跨段近场（引号前 40 / 后 20 字，模型实体而非字典猜名）：
+        //      对白段常常整段只有引号、没有说话动词，归属线索落在相邻旁白段落（"张三靠墙站着。"）。
+        //      该步只在同段没有任何显式归属时启用；模型若已明确给出"非登记角色"名字则不得猜测。
+        val window = windowSignal
+        if (window != null && window.modelReady && !modelCueRejected) {
+            nearestMention(window.persons, windowQuoteIndex, windowQuoteIndex)
+                ?.let { name ->
+                    matchName(name, nameMap)?.let {
+                        return Assigned(it.name, it.id, "ner-window", CONF_NER_WINDOW)
+                    }
+                }
         }
 
         // ⑦ 对话轮转（换段后的无名对白：在 ≤3 已知角色中取与上一句不同的一个）
@@ -522,7 +530,8 @@ object OfflineRoleResolver {
                     AppLog.putDebugWithTag(
                         AppLog.TAG_TTS_TRACE,
                         "roleResolve ch=$chapterIndex nerCue=${byReason["ner-cue"] ?: 0} " +
-                            "ner=${byReason["ner"] ?: 0} cue=${byReason["cue-hit"] ?: 0} " +
+                            "ner=${byReason["ner"] ?: 0} win=${byReason["ner-window"] ?: 0} " +
+                            "cue=${byReason["cue-hit"] ?: 0} " +
                             "lock=${byReason["lock"] ?: 0} turn=${byReason["turn-taking"] ?: 0} " +
                             "unknown=${byReason["unknown"] ?: 0} modelCues=${result.modelCueSpans}",
                         level = AppLog.Level.INFO
