@@ -184,6 +184,12 @@ class CharacterVoiceAssignServiceTest {
         assertEquals("v_aged|苍老", result.assignments.first().voiceName)
     }
 
+    /** 用户手动点「重新配声」必须重算既有绑定，否则算法升级对老用户永不生效 */
+    @Test
+    fun `手动重新配声必须覆盖既有绑定`() {
+        assertTrue(CharacterVoiceAssignService.manualAssignOverwrites())
+    }
+
     @Test
     fun `角色配音行是否已配声只看音色字段`() {
         assertTrue(CharacterVoiceAssignService.RoleVoiceRow(1, "张三", "male", 0, "a|男", "男").configured)

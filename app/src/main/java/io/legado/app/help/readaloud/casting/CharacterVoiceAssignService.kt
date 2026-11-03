@@ -88,6 +88,14 @@ object CharacterVoiceAssignService {
     }
 
     /**
+     * 手动「重新配声」是否覆盖既有绑定（纯函数，便于单测锁定语义）。
+     *
+     * 返回 true：用户主动点"重新配声"就必须重算所有角色；若沿用 overwrite=false，
+     * 算法升级（性别/年龄归一化）对已配过声的用户永远不生效（2026-11-03 真机实证：57 条旧绑定被跳过）。
+     */
+    fun manualAssignOverwrites(): Boolean = true
+
+    /**
      * 纯函数配声（可单测）：不读写数据库。
      * 优先级（T8.17）：固定绑定（fixed_roles：角色名→音色）> 性别/年龄打分 > 撞音避让 > 兜底。
      */
@@ -172,8 +180,11 @@ object CharacterVoiceAssignService {
         val voices = BuiltinTtsRuntime.voices()
         if (voices.isEmpty()) return@withContext AssignResult(emptyList())
         val aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+        // 手动入口（UI「重新配声」）传 overwrite=false，但算法升级必须能重算旧绑定，
+        // 否则性别/年龄归一化对已配过声的用户永远不生效（2026-11-03 真机实证：57 条旧绑定被跳过）。
+        val effectiveOverwrite = overwrite || manualAssignOverwrites()
         val planned = plan(
-            characters = characters.filter { overwrite || it.speechRouteJson.isBlank() },
+            characters = characters.filter { effectiveOverwrite || it.speechRouteJson.isBlank() },
             voices = voices,
             narratorHint = aliasStore.narratorVoice(bookKey).orEmpty(),
             fixedVoiceMap = aliasStore.merged(bookKey).roles
