@@ -281,6 +281,17 @@ object OfflineRoleResolver {
             }
         }
 
+        // ③.5 模型 PER 紧邻（引号前 12 / 后 10 字）：引号紧挨人名时，模型实体比字典字符串匹配更可信，
+        //     必须优先于 ④ 的字典命中（否则"模型判定占比"会被字典吃掉，观感仍是规则匹配）。
+        if (signal.modelReady) {
+            nearestMention(signal.persons, range.start, range.end, maxBefore = 12, maxAfter = 10)
+                ?.let { name ->
+                    matchName(name, nameMap)?.let {
+                        return Assigned(it.name, it.id, "ner", CONF_NER)
+                    }
+                }
+        }
+
         // ④ 字典 cue 命中：只认**本段**前缀/后缀里离引号最近的角色名，且必须存在"人名+说话动词"结构。
         // 跨段前缀（上一段末尾 40 字）里的名字交给 ③ 的模型窗口判定 —— 模型能判"人名+说话动词"结构，
         // 字典只做同段精确匹配；否则上一段旁白提到谁，下一段对白就判给谁（真机 ch=120 回归：16 处引号中

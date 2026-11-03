@@ -389,6 +389,33 @@ class OfflineRoleResolverTest {
         assertEquals("ner-cue", result.segments[0].reason)
     }
 
+    /** 引号紧挨人名时，模型 PER 必须优先于字典匹配（否则模型占比被字典吃掉） */
+    @Test
+    fun `引号紧邻模型 PER 时优先判 ner`() {
+        val paragraph = "张三在旁边冷笑。“走吧。”"
+        val quoteAt = paragraph.indexOf('“')
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("张三")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    persons = listOf(NerTextEngine.Mention("张三", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            listOf(paragraph),
+            listOf(unit("u1", 0, quoteAt, paragraph.length, cueBefore = paragraph.substring(0, quoteAt))),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("ner", result.segments[0].reason)
+    }
+
     /** 模型 cue 带称谓后缀（"张三大人"）应剥壳后命中角色，而不是当未识别 */
     @Test
     fun `模型 cue 带称谓后缀仍能命中`() {
