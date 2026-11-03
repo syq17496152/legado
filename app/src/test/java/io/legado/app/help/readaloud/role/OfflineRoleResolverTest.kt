@@ -299,6 +299,42 @@ class OfflineRoleResolverTest {
         assertEquals("ner-cue", result.segments[0].reason)
     }
 
+    /** 有模型时，上一段前缀里的角色名不得被字典 cue 抢判（跨段归属交给模型窗口） */
+    @Test
+    fun `模型就绪时跨段名字不参与字典归因`() {
+        val paragraphs = listOf("张三转身看向李四。", "“你是谁？”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(modelReady = true)
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 6, cueBefore = "张三转身看向李四。\n")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertTrue("跨段名字不得抢判", result.segments[0].characterName.isBlank())
+        assertEquals("unknown", result.segments[0].reason)
+    }
+
+    /** 无模型时保留跨段字典兜底（老设备/未下载模型功能不断档） */
+    @Test
+    fun `无模型时跨段名字仍可兜底`() {
+        val paragraphs = listOf("张三转身看向李四。", "“你是谁？”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = {
+            NerTextEngine.ParagraphSignals(modelReady = false)
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 6, cueBefore = "张三转身看向李四。\n")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("李四", result.segments[0].characterName)
+        assertEquals("cue-hit", result.segments[0].reason)
+    }
+
     /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
     @Test
     fun `无模型时正则 cue 兜底`() {

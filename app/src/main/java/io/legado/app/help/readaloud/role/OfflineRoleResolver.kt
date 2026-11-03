@@ -269,13 +269,26 @@ object OfflineRoleResolver {
             }
         }
 
-        // ④ 字典 cue 命中：取**离引号最近**的角色名（前文 lastIndexOf、后文 indexOf）。
+        // ④ 字典 cue 命中：只认**本段**前缀/后缀里离引号最近的角色名。
+        // 跨段前缀（上一段末尾 40 字）里的名字交给 ③ 的模型窗口判定 —— 模型能判"人名+说话动词"结构，
+        // 字典只做同段精确匹配；否则上一段旁白提到谁，下一段对白就判给谁（真机 ch=120 回归：16 处引号中
+        // 有 4 处最近名来自上一段，观感就是"张冠李戴"）。
         // 不能用"cue 文本里任意包含"：preprocessor 的 cueBefore 会带上跨段上下文，
-        // 上一段的角色名会抢先命中 ⇒ 张冠李戴（2026-10-31 回归集实证：s01 第二句被判给张三）
+        // 上一段的角色名会抢先命中（2026-10-31 回归集实证：s01 第二句被判给张三）
         if (cueText.isNotBlank()) {
-            nearestKnownName(unit.cueBefore, unit.cueAfter, knownNames)?.let { name ->
+            val sameParagraphBefore = unit.cueBefore.substringAfterLast('\n')
+            val sameParagraphAfter = unit.cueAfter.substringBefore('\n')
+            nearestKnownName(sameParagraphBefore, sameParagraphAfter, knownNames)?.let { name ->
                 matchName(name, nameMap)?.let {
                     return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
+                }
+            }
+            // 无模型时保留旧的跨段兜底（老设备/未下载模型不得功能断档）
+            if (!signal.modelReady) {
+                nearestKnownName(unit.cueBefore, unit.cueAfter, knownNames)?.let { name ->
+                    matchName(name, nameMap)?.let {
+                        return Assigned(it.name, it.id, "cue-hit", CONF_CUE)
+                    }
                 }
             }
         }
