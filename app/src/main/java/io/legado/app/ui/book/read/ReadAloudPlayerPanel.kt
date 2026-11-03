@@ -2524,14 +2524,13 @@ private fun FluidBackdropLayer(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
-                // 性能要点（2026-11-03 真机：播放中 janky 92%、50th 22ms；暂停 0 帧）：
-                // 渐变只画一次，每帧仅更新合成层的平移/缩放，不再全屏重绘 linearGradient + 3 个大半径 radialGradient。
-                translationX = ImmersiveStagePolicy.fluidTranslationPx(shift, size.width)
-                scaleX = ImmersiveStagePolicy.FLUID_LAYER_SCALE
-                scaleY = ImmersiveStagePolicy.FLUID_LAYER_SCALE
+                // 性能要点（2026-11-03 真机：播放中 janky 92%~99%，Slow UI thread 很低 ⇒ GPU 合成瓶颈）：
+                // 渐变只画一次，每帧仅改合成层 alpha（纯混合，不重绘、不重采样）；
+                // 试过的全屏平移+放大方案会让 GPU 每帧重采样整屏，实测反而更卡。 
+                alpha = ImmersiveStagePolicy.fluidLayerAlpha(shift)
             }
     ) {
-        // 绘制坐标固定为 0 位移；视觉位移由上面的 graphicsLayer 承担
+        // 渐变几何固定不动；动的只是整层 alpha（呼吸感由 fluidLayerAlpha 驱动）
         val drawShift = 0f
         drawRect(
             brush = Brush.linearGradient(

@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -128,23 +127,18 @@ internal object ImmersiveStagePolicy {
     }
 
     /**
-     * 流体背景层位移（像素）：把 shift 分数转成合成层平移。
+     * 流体背景层的透明度呼吸（0.90..1.00）：shift ∈ [-0.10, 0.10] 线性映射。
      *
-     * 性能要点（2026-11-03 真机取证：播放中 janky 92%、50th 22ms；暂停后 0 帧）：
-     * 旧实现每帧重绘「全屏 linearGradient + 3 个全屏大半径 radialGradient」，单帧绘制成本
-     * 直接超过 16.7ms 预算；改为渐变只画一次、每帧仅更新 layer translationX ⇒ 绘制归零。
+     * 性能要点（2026-11-03 真机取证：播放中 janky 92%~99%、50th 20~22ms；暂停后 0 帧；
+     * `Slow UI thread` 很低而 `Janky` 高 ⇒ 瓶颈在 GPU 合成，不是绘制）：
+     * 旧实现每帧重绘「全屏 linearGradient + 3 个全屏大半径 radialGradient」；
+     * 若再叠加全屏平移/放大又会让 GPU 每帧重采样整屏（实测反而更卡）。
+     * 最终选择「渐变只画一次 + 每帧仅改 layer alpha」⇒ 无重绘、无重采样，只多一次混合。
      */
-    fun fluidTranslationPx(shift: Float, widthPx: Float): Float = shift * widthPx
-
-    /** 流体层放大倍数：平移 ±10% 后四边不露底色（1.25 足够覆盖） */
-    const val FLUID_LAYER_SCALE = 1.25f
-
-    /**
-     * 粒子层循环位移（像素）：两层首尾相接（[secondLayer]=false 取 [0,1)，true 取 [-1,0)），
-     * 平移即可无缝循环 ⇒ 粒子的 Canvas 只在组合时画一次，不再每帧重绘 26 个圆。
-     */
-    fun particleLayerTranslationPx(progress: Float, heightPx: Float, secondLayer: Boolean): Float =
-        (progress - if (secondLayer) 1f else 0f) * heightPx
+    fun fluidLayerAlpha(shift: Float): Float {
+        val clamped = shift.coerceIn(-0.10f, 0.10f)
+        return 0.90f + (clamped + 0.10f) / 0.20f * 0.10f
+    }
 }
 
 private fun isReducedMotionDevice(): Boolean {
@@ -338,35 +332,21 @@ internal fun ImmersiveParticleLayer(
         ),
         label = "immersiveParticleProgress"
     )
-    // 性能要点（2026-11-03 真机：播放中 janky 92%）：粒子只在组合时画一次，
-    // 每帧仅更新两层合成层的 translationY（首尾相接做无缝循环），不再全屏重绘 26 个圆。
-    Box(modifier = modifier.fillMaxSize().clipToBounds()) {
-        repeat(2) { layer ->
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationY = ImmersiveStagePolicy.particleLayerTranslationPx(
-                            progress = progress,
-                            heightPx = size.height,
-                            secondLayer = layer == 1
-                        )
-                    }
-            ) {
-                repeat(count) { i ->
-                    val phaseX = ImmersiveStagePolicy.particlePhase(seed, i * 3)
-                    val phaseY = ImmersiveStagePolicy.particlePhase(seed, i * 3 + 1)
-                    val phaseA = ImmersiveStagePolicy.particlePhase(seed, i * 3 + 2)
-                    val radius = (1.2f + phaseA * 1.8f).dp.toPx()
-                    val x = phaseX * size.width
-                    val y = phaseY * size.height
-                    drawCircle(
-                        color = colors.primaryText.copy(alpha = 0.10f + phaseA * 0.10f),
-                        radius = radius,
-                        center = Offset(x, y)
-                    )
-                }
-            }
+    // 粒子保持**单层**每帧重绘：双层平移看起来更省，实则多一路全屏合成层，
+    // 低端机上 GPU 合成是瓶颈（2026-11-03 实测双层版本 janky 反而升到 98.8%）。
+    Canvas(modifier = modifier.fillMaxSize()) {
+        repeat(count) { i ->
+            val phaseX = ImmersiveStagePolicy.particlePhase(seed, i * 3)
+            val phaseY = ImmersiveStagePolicy.particlePhase(seed, i * 3 + 1)
+            val phaseA = ImmersiveStagePolicy.particlePhase(seed, i * 3 + 2)
+            val radius = (1.2f + phaseA * 1.8f).dp.toPx()
+            val x = phaseX * size.width
+            val y = ((phaseY + progress) % 1f) * size.height
+            drawCircle(
+                color = colors.primaryText.copy(alpha = 0.10f + phaseA * 0.10f),
+                radius = radius,
+                center = Offset(x, y)
+            )
         }
     }
 }
