@@ -40,8 +40,9 @@ object OfflineRoleCacheStore {
     /**
      * 归因算法版本（缓存命名空间）。AD-16 主路径改为「端侧 NER cue/PER」后必须升版：
      * 旧版（纯正则 cue）产出的分镜缓存不可复用，否则用户看到的仍是旧判定。
+     * v3：字典 cue 收紧为「仅本段名字」（跨段名字交模型窗口判定）⇒ 同输入旧缓存会得到不同结果。
      */
-    const val MODE_PREFIX = "offline-ner-v2"
+    const val MODE_PREFIX = "offline-ner-v3"
     private const val SCHEMA = "playback-v1"
 
     fun mode(): String = "$MODE_PREFIX|${ReadAloudRolePreprocessor.VERSION}"
