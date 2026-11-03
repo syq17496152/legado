@@ -335,6 +335,32 @@ class OfflineRoleResolverTest {
         assertEquals("cue-hit", result.segments[0].reason)
     }
 
+    /** 跨段前缀的合法 cue（上一段以「张三说：」结尾）由模型窗口判定，不因收紧字典而丢失 */
+    @Test
+    fun `跨段落 cue 由模型窗口判定`() {
+        val paragraphs = listOf("张三说：", "“我们走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("张三")
+            if (at >= 0 && text.contains("说")) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    cues = listOf(NerTextEngine.Mention("张三", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 6, cueBefore = "张三说：\n")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
+
     /** 无模型时正则兜底路径仍可用（老设备/未下载模型不得功能断档） */
     @Test
     fun `无模型时正则 cue 兜底`() {
