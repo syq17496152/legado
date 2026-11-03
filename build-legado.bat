@@ -46,6 +46,16 @@ if /i "%~1"=="-r" set "BUILD_TYPE=release"
 set "APP_VERSION="
 if not "%~2"=="" set "APP_VERSION=%~2"
 
+:: ABI 渠道（offline-tts-llm-productization 1.5 / S1 单 ABI 分包，2026-11-03）
+:: 用法：set LEGADO_ABI=arm64|x86_64|arm32|both 再调用本脚本（build_and_smoke.py 会按设备 ABI 自动设置）。
+:: 缺省：debug=arm64（真机交付包，单 ABI 省 ~56MB）；release=both（arm64+arm32 保旧机型）。
+:: 排障对比才用 both —— 双 ABI 包体积超预算，禁止交付（audit_apk_size.py 会拦）。
+set "ABI_TARGET=%LEGADO_ABI%"
+if "%ABI_TARGET%"=="" (
+    if "%BUILD_TYPE%"=="release" (set "ABI_TARGET=both") else (set "ABI_TARGET=arm64")
+)
+echo   ABI target : %ABI_TARGET%
+
 :: Final applicationId（2026-09-23 取消共存包，仅 io.legado.miss.app）
 set "FINAL_APP_ID=%DEFAULT_APP_ID%"
 
@@ -110,8 +120,13 @@ echo ============================================================
 echo.
 
 :: Assemble optional Gradle -P flags (explicit version for 双包同版本发版)
-set "P_FLAGS="
+set "P_FLAGS=-PabiTarget=%ABI_TARGET%"
 if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
+:: 交付用测试包默认关闭 debuggable（R8 optimize 模式，dex 30.3MB→12.5MB）；
+:: 仅排障需要 IDE attach 时 set LEGADO_TEST_DEBUGGABLE=true（该产物不得交付）。
+if "%BUILD_TYPE%"=="debug" (
+    if "%LEGADO_TEST_DEBUGGABLE%"=="" (set "P_FLAGS=%P_FLAGS% -PtestDebuggable=false") else (set "P_FLAGS=%P_FLAGS% -PtestDebuggable=%LEGADO_TEST_DEBUGGABLE%")
+)
 
 :: Build with optional Gradle project properties + transient-lock auto-retry
 :: 2026-09-03 local-build-speedup（P1/P1b）：
@@ -178,9 +193,13 @@ echo ============================================================
 echo.
 
 set "APK_FOUND=0"
-:: 根据包类型确定子目录名：release=release, debug=test
+:: 根据包类型 + ABI 渠道确定子目录名：release=release；debug 单 ABI 分包 test / test-x86_64 / test-arm32
 set "APK_SUBDIR=test"
 if "%BUILD_TYPE%"=="release" set "APK_SUBDIR=release"
+if "%BUILD_TYPE%"=="debug" (
+    if "%ABI_TARGET%"=="x86_64" set "APK_SUBDIR=test-x86_64"
+    if "%ABI_TARGET%"=="arm32" set "APK_SUBDIR=test-arm32"
+)
 set "DIST_DIR=%PROJECT_DIR%\output\apk\%APK_SUBDIR%"
 set "APK_BUILD_DIR=%APK_OUTPUT_DIR%\app\%BUILD_TYPE%"
 if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
