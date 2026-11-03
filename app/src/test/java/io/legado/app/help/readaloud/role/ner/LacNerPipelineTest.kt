@@ -139,6 +139,61 @@ class LacNerPipelineTest {
         assertTrue(LacNerPostProcessor.cueCandidates(tokens).isEmpty())
     }
 
+    /** 人名被 4 个动作/修饰词元隔开时仍要命中（回看窗口 3 → 5，真机 ch651 有 4 段此类漏召回） */
+    @Test
+    fun `人名被动作短语隔开五个词元仍命中`() {
+        val tokens = listOf(
+            LacDecoder.Token("张三", "nr", 0, 2),
+            LacDecoder.Token("抬眼", "v", 2, 4),
+            LacDecoder.Token("看", "v", 4, 5),
+            LacDecoder.Token("了", "u", 5, 6),
+            LacDecoder.Token("一眼", "m", 6, 8),
+            LacDecoder.Token("说道", "v", 8, 10),
+            LacDecoder.Token("：", "w", 10, 11)
+        )
+        assertEquals(listOf("张三"), LacNerPostProcessor.cueCandidates(tokens).map { it.name })
+    }
+
+    /** 窗口扩大后代词仍然阻断（不得跨代词把前文名字当说话人） */
+    @Test
+    fun `扩大回看窗口后代词仍然阻断`() {
+        val tokens = listOf(
+            LacDecoder.Token("张三", "nr", 0, 2),
+            LacDecoder.Token("他", "r", 2, 3),
+            LacDecoder.Token("冷冷", "d", 3, 5),
+            LacDecoder.Token("地", "u", 5, 6),
+            LacDecoder.Token("看", "v", 6, 7),
+            LacDecoder.Token("了一眼", "m", 7, 10),
+            LacDecoder.Token("说道", "v", 10, 12),
+            LacDecoder.Token("：", "w", 12, 13)
+        )
+        assertTrue(LacNerPostProcessor.cueCandidates(tokens).isEmpty())
+    }
+
+    /** 复杂词性（vn/vd/xc 等）不得阻断回看：它们是网文动作短语的常见标注 */
+    @Test
+    fun `复合词性不阻断回看`() {
+        val tokens = listOf(
+            LacDecoder.Token("李四", "nr", 0, 2),
+            LacDecoder.Token("转身", "vn", 2, 4),
+            LacDecoder.Token("站定", "vd", 4, 6),
+            LacDecoder.Token("说", "v", 6, 7),
+            LacDecoder.Token("：", "w", 7, 8)
+        )
+        assertEquals(listOf("李四"), LacNerPostProcessor.cueCandidates(tokens).map { it.name })
+    }
+
+    /** 人名子类标签（nh/nhd 系列）同样可作为 cue 人名 */
+    @Test
+    fun `人名子类标签可作为 cue`() {
+        val tokens = listOf(
+            LacDecoder.Token("零点", "nh", 0, 2),
+            LacDecoder.Token("道", "v", 2, 3),
+            LacDecoder.Token("：", "w", 3, 4)
+        )
+        assertEquals(listOf("零点"), LacNerPostProcessor.cueCandidates(tokens).map { it.name })
+    }
+
     @Test
     fun `形容词与高频组合不得被 cue 兜底误收`() {
         val adjectives = listOf(

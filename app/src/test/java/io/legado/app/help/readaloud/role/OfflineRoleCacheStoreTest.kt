@@ -16,9 +16,9 @@ class OfflineRoleCacheStoreTest {
         assertTrue(OfflineRoleCacheStore.mode().startsWith(OfflineRoleCacheStore.MODE_PREFIX))
         assertTrue(OfflineRoleCacheStore.MODE_PREFIX.contains("ner"))
         assertFalse(OfflineRoleCacheStore.MODE_PREFIX.contains("rule"))
-        // 跨段近场 PER 判定（ner-window）上线后同输入结果不同 ⇒ 必须落在 v4 命名空间，旧缓存不得复用
+        // 模型 cue 回看窗口扩大（3→5）后同输入结果不同 ⇒ 必须落在 v5 命名空间，旧缓存不得复用
         assertEquals(
-            "offline-ner-v4|" + ReadAloudRolePreprocessor.VERSION,
+            "offline-ner-v5|" + ReadAloudRolePreprocessor.VERSION,
             OfflineRoleCacheStore.mode()
         )
     }

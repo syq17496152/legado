@@ -16,9 +16,11 @@ object LacNerPostProcessor {
 
     data class NameSpan(val name: String, val start: Int, val end: Int)
 
-    /** 可直接作为 cue 人名的前一词元标签（名词类 + 模型 NER 标签） */
+    /** 可直接作为 cue 人名的前一词元标签（名词类 + 模型 NER 标签 + 人名子类） */
     private val cueLabelAllowed = setOf(
-        "n", "nr", "ns", "nz", "nw", "PER", "LOC", "ORG", "TIME", "s", "t"
+        "n", "nr", "ns", "nz", "nw", "PER", "LOC", "ORG", "TIME", "s", "t",
+        // LAC 词表中的人名子类（部分模型权重会把普通人名标成 nh/nhd 系列，不认就丢 cue）
+        "nh", "nhd", "nhs", "ni", "nb"
     )
 
     /**
@@ -30,8 +32,13 @@ object LacNerPostProcessor {
     /**
      * 回看找人名时可跳过的非名词类标签（动词/形容词/副词/量词/介词/连词/助词/标点等）。
      * **代词 r 不在其中**：遇到"他说/她道"必须立刻停，不能把前文名词当成说话人。
+     * vn/vd/an/ad/xc 等复合词性是 LAC 常见输出：跳过它们才能跨过"冷冷地看了一眼"这类动作短语
+     * （真机 2026-11-03 统计：ch651 有 4 段人名被 4~5 个动词/修饰词隔开而漏 cue）。
      */
-    private val skipLabels = setOf("v", "a", "d", "q", "m", "p", "c", "u", "w", "x", "f")
+    private val skipLabels = setOf(
+        "v", "a", "d", "q", "m", "p", "c", "u", "w", "x", "f",
+        "vn", "vd", "an", "ad", "ng", "xc"
+    )
 
     private val speechVerbSuffixes = listOf(
         "说道", "问道", "答道", "笑道", "喊道", "叫道", "喝道", "叹道", "骂道",
@@ -75,7 +82,9 @@ object LacNerPostProcessor {
             if (index == 0 || !isSpeechVerb(token.word)) return@forEachIndexed
             if (!hasDialogueMarker(tokens, index)) return@forEachIndexed
             // 网文常见"张三笑着说 / 李四冷笑着道"：人名与说话动词之间夹动作/助词，
-            // 只取紧邻前一词会漏掉 ⇒ 回看至多 3 个词元找最近的名词性词元（模型标签驱动，不是正则）
+            // 只取紧邻前一词会漏掉 ⇒ 回看至多 5 个词元找最近的名词性词元（模型标签驱动，不是正则）。
+            // 3 → 5（2026-11-03 真机统计）：ch651 41 个说话动词中有 4 个的人名被 4~5 个动作/修饰词隔开，
+            // 3 词元窗口会全部漏掉；扩大后仍遇代词 r 立即停止（不猜）。
             val nameToken = nameBack(tokens, index) ?: return@forEachIndexed
             spanOf(nameToken.word, nameToken.start)?.let { spans.add(it) }
         }
@@ -84,7 +93,7 @@ object LacNerPostProcessor {
 
     /** 从说话动词往前找最近的名词性命名词元（跳过动词/助词/副词/介词等，遇代词即停） */
     private fun nameBack(tokens: List<LacDecoder.Token>, verbIndex: Int): LacDecoder.Token? {
-        val floor = maxOf(0, verbIndex - 3)
+        val floor = maxOf(0, verbIndex - NAME_BACK_SPAN)
         for (k in verbIndex - 1 downTo floor) {
             val token = tokens[k]
             if (token.label in cueLabelAllowed) return token
@@ -94,6 +103,9 @@ object LacNerPostProcessor {
         }
         return null
     }
+
+    /** 人名回看窗口（词元数）：5 覆盖"人名 + 动作短语（4~5 词元）+ 说话动词"的网文句式 */
+    private const val NAME_BACK_SPAN = 5
 
     private fun isSpeechVerb(word: String): Boolean =
         speechVerbSuffixes.any { word.endsWith(it) }
