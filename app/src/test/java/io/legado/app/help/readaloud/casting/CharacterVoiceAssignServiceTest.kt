@@ -1,6 +1,7 @@
 ﻿package io.legado.app.help.readaloud.casting
 
 import io.legado.app.data.entities.BookCharacter
+import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -279,5 +280,35 @@ class CharacterVoiceAssignServiceTest {
         )
         assertEquals(1, result.assignments.size)
         assertEquals("v_a|苍劲", result.assignments.first().voiceName)
+    }
+
+    /** 未绑定判定：空 JSON 与 toneID 为空都算未绑定（播放期会回落旁白音） */
+    @Test
+    fun `未绑定音色判定覆盖空路由与空音色`() {
+        assertTrue(CharacterVoiceAssignService.needsAutoVoice(""))
+        val blankRoute = SpeechRoute(
+            engineType = SpeechRoute.ENGINE_SYSTEM, engineValue = "pkg",
+            speakerName = "", toneID = "", source = SpeechRoute.SOURCE_AUTO
+        )
+        assertTrue(CharacterVoiceAssignService.needsAutoVoice(blankRoute.toJson()))
+        val boundRoute = SpeechRoute(
+            engineType = SpeechRoute.ENGINE_SYSTEM, engineValue = "pkg",
+            speakerName = "音色A", toneID = "v_a|音色A", source = SpeechRoute.SOURCE_AUTO
+        )
+        assertFalse(CharacterVoiceAssignService.needsAutoVoice(boundRoute.toJson()))
+    }
+
+    /** 自动补声不得抢走已绑定角色占用的音色（否则老角色下次开播又换声） */
+    @Test
+    fun `自动补声避开已占用音色`() {
+        val taken = voice("v_taken", "male", "youth", listOf("male", "youth"), name = "已占用")
+        val free = voice("v_free", "male", "youth", listOf("male", "youth"), name = "空闲")
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character(1, "陆沉", BookCharacter.GENDER_MALE)),
+            voices = listOf(taken, free),
+            reservedVoiceIds = setOf(taken.voiceName)
+        )
+        assertEquals(1, result.assignments.size)
+        assertEquals(free.voiceName, result.assignments.first().voiceName)
     }
 }

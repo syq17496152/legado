@@ -94,6 +94,13 @@ internal fun stableDialogueVoice(
     if (!isNarration && !hasRole && lastDialogueVoice != null) lastDialogueVoice else current
 
 /**
+ * 章开始自动补声闸门（纯函数可单测）：只有内置引擎激活且当前有书对象时才补声。
+ * 非内置引擎（系统/HTTP/脚本）的音色绑定由各自引擎管理，补声无意义且可能写错通道。
+ */
+internal fun shouldAutoAssignVoices(builtinActive: Boolean, hasBook: Boolean): Boolean =
+    builtinActive && hasBook
+
+/**
  * 本地朗读（AD-03/AD-05/AD-09）
  * init 按路由包名构造 + 8s 超时看门狗 + 失败降级默认引擎明示 + 每引擎独立参数
  * 多人模式（AD-09 期1）：选角模板分段 → 逐段 onDone 驱动（suspend utterance）
@@ -554,6 +561,12 @@ class TTSReadAloudService : BaseReadAloudService() {
                         aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot),
                         forceRecompute = rolesChanged
                     )
+                }
+                // 自动补声（音色稳定性）：新发现角色若没有音色绑定，播放期只能拿旁白音，
+                // 与其他角色音色交替就是用户听到的"音色乱跳" ⇒ 章开始只为未绑定角色补声，不动已有绑定
+                ReadBook.book?.takeIf { shouldAutoAssignVoices(builtinActive, true) }?.let { book ->
+                    runCatching { CharacterVoiceAssignService.assignMissing(this, book) }
+                        .onFailure { AppLog.put("自动补声失败：${it.message}") }
                 }
             }.onFailure { AppLog.put("离线角色归因准备失败：${it.message}") }
         }

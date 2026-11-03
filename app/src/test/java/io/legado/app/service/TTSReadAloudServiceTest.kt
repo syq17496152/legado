@@ -2,6 +2,7 @@ package io.legado.app.service
 
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -117,5 +118,13 @@ class TTSReadAloudServiceTest {
             "旁白音",
             stableDialogueVoice(false, hasRole = false, lastDialogueVoice = null, current = current)?.voiceId
         )
+    }
+
+    /** 章开始自动补声只对内置引擎 + 有书对象生效（其他通道的音色由各自引擎管理） */
+    @Test
+    fun `仅内置引擎且有书时才自动补声`() {
+        assertTrue(shouldAutoAssignVoices(builtinActive = true, hasBook = true))
+        assertFalse(shouldAutoAssignVoices(builtinActive = false, hasBook = true))
+        assertFalse(shouldAutoAssignVoices(builtinActive = true, hasBook = false))
     }
 }

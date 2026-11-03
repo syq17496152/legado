@@ -146,10 +146,12 @@ object CharacterVoiceAssignService {
         characters: List<BookCharacter>,
         voices: List<BuiltinVoice>,
         narratorHint: String = "",
-        fixedVoiceMap: Map<String, String> = emptyMap()
+        fixedVoiceMap: Map<String, String> = emptyMap(),
+        /** 已被其他角色占用的音色：自动补声时传入，避免新角色抢走老角色的音色 */
+        reservedVoiceIds: Set<String> = emptySet()
     ): AssignResult {
         if (voices.isEmpty()) return AssignResult(emptyList())
-        val used = HashSet<String>()
+        val used = HashSet<String>(reservedVoiceIds)
         val assignments = mutableListOf<Assignment>()
         // 预计算音色元数据（归一化一次，避免每个角色 × 每个音色重复做字符串解析）
         val traits = voices.associate { it.voiceName to voiceTraitsOf(it) }
@@ -279,6 +281,66 @@ object CharacterVoiceAssignService {
         )
         AppLog.put("角色配声完成：角色 ${planned.assignments.size} / 实际写入 $changed / 撞音 ${planned.conflicts.size}")
         planned.copy(assignments = planned.assignments.map { it.copy(conflict = it.voiceName in planned.conflicts.map { c -> c.voiceName }) })
+    }
+
+    /**
+     * 角色是否缺少音色绑定（纯函数可单测）：路由 JSON 为空或 toneID 为空都算"未绑定"。
+     * 未绑定角色在播放期会回落旁白音，同一段对话里就会"角色音↔旁白音"乱跳。
+     */
+    internal fun needsAutoVoice(routeJson: String): Boolean =
+        SpeechRoute.fromJson(routeJson).toneID.isBlank()
+
+    /**
+     * 自动补声（章开始发现新角色时调用）：**只给未绑定音色的角色分配**，绝不改动已有绑定。
+     *
+     * 为什么需要：`OfflineCharacterDiscovery` 在章开始新增角色，但不会写 `speechRouteJson`；
+     * 这些角色播放期只能拿旁白音，而其他角色有自己的音色 ⇒ 用户听到"同一段对话里音色乱跳"
+     * （2026-11-03 用户反馈）。手动"重新配声"仍走 [assignAll] 全量重算。
+     */
+    suspend fun assignMissing(context: Context, book: Book): AssignResult = withContext(Dispatchers.IO) {
+        val bookKey = book.characterBookKey()
+        val characters = runCatching { appDb.bookCharacterDao.characters(bookKey) }
+            .getOrDefault(emptyList())
+        val unbound = characters.filter { needsAutoVoice(it.speechRouteJson) }
+        if (unbound.isEmpty()) return@withContext AssignResult(emptyList())
+        BuiltinTtsRuntime.init(context)
+        BuiltinTtsRuntime.ensureSeeded()
+        val voices = BuiltinTtsRuntime.voices()
+        if (voices.isEmpty()) return@withContext AssignResult(emptyList())
+        val aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+        // 已绑定角色占用的音色先占位，避免新角色把老角色的音色抢走（否则老角色下次开播又换声）
+        val reserved = characters
+            .filterNot { needsAutoVoice(it.speechRouteJson) }
+            .mapNotNull { SpeechRoute.fromJson(it.speechRouteJson).toneID.takeIf { id -> id.isNotBlank() } }
+            .toSet()
+        val planned = plan(
+            characters = unbound,
+            voices = voices,
+            narratorHint = aliasStore.narratorVoice(bookKey).orEmpty(),
+            fixedVoiceMap = aliasStore.merged(bookKey).roles,
+            reservedVoiceIds = reserved
+        )
+        val packageName = context.packageName
+        planned.assignments.forEach { assignment ->
+            val character = unbound.firstOrNull { it.id == assignment.characterId } ?: return@forEach
+            val route = SpeechRoute(
+                engineType = SpeechRoute.ENGINE_SYSTEM,
+                engineValue = packageName,
+                speakerName = assignment.voiceDisplayName,
+                toneID = assignment.voiceName,
+                source = SpeechRoute.SOURCE_AUTO
+            )
+            runCatching {
+                appDb.bookCharacterDao.updateCharacter(
+                    character.copy(
+                        speechRouteJson = route.toJson(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }.onFailure { AppLog.put("自动补声写库失败（${character.name}）：${it.message}") }
+        }
+        AppLog.put("自动补声完成：未绑定 ${planned.assignments.size} / 撞音 ${planned.conflicts.size}")
+        planned
     }
 
     /** 分镜/播放期需要的角色索引（离线归因输入） */
