@@ -361,6 +361,34 @@ class OfflineRoleResolverTest {
         assertEquals("ner-cue", result.segments[0].reason)
     }
 
+    /** 模型 cue 距引号 25~40 字仍要命中（旧 25 字窗口会漏，退化到字典匹配） */
+    @Test
+    fun `模型 cue 距引号三十字仍能命中`() {
+        val prefix = "张三在原地站了很久，又反复整理衣袖，才用沙哑的声音缓缓说道："
+        assertTrue("构造的前缀必须超过旧窗口 25 字", prefix.length > 25)
+        val paragraph = prefix + "“走吧。”"
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val at = text.indexOf("张三")
+            if (at >= 0) {
+                NerTextEngine.ParagraphSignals(
+                    modelReady = true,
+                    cues = listOf(NerTextEngine.Mention("张三", at, at + 2))
+                )
+            } else {
+                NerTextEngine.ParagraphSignals(modelReady = true)
+            }
+        }
+        val result = OfflineRoleResolver.resolve(
+            listOf(paragraph),
+            listOf(unit("u1", 0, prefix.length, prefix.length + 7, cueBefore = prefix)),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertEquals("张三", result.segments[0].characterName)
+        assertEquals("ner-cue", result.segments[0].reason)
+    }
+
     /** 模型 cue 带称谓后缀（"张三大人"）应剥壳后命中角色，而不是当未识别 */
     @Test
     fun `模型 cue 带称谓后缀仍能命中`() {

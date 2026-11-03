@@ -182,14 +182,17 @@ object OfflineRoleResolver {
 
     /**
      * 模型人名信号中离引号簇最近的一个（AD-16 ③）：
-     * 前文只在引号前 25 字内、后文只在引号后 15 字内取，前文同距优先（说话人 cue 通常在前）。
+     * 前文只在引号前 40 字内、后文只在引号后 20 字内取，前文同距优先（说话人 cue 通常在前）。
+     *
+     * 2026-11-03：前文窗口 25 → 40 字（与跨段近场窗口口径一致）。长句里"人名+说话动词"常距引号
+     * 25~40 字，旧窗口会让模型 cue 漏掉、退化到字典匹配（真机 ch=400 模型占比仅 30% 的主因之一）。
      */
     private fun nearestMention(
         mentions: List<NerTextEngine.Mention>,
         rangeStart: Int,
         rangeEnd: Int,
-        maxBefore: Int = 25,
-        maxAfter: Int = 15
+        maxBefore: Int = 40,
+        maxAfter: Int = 20
     ): String? {
         return mentions.mapNotNull { mention ->
             val beforeGap = rangeStart - mention.end
