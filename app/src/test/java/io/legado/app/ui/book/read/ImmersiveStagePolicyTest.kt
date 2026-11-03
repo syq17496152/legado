@@ -160,4 +160,17 @@ class ImmersiveStagePolicyTest {
         assertEquals(0.90f, ImmersiveStagePolicy.fluidLayerAlpha(-5f), 0.001f)
         assertEquals(1.00f, ImmersiveStagePolicy.fluidLayerAlpha(5f), 0.001f)
     }
+
+    /** 低配降级真机取证日志文案（任务 2.7）：字段与顺序必须稳定，便于 logcat 逐字比对 */
+    @Test
+    fun `低配诊断日志文案字段稳定`() {
+        assertEquals(
+            "immersive reduceMotion=true lowRam=false sdk=28",
+            reduceMotionLogText(reduced = true, lowRam = false, sdkInt = 28)
+        )
+        assertEquals(
+            "immersive reduceMotion=false lowRam=false sdk=33",
+            reduceMotionLogText(reduced = false, lowRam = false, sdkInt = 33)
+        )
+    }
 }

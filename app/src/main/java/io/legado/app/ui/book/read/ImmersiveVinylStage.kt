@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
+import io.legado.app.constant.AppLog
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -144,11 +145,22 @@ internal object ImmersiveStagePolicy {
     }
 }
 
+/** 低配诊断日志文案（纯函数可单测）：真机验证"降级是否生效"时按这行日志比对 */
+internal fun reduceMotionLogText(reduced: Boolean, lowRam: Boolean, sdkInt: Int): String =
+    "immersive reduceMotion=$reduced lowRam=$lowRam sdk=$sdkInt"
+
 /** 低配判定（供粒子层与流体层共用；`internal` 让同模块的播放面板也能读到同一口径） */
 internal fun isReducedMotionDevice(): Boolean {
     val am = appCtx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
     val lowRam = am?.isLowRamDevice == true
-    return ImmersiveStagePolicy.shouldReduceMotion(lowRam, Build.VERSION.SDK_INT)
+    val reduced = ImmersiveStagePolicy.shouldReduceMotion(lowRam, Build.VERSION.SDK_INT)
+    // 正式诊断日志（保留）：真机验证"低配降级是否真的生效"（任务 2.7），便于现场取证
+    AppLog.putDebugWithTag(
+        AppLog.TAG_TTS_TRACE,
+        reduceMotionLogText(reduced, lowRam, Build.VERSION.SDK_INT),
+        level = AppLog.Level.INFO
+    )
+    return reduced
 }
 
 /**
