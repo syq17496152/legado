@@ -237,8 +237,8 @@ object OfflineRoleResolver {
             append(' ')
             append(unit.cueAfter)
         }.trim()
-        // 近场 cue：只保留引号两侧各 24 字（cueBefore 带跨段上下文，远场文本会污染正则兜底与学习 cue）
-        val nearCue = unit.cueBefore.takeLast(24) + " " + unit.cueAfter.take(24)
+        // 近场 cue：引号两侧各 40 字（含"深吸一口气，缓缓说道："这类长引导语；旧 24 字会把人名截掉）
+        val nearCue = unit.cueBefore.takeLast(40) + " " + unit.cueAfter.take(40)
 
         // ① 显式 speakerHint（若上游提供）
         matchName(unit.speakerHint, nameMap)?.let { return Assigned(it.name, it.id, "alias", CONF_ALIAS) }
