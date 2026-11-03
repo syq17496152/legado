@@ -1,13 +1,13 @@
 package io.legado.app.ui.book.read.config
 
 /**
- * 听书场景卡状态机（T5.1 / ui-design §2/§8）：纯函数，JVM 可单测。
+ * 听书中心状态机（T5.1 / ui-design §2/§8）：纯函数，JVM 可单测。
  *
- * 四卡固定映射到已有内置模板（不新造第二套模板语义）：
+ * 三卡固定映射到已有内置模板（不新造第二套模板语义）：
  * - 普通朗读 → `builtin_mono`（单声，关闭多人）
  * - 双声对读 → `builtin_dual_voice`（旁白/对白两音色）
  * - 沉浸多角色 → `builtin_immersive_multi`（角色级配声，推荐）
- * - 自定义 → 其余模板（可跳模板管理）
+ * - 自定义模板不再占卡位（4.4），只在状态行提示当前模板名
  *
  * 主按钮文案三态：未就绪→「启用离线朗读」；多角色未准备→「识别角色并开始」；其余→「开始听书」。
  */
@@ -17,6 +17,12 @@ data class SceneCardRow(
     val subtitle: String,
     val selected: Boolean,
     val recommended: Boolean = false
+)
+
+/** 三步引导的一步（spec R2：不阻塞 —— 缺失时只提示当前该做什么，不把资产当门槛） */
+data class GuideStep(
+    val title: String,
+    val done: Boolean
 )
 
 data class SceneSnapshot(
@@ -29,7 +35,11 @@ data class SceneSnapshot(
     /** 本章准备度三数字（页面顶部统计卡用，缺省 0 便于既有调用方不受影响） */
     val characterCount: Int = 0,
     val assignedCount: Int = 0,
-    val storyboardSegments: Int = 0
+    val storyboardSegments: Int = 0,
+    /** 三步引导（引擎 / 音色 / 开听） */
+    val guideSteps: List<GuideStep> = emptyList(),
+    /** 资源概览一行（音色 · 模板 · 配乐 · 占用），空串则不显示 */
+    val resourceLine: String = ""
 )
 
 object CastSceneState {
@@ -64,6 +74,27 @@ object CastSceneState {
     fun badgeOf(index: Int): String = ('A' + index.coerceIn(0, 25)).toString()
 
     /**
+     * 三步引导（spec R2「可跳过、不阻塞」）：
+     * 只表达「现在到哪一步」，不把资产配置变成听书前置门槛 —— 系统语音始终可听。
+     */
+    fun guideSteps(engineReady: Boolean, voiceCount: Int, hasBook: Boolean): List<GuideStep> = listOf(
+        GuideStep("① 离线引擎就绪", engineReady),
+        GuideStep("② 音色可用", voiceCount > 0),
+        GuideStep("③ 打开一本书听书", hasBook && engineReady && voiceCount > 0)
+    )
+
+    /** 资源概览一行：让用户在听书中心就能看到"我有什么、占多少空间"，不必翻到设置里找 */
+    fun resourceLine(
+        voiceCount: Int,
+        templateCount: Int,
+        bgmCount: Int,
+        storageBytes: Long
+    ): String {
+        val mb = storageBytes / (1024L * 1024L)
+        return "音色 $voiceCount · 模板 $templateCount · 配乐 $bgmCount · 离线资产 ${mb}MB"
+    }
+
+    /**
      * 使用提示（纯函数可单测）：首次进本页的人不用去翻文档，
      * 也顺带把"开听后怎么回来改"说清楚（页面内容偏短，空区靠它填得有意义）。
      */
@@ -92,8 +123,12 @@ object CastSceneState {
      * @param assignedCount 已配声角色数
      * @param storyboardSegments 当前章离线分镜段数（0 = 未产出）
      * @param activeTemplateId 当前激活模板
-     * @param customName 当前模板显示名（"自定义"卡副标题用）
+     * @param customName 当前模板显示名（自定义模板状态行用）
      * @param hasBook 是否已打开书（未开书时禁用主按钮）
+     * @param voiceCount 可用音色数（三步引导第②步与资源概览）
+     * @param templateCount 选角模板数（资源概览）
+     * @param bgmCount 已启用配乐数（资源概览）
+     * @param storageBytes 离线资产占用（模型+音色+缓存）
      */
     fun evaluate(
         engineReady: Boolean,
@@ -102,7 +137,11 @@ object CastSceneState {
         storyboardSegments: Int,
         activeTemplateId: String?,
         customName: String = "",
-        hasBook: Boolean = true
+        hasBook: Boolean = true,
+        voiceCount: Int = 0,
+        templateCount: Int = 0,
+        bgmCount: Int = 0,
+        storageBytes: Long = 0L
     ): SceneSnapshot {
         val selected = cardOf(activeTemplateId)
         val multiSubtitle = if (characterCount <= 0) {
@@ -129,9 +168,11 @@ object CastSceneState {
             selected == CARD_MULTI -> "角色识别：已完成 · 本章 $storyboardSegments 段分镜"
             else -> "当前为「${cards.first { it.selected }.title}」；需要更细的模板可在「选角模板」里改"
         }
+        // 4.11 开箱即用（spec R2）：离线引擎未就绪也**不阻塞** —— 主按钮直接可听（回落系统语音），
+        // 「启用离线」变成状态行里的提示与「引擎与音色」入口，而不是挡在用户前面的门槛。
         val primaryLabel = when {
             !hasBook -> "请先打开一本书"
-            !engineReady -> "启用离线朗读"
+            !engineReady -> "开始听书（系统语音）"
             selected == CARD_MULTI && (characterCount <= 0 || assignedCount <= 0) -> "识别角色并开始"
             else -> "开始听书"
         }
@@ -144,7 +185,9 @@ object CastSceneState {
             selectedCard = selected,
             characterCount = characterCount,
             assignedCount = assignedCount,
-            storyboardSegments = storyboardSegments
+            storyboardSegments = storyboardSegments,
+            guideSteps = guideSteps(engineReady, voiceCount, hasBook),
+            resourceLine = resourceLine(voiceCount, templateCount, bgmCount, storageBytes)
         )
     }
 }

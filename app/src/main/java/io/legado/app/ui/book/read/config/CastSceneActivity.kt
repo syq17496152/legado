@@ -128,7 +128,10 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         val activeTemplateId: String?,
         val customName: String,
         val hasBook: Boolean,
-        val bgmTrackCount: Int
+        val bgmTrackCount: Int,
+        val voiceCount: Int = 0,
+        val templateCount: Int = 0,
+        val storageBytes: Long = 0L
     )
 
     private suspend fun reloadState() {
@@ -141,7 +144,11 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             storyboardSegments = facts.storyboardSegments,
             activeTemplateId = facts.activeTemplateId,
             customName = facts.customName,
-            hasBook = facts.hasBook
+            hasBook = facts.hasBook,
+            voiceCount = facts.voiceCount,
+            templateCount = facts.templateCount,
+            bgmCount = facts.bgmTrackCount,
+            storageBytes = facts.storageBytes
         )
         bgmEnabled = AppConfig.aiReadAloudBgmEnabled
         bgmTrackCount = facts.bgmTrackCount
@@ -149,9 +156,10 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
 
     private suspend fun loadFacts(): Facts {
         runCatching { BuiltinTtsRuntime.ensureSeeded() }
-        val engineReady = runCatching {
-            BuiltinTtsRuntime.isReady() && BuiltinTtsRuntime.voices().isNotEmpty()
-        }.getOrDefault(false)
+        // 开箱即用（spec R2 / 4.11）：引擎就绪只看档位 READY，**不再要求音色数 > 0**
+        // —— 单声档（vits 内置默认音色）本来就没有音色条目，旧判据会让它永远显示"未就绪"。
+        val activeProfile = runCatching { BuiltinTtsRuntime.activeProfile() }.getOrNull()
+        val engineReady = activeProfile != null && BuiltinTtsRuntime.isReady()
         val book = ReadBook.book
         val chapter = ReadBook.curTextChapter
         val bookKey = book?.characterBookKey()
@@ -180,6 +188,18 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                 appDb.readAloudBgmDao.enabledTracksByType(ReadAloudBgmTrack.TYPE_BGM).size
             }.getOrDefault(0)
         }
+        // 资源概览（spec R2 三步引导第②步 + 4.9 资源中心的最小可见面）：
+        // 音色数取当前档位可用音色；单声档按引擎自带默认音色记 1（否则引导第②步永远不亮）
+        val voiceCount = runCatching {
+            when {
+                activeProfile == null -> 0
+                activeProfile.requiresReference || activeProfile.multiSpeaker ->
+                    BuiltinTtsRuntime.voices().size
+                else -> 1
+            }
+        }.getOrDefault(0)
+        val templateCount = runCatching { TtsCastingStore.all().size }.getOrDefault(0)
+        val storageBytes = runCatching { BuiltinTtsRuntime.storageBreakdown().totalBytes }.getOrDefault(0L)
         return Facts(
             engineReady = engineReady,
             characterCount = characters.size,
@@ -188,7 +208,10 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             activeTemplateId = activeId,
             customName = customName,
             hasBook = book != null,
-            bgmTrackCount = bgmTrackCount
+            bgmTrackCount = bgmTrackCount,
+            voiceCount = voiceCount,
+            templateCount = templateCount,
+            storageBytes = storageBytes
         )
     }
 
@@ -232,11 +255,15 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         }
     }
 
-    /** 主按钮：未就绪 → 引导到管理页；多角色未准备 → 先识别/配声；其余 → 直接开始听书 */
+    /**
+     * 主按钮（4.11 开箱即用）：
+     * 未就绪 → **直接开始听书**（朗读服务对未安装的引擎本来就会回退系统语音），
+     * 只提示一句去哪里启用离线；多角色未准备 → 先识别/配声；其余 → 直接开始听书。
+     */
     private fun primaryAction() {
         if (!snapshot.engineReady) {
-            toastOnUi("先下载/导入语音包并一键启用离线引擎")
-            startActivity<BuiltinTtsActivity>()
+            toastOnUi("离线引擎未就绪：本次用系统语音朗读，可在「引擎与音色」里启用离线")
+            startReading()
             return
         }
         if (snapshot.selectedCard == CastSceneState.CARD_MULTI &&
@@ -336,6 +363,31 @@ private fun CastSceneScreen(
                     )
                 }
             )
+            // 三步引导（spec R2）：只表达"现在在哪一步"，不把资产当听书门槛（系统语音始终可听）
+            if (snapshot.guideSteps.isNotEmpty()) {
+                AppCard {
+                    SectionTitle("开通三步")
+                    snapshot.guideSteps.forEach { step ->
+                        Row(
+                            modifier = Modifier.padding(top = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StatusDot(
+                                if (step.done) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                                size = 7
+                            )
+                            Text(
+                                text = step.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (step.done) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
             // 两列网格：三卡（后一格留白）一屏可见，窄屏也不用来回滚动找选项
             snapshot.cards.chunked(2).forEach { pair ->
                 Row(
@@ -366,6 +418,15 @@ private fun CastSceneScreen(
                     SceneStat("${snapshot.characterCount}", "识别角色", Modifier.weight(1f))
                     SceneStat("${snapshot.assignedCount}", "已配音色", Modifier.weight(1f))
                     SceneStat("${snapshot.storyboardSegments}", "本章分镜", Modifier.weight(1f))
+                }
+                // 资源概览：让用户在本页就知道"有什么、占多少"，不必翻到设置里逐项找
+                if (snapshot.resourceLine.isNotBlank()) {
+                    Text(
+                        text = snapshot.resourceLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
             // 使用提示：把首次使用要知道的三条说完，页面不至于下半屏全空
