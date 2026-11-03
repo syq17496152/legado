@@ -66,7 +66,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 听书场景卡（T5.1 / ui-design §2/§8）：阅读页入口，四卡选演播方式 + 一键开始听书。
+ * 听书中心（T5.1 / ui-design §2/§8）：阅读页唯一听书入口，三卡选演播方式 + 一键开始听书。
+ * 4.3/4.4：阅读菜单的三个并列入口收敛到本页；卡片 4→3，「自定义模板/预合成/引擎管理」进「高级」区。
  *
  * 口径（AD-09）：卡=已有内置模板（单声/双声/沉浸多角色），不自造第二套模板；
  * 激活仍走唯一收敛点 [TtsCastingStore.setActiveTemplateId]；多角色就绪沿用
@@ -99,6 +100,7 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                         onOpenVoices = { startActivity<BuiltinTtsActivity>() },
                         onOpenBgm = { startActivity<ReadAloudBgmManageActivity>() },
                         onOpenTemplates = { showDialogFragment(TtsCastingManageFragment.newInstance()) },
+                        onOpenPrebuild = { showDialogFragment(TtsPrebuildDialog.newInstance()) },
                         onPrimary = ::primaryAction
                     )
                 }
@@ -212,12 +214,12 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         }
     }
 
-    /** 选卡：自定义 → 模板管理；其余 → 幂等导入内置模板并激活对应模板 */
+    /**
+     * 选卡：幂等导入内置模板并激活对应模板。
+     * 4.4 起卡片只有单声/双声/多角色三张；「自定义模板」入口改由高级区 chip 触发
+     * （[CastSceneState.templateOf] 对未知 cardId 返回 null ⇒ 这里直接返回，不会误激活）。
+     */
     private fun selectCard(cardId: String) {
-        if (cardId == CastSceneState.CARD_CUSTOM) {
-            showDialogFragment(TtsCastingManageFragment.newInstance())
-            return
-        }
         val template = CastSceneState.templateOf(cardId) ?: return
         lifecycleScope.launch {
             busy = true
@@ -313,6 +315,7 @@ private fun CastSceneScreen(
     onOpenVoices: () -> Unit,
     onOpenBgm: () -> Unit,
     onOpenTemplates: () -> Unit,
+    onOpenPrebuild: () -> Unit,
     onPrimary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -324,8 +327,8 @@ private fun CastSceneScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ScreenHeader(
-                title = "听书场景卡",
-                subtitle = "选一种演播方式，一次点开就能听",
+                title = "听书中心",
+                subtitle = "选一种演播方式，一次点开就能听；更多设置收在下面「高级」",
                 trailing = {
                     StatusPill(
                         text = if (snapshot.engineReady) "离线就绪" else "未就绪",
@@ -333,7 +336,7 @@ private fun CastSceneScreen(
                     )
                 }
             )
-            // 两列网格：四卡一屏可见，窄屏也不用来回滚动找选项
+            // 两列网格：三卡（后一格留白）一屏可见，窄屏也不用来回滚动找选项
             snapshot.cards.chunked(2).forEach { pair ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -408,18 +411,27 @@ private fun CastSceneScreen(
                     Switch(checked = bgmEnabled, onCheckedChange = onToggleBgm)
                 }
             }
-            // 快捷设置：三个高频入口并排成胶囊，单行占位（避免卡片被底部按钮裁切）
+            // 高级区（4.4/4.5）：原先并列在阅读菜单的三项能力收在这里，
+            // 保证「入口收敛」不丢能力 —— 预合成 / 引擎管理 / 自定义模板 / 配乐 全部可达。
             AppCard {
-                SectionTitle("快捷设置")
+                SectionTitle("高级")
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AssistChip(onClick = onOpenVoices, label = { Text("音色库") })
-                    AssistChip(onClick = onOpenBgm, label = { Text("配乐库") })
+                    AssistChip(onClick = onOpenVoices, label = { Text("引擎与音色") })
                     AssistChip(onClick = onOpenTemplates, label = { Text("选角模板") })
+                    AssistChip(onClick = onOpenPrebuild, label = { Text("批量预合成") })
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AssistChip(onClick = onOpenBgm, label = { Text("配乐库") })
                 }
             }
             if (busy) {

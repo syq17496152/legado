@@ -69,7 +69,24 @@ class CastSceneStateTest {
     }
 
     @Test
-    fun `自定义模板选中自定义卡并显示模板名`() {
+    fun `卡片收敛为三张且自定义不再占卡位`() {
+        val snapshot = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 0,
+            assignedCount = 0,
+            storyboardSegments = 0,
+            activeTemplateId = null
+        )
+        assertEquals(3, snapshot.cards.size)
+        assertEquals(
+            listOf(CastSceneState.CARD_MONO, CastSceneState.CARD_DUAL, CastSceneState.CARD_MULTI),
+            snapshot.cards.map { it.id }
+        )
+        assertTrue(snapshot.cards.none { it.id == CastSceneState.CARD_CUSTOM })
+    }
+
+    @Test
+    fun `已激活自定义模板时用状态行说明并保留主按钮`() {
         val snapshot = CastSceneState.evaluate(
             engineReady = true,
             characterCount = 3,
@@ -78,8 +95,10 @@ class CastSceneStateTest {
             activeTemplateId = "user_template_x",
             customName = "我的模板"
         )
+        // 自定义模板不再有卡位，但选中态要能从状态行读出来，否则用户不知道当前用的是哪个模板
         assertEquals(CastSceneState.CARD_CUSTOM, snapshot.selectedCard)
-        assertTrue(snapshot.cards.first { it.id == CastSceneState.CARD_CUSTOM }.subtitle.contains("我的模板"))
+        assertTrue(snapshot.statusLine.contains("我的模板"))
+        assertTrue(snapshot.cards.none { it.selected })
         assertEquals("开始听书", snapshot.primaryLabel)
     }
 

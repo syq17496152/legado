@@ -431,8 +431,6 @@ class ReadMenu @JvmOverloads constructor(
                             onDelRubyTagClick = { callBack.toggleRubyTag() },
                             onDelHTagClick = { callBack.toggleHTag() },
                             onEpubScheduleModeClick = { callBack.showEpubCoreScheduleMode() },
-                            onTtsPrebuildClick = { callBack.showTtsPrebuild() },
-                            onBuiltinTtsClick = { callBack.openBuiltinTtsEngine() },
                             onCastSceneClick = { callBack.openCastScene() }
                         ),
                         style = style,
@@ -871,9 +869,10 @@ class ReadMenu @JvmOverloads constructor(
         /** Q-N4：AI 净化（阅读菜单「替换净化」旁入口） */
         fun purifySelection()
 
-        /** 内置离线朗读入口（本地书同样可达；默认空实现，避免其它实现类编译中断） */
-        fun showTtsPrebuild() = Unit
-        fun openBuiltinTtsEngine() = Unit
+        /**
+         * 听书唯一入口（4.3 / spec R1）：预合成与引擎管理在听书中心内，不再走读菜单。
+         * 本地书同样可达；默认空实现，避免其它实现类编译中断。
+         */
         fun openCastScene() = Unit
     }
 }

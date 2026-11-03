@@ -1043,9 +1043,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_download -> showDownloadDialog()
-            R.id.menu_tts_prebuild -> showTtsPrebuildDialog()
-            R.id.menu_builtin_tts -> startActivity<BuiltinTtsActivity>()
-            // T5.1：听书场景卡（四卡选演播方式 + 一键开始）
+            // 听书唯一入口（4.3）：预合成/引擎管理已移入听书中心
+            // 引擎管理入口保留在听书中心「高级」区（CastSceneActivity → 引擎与音色）
+            // 听书中心：三卡选演播方式 + 一键开始（4.4 把「自定义」移入高级）
             R.id.menu_cast_scene -> startActivity<CastSceneActivity>()
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_add_scene_bookmark -> addSceneBookmarkFromReadMenu()
@@ -6019,11 +6019,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
-    /** 批量预合成发起（P2-7）：门控三条件预检在 Dialog 内执行 */
-    private fun showTtsPrebuildDialog() {
-        showDialogFragment(TtsPrebuildDialog.newInstance())
-    }
-
     override fun addBookmark() {
         val book = ReadBook.book
         val page = ReadBook.curTextChapter?.getPage(ReadBook.durPageIndex)
@@ -6394,16 +6389,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         showEpubCoreScheduleModeDialog()
     }
 
-    // 内置离线朗读三入口（Compose 溢出菜单，本地书与网络书一致可见；IF-14-C）
-    override fun showTtsPrebuild() {
-        binding.readMenu.runMenuOut()
-        showTtsPrebuildDialog()
-    }
-
-    override fun openBuiltinTtsEngine() {
-        startActivity<BuiltinTtsActivity>()
-    }
-
+    // 听书唯一入口（4.3 / spec R1）：预合成与引擎管理都在听书中心内，读菜单不再分发
     override fun openCastScene() {
         startActivity<CastSceneActivity>()
     }

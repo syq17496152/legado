@@ -110,26 +110,24 @@ object CastSceneState {
         } else {
             "已识别 $characterCount 个角色 · 音色已配 $assignedCount 个"
         }
-        val customSubtitle = if (selected == CARD_CUSTOM) {
-            "当前模板：${customName.ifBlank { "跟随默认（单声）" }}"
-        } else {
-            "可进入模板管理自选"
-        }
+        // 4.4：卡片收敛为 3 张（单声 / 双声 / 智能多角色）；「自定义模板」不再占卡位，
+        // 移入高级区（选角模板 chip）。已激活自定义模板时用状态行说明，避免用户"看不到当前选择"。
         val cards = listOf(
             SceneCardRow(CARD_MONO, "普通朗读", "当前引擎 · 单声", selected == CARD_MONO),
             SceneCardRow(CARD_DUAL, "双声对读", "旁白 + 对白两个音色", selected == CARD_DUAL),
             SceneCardRow(
                 CARD_MULTI, "沉浸多角色", multiSubtitle, selected == CARD_MULTI, recommended = true
-            ),
-            SceneCardRow(CARD_CUSTOM, "自定义", customSubtitle, selected == CARD_CUSTOM)
+            )
         )
         val statusLine = when {
-            !hasBook -> "请先打开一本书（在阅读页侧拉菜单打开「听书场景卡」）"
+            !hasBook -> "请先打开一本书（在阅读页侧拉菜单打开「听书」）"
             !engineReady -> "离线引擎未就绪：先下载/导入语音包，再回来一键启用"
+            selected == CARD_CUSTOM ->
+                "当前为自定义模板「${customName.ifBlank { "未命名" }}」· 可在「选角模板」里更换"
             selected == CARD_MULTI && storyboardSegments <= 0 ->
                 if (characterCount <= 0) "角色识别：未开始" else "角色识别：已完成 · 本章还没有分镜"
             selected == CARD_MULTI -> "角色识别：已完成 · 本章 $storyboardSegments 段分镜"
-            else -> "当前为「${cards.first { it.selected }.title}」；需要更细的模板可点「自定义」"
+            else -> "当前为「${cards.first { it.selected }.title}」；需要更细的模板可在「选角模板」里改"
         }
         val primaryLabel = when {
             !hasBook -> "请先打开一本书"

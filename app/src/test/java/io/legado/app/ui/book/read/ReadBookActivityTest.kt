@@ -13,9 +13,10 @@ import org.junit.Test
 class ReadBookActivityTest {
 
     @Test
-    fun `内置离线引擎菜单入口存在`() {
-        assertTrue("菜单 id 缺失：menu_builtin_tts", R.id.menu_builtin_tts > 0)
-        assertTrue("菜单标题资源缺失", R.string.builtin_tts_menu_entry > 0)
+    fun `阅读菜单只剩一个听书入口`() {
+        // 4.3 / spec R1：menu_cast_scene 是唯一朗读入口；平行入口（预合成/引擎）已移入听书中心
+        assertTrue("菜单 id 缺失：menu_cast_scene", R.id.menu_cast_scene > 0)
+        assertTrue("菜单标题资源缺失", R.string.cast_scene_menu_entry > 0)
     }
 
     @Test

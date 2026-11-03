@@ -3488,7 +3488,7 @@ Selected text or question:
     <!-- 内置离线 TTS（builtin-offline-tts） -->
     <string name="builtin_tts_engine_label">Legado Offline TTS</string>
     <string name="builtin_tts_menu_entry">Offline multi-voice engine</string>
-    <string name="cast_scene_menu_entry">Reading scene cards</string>
+    <string name="cast_scene_menu_entry">Listen</string>
     <string name="builtin_tts_channel_name">Offline speech engine</string>
     <string name="builtin_tts_foreground_text">Synthesizing offline speech…</string>
     <string name="builtin_tts_title">Offline multi-voice reading</string>
