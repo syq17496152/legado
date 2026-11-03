@@ -28,8 +28,14 @@ object CharacterVoiceAssignService {
         val voiceName: String,
         val voiceDisplayName: String,
         val reason: String,
-        val conflict: Boolean = false
+        val conflict: Boolean = false,
+        /** 分池归属（旁白/主角/配角/龙套），用于报告与"谁占了谁的最佳音色"排查 */
+        val pool: String = ""
     )
+
+    const val POOL_LEAD = "主角"
+    const val POOL_SUPPORT = "配角"
+    const val POOL_EXTRA = "龙套"
 
     data class AssignResult(
         val assignments: List<Assignment>,
@@ -176,7 +182,8 @@ object CharacterVoiceAssignService {
                         voiceName = fixed.voiceName,
                         voiceDisplayName = fixed.displayName,
                         reason = "固定绑定",
-                        conflict = conflict
+                        conflict = conflict,
+                        pool = poolOf(character)
                     )
                 )
                 return@forEach
@@ -189,8 +196,17 @@ object CharacterVoiceAssignService {
             val characterMoods = moodsFromText(
                 listOf(character.personality, character.biography).joinToString(" ")
             )
-            val ranked = voices.sortedByDescending {
-                score(it, traits.getValue(it.voiceName), gender, ageText, characterMoods)
+            // 5.2 性别硬约束：**明确异性**的音色直接排除（仅"性别未知"的音色仍可参与），
+            // 避免"男角色配到女声"这类一眼假的错配。硬约束过滤后为空时退回全量，
+            // 保证任何角色都不会因为库不够而没声（此时 reason 会标注 fallback）。
+            val eligible = voices.filter {
+                val traitsOfVoice = traits.getValue(it.voiceName)
+                gender.isBlank() || traitsOfVoice.gender.isBlank() || traitsOfVoice.gender == gender
+            }
+            val genderFallback = eligible.isEmpty()
+            val pool = if (genderFallback) voices else eligible
+            val ranked = pool.sortedByDescending {
+                score(it, traits.getValue(it.voiceName), gender, ageText, characterMoods, used)
             }
             val preferred = ranked.firstOrNull { it.voiceName !in used }
                 ?: ranked.firstOrNull()
@@ -203,10 +219,17 @@ object CharacterVoiceAssignService {
                     characterName = character.name,
                     voiceName = preferred.voiceName,
                     voiceDisplayName = preferred.displayName,
-                    reason = reasonOf(
-                        preferred, traits.getValue(preferred.voiceName), gender, ageText, characterMoods
-                    ),
-                    conflict = conflict
+                    reason = buildString {
+                        append(
+                            reasonOf(
+                                preferred, traits.getValue(preferred.voiceName),
+                                gender, ageText, characterMoods
+                            )
+                        )
+                        if (genderFallback) append("·同性音色已用尽")
+                    },
+                    conflict = conflict,
+                    pool = poolOf(character)
                 )
             )
         }
@@ -279,7 +302,10 @@ object CharacterVoiceAssignService {
                 roles = roles
             )
         )
-        AppLog.put("角色配声完成：角色 ${planned.assignments.size} / 实际写入 $changed / 撞音 ${planned.conflicts.size}")
+        AppLog.put(
+            "角色配声完成：角色 ${planned.assignments.size} / 实际写入 $changed / " +
+                    "撞音 ${planned.conflicts.size} / 分池 ${poolSummary(planned.assignments)}"
+        )
         planned.copy(assignments = planned.assignments.map { it.copy(conflict = it.voiceName in planned.conflicts.map { c -> c.voiceName }) })
     }
 
@@ -339,7 +365,10 @@ object CharacterVoiceAssignService {
                 )
             }.onFailure { AppLog.put("自动补声写库失败（${character.name}）：${it.message}") }
         }
-        AppLog.put("自动补声完成：未绑定 ${planned.assignments.size} / 撞音 ${planned.conflicts.size}")
+        AppLog.put(
+            "自动补声完成：未绑定 ${planned.assignments.size} / 撞音 ${planned.conflicts.size} / " +
+                    "分池 ${poolSummary(planned.assignments)}"
+        )
         planned
     }
 
@@ -448,14 +477,24 @@ object CharacterVoiceAssignService {
             ?: voices.firstOrNull()
     }
 
+    /** 分池：主角 / 配角 / 龙套（旁白由 [pickNarrator] 单独占位），用于报告与排查抢音色 */
+    internal fun poolOf(character: BookCharacter): String = when (character.roleLevel) {
+        BookCharacter.ROLE_MAIN -> POOL_LEAD
+        BookCharacter.ROLE_IMPORTANT -> POOL_SUPPORT
+        else -> POOL_EXTRA
+    }
+
     private fun score(
         voice: BuiltinVoice,
         traits: VoiceTraits,
         gender: String,
         ageText: String,
-        characterMoods: Set<String> = emptySet()
+        characterMoods: Set<String> = emptySet(),
+        used: Set<String> = emptySet()
     ): Int {
         var score = 0
+        // 5.2「同书未使用 +2」：同分时优先没被占用的音色，减少"前面角色顺手拿走最佳匹配"
+        if (voice.voiceName !in used) score += 2
         val voiceGender = traits.gender
         if (gender.isNotBlank() && voiceGender == gender) score += 4
         if (gender.isNotBlank() && voiceGender.isNotBlank() && voiceGender != gender) score -= 3
@@ -491,6 +530,13 @@ object CharacterVoiceAssignService {
         if (voice.origin == BuiltinVoice.ORIGIN_PRESET) parts.add("内置")
         return parts.joinToString("·").ifBlank { "默认分配" }
     }
+
+    /** 分池报告（写入日志，便于真机复盘"哪个池子占了多少音色"） */
+    private fun poolSummary(assignments: List<Assignment>): String =
+        assignments.groupingBy { it.pool.ifBlank { POOL_EXTRA } }
+            .eachCount()
+            .entries
+            .joinToString(" ") { "${it.key}${it.value}" }
 
     private val LEAD_KEYWORDS = listOf("主角", "男主", "女主")
 }

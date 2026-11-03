@@ -311,4 +311,73 @@ class CharacterVoiceAssignServiceTest {
         assertEquals(1, result.assignments.size)
         assertEquals(free.voiceName, result.assignments.first().voiceName)
     }
+
+    /** 5.2 性别硬约束：男角色即使男声已用完，也**绝不**退到女声（宁可撞音，也不配错性别） */
+    @Test
+    fun `同性音色不足时撞音也不配异性`() {
+        val maleOnly = listOf(
+            voice("m1", "male", "youth", name = "唯一男声"),
+            voice("f1", "female", "youth", name = "女声甲"),
+            voice("f2", "female", "aged", name = "女声乙")
+        )
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(
+                character(1, "林凡", BookCharacter.GENDER_MALE),
+                character(2, "王猛", BookCharacter.GENDER_MALE)
+            ),
+            voices = maleOnly
+        )
+        assertEquals(2, result.assignments.size)
+        // 两人都必须是男声（第二个被迫撞音）
+        assertTrue(result.assignments.all { it.voiceName.contains("唯一男声") })
+        assertTrue(result.assignments.any { it.conflict })
+    }
+
+    /** 库里完全没有同性音色时才允许回退，并且必须把回退写进 reason（便于用户理解为什么配了异性音） */
+    @Test
+    fun `同性音色为空时回退并在原因里标注`() {
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character(1, "林凡", BookCharacter.GENDER_MALE)),
+            voices = listOf(voice("f1", "female", "youth", name = "女声甲"))
+        )
+        assertEquals(1, result.assignments.size)
+        assertTrue(result.assignments.first().voiceName.contains("女声甲"))
+        assertTrue(result.assignments.first().reason.contains("同性音色已用尽"))
+    }
+
+    /** 性别未知的音色不受硬约束影响（无法证明是异性，仍可参与，避免库标签缺失时无人可配） */
+    @Test
+    fun `性别未知音色仍可参与配声`() {
+        val unknown = BuiltinVoice(
+            id = "u1", name = "未标注音色", refAudio = "u1/prompt.wav", refText = "稿",
+            origin = BuiltinVoice.ORIGIN_PRESET, readOnly = true
+        )
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(character(1, "林凡", BookCharacter.GENDER_MALE)),
+            voices = listOf(unknown)
+        )
+        assertEquals(1, result.assignments.size)
+        assertEquals(unknown.voiceName, result.assignments.first().voiceName)
+    }
+
+    /** 分池标签必须与角色定位一致（报告/排查依赖它） */
+    @Test
+    fun `分池按主角配角龙套标注`() {
+        val result = CharacterVoiceAssignService.plan(
+            characters = listOf(
+                character(1, "林凡", BookCharacter.GENDER_MALE, BookCharacter.ROLE_MAIN),
+                character(2, "王猛", BookCharacter.GENDER_MALE, BookCharacter.ROLE_IMPORTANT),
+                character(3, "路人甲", BookCharacter.GENDER_MALE, BookCharacter.ROLE_NORMAL)
+            ),
+            voices = listOf(
+                voice("m1", "male", "youth", name = "男声一"),
+                voice("m2", "male", "aged", name = "男声二"),
+                voice("m3", "male", "teen", name = "男声三")
+            )
+        )
+        val byName = result.assignments.associateBy { it.characterName }
+        assertEquals(CharacterVoiceAssignService.POOL_LEAD, byName.getValue("林凡").pool)
+        assertEquals(CharacterVoiceAssignService.POOL_SUPPORT, byName.getValue("王猛").pool)
+        assertEquals(CharacterVoiceAssignService.POOL_EXTRA, byName.getValue("路人甲").pool)
+    }
 }
