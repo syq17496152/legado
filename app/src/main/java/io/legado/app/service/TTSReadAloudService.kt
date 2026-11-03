@@ -80,6 +80,20 @@ internal fun pickNarratorVoice(
 }
 
 /**
+ * 未识别对白的音色稳定策略（纯函数可单测）：
+ * 角色归因失败时若沿用旁白音色，同一段对话里会出现"角色音 → 旁白音"的跳变
+ * （2026-11-03 用户反馈「一会主角是这个音色，一会又变成另一个音色」）。
+ * 对白/独白段只要已有上一句角色音色就沿用它；旁白段与已识别段不受影响。
+ */
+internal fun stableDialogueVoice(
+    isNarration: Boolean,
+    hasRole: Boolean,
+    lastDialogueVoice: TtsVoiceRef?,
+    current: TtsVoiceRef?
+): TtsVoiceRef? =
+    if (!isNarration && !hasRole && lastDialogueVoice != null) lastDialogueVoice else current
+
+/**
  * 本地朗读（AD-03/AD-05/AD-09）
  * init 按路由包名构造 + 8s 超时看门狗 + 失败降级默认引擎明示 + 每引擎独立参数
  * 多人模式（AD-09 期1）：选角模板分段 → 逐段 onDone 驱动（suspend utterance）
@@ -146,6 +160,10 @@ class TTSReadAloudService : BaseReadAloudService() {
      */
     @Volatile
     private var startedUtteranceId = ""
+
+    /** 最近一个对白/独白段的角色音色（稳定性锚点）：归因失败的对白沿用它，避免切回旁白音色 */
+    @Volatile
+    private var lastDialogueVoiceRef: TtsVoiceRef? = null
 
     // init 看门狗（AD-03：约 8s）
     private val initWatchdog = Runnable {
@@ -498,6 +516,8 @@ class TTSReadAloudService : BaseReadAloudService() {
         ReadAloudTrace.reset()
         // 跨章复用同一段落/偏移时 utteranceId 会重复 ⇒ 旧章残留的播放起点不得让新章预取提前起跑
         startedUtteranceId = ""
+        // 音色稳定性锚点按章重置：上一章的角色音色不得带进新章的对白
+        lastDialogueVoiceRef = null
         val chapterIndex = textChapter.chapter.index
         if (builtinActive) {
             runCatching {
@@ -619,6 +639,17 @@ class TTSReadAloudService : BaseReadAloudService() {
                     )
                     else -> fallbackVoiceRef
                 }
+                // 稳定性（2026-11-03 用户反馈"音色乱跳"）：归因失败的对白沿用上一句角色音色，
+                // 不切回旁白音——否则同一段对话会听起来"突然换人"
+                voiceRef = stableDialogueVoice(
+                    isNarration = segment.tag == CastingTag.NARRATION,
+                    hasRole = roleHit != null,
+                    lastDialogueVoice = lastDialogueVoiceRef,
+                    current = voiceRef
+                )
+                if (segment.tag != CastingTag.NARRATION && voiceRef?.voiceId?.isNotBlank() == true) {
+                    lastDialogueVoiceRef = voiceRef
+                }
                 // T8.7 角色徽章：把本段角色名随 utterance 透传给引擎（内置引擎通知显示「正在朗读：张三」+ 阅读页浮层）
                 val roleLabel = readAloudRoleLabel(segment.tag, roleHit?.characterName.orEmpty())
                 ReadAloudRoleBadge.update(roleLabel)
@@ -668,7 +699,8 @@ class TTSReadAloudService : BaseReadAloudService() {
                             chapterIndex = chapterIndex,
                             paragraphIndex = p,
                             ruleSet = ruleSet,
-                            fallbackVoiceRef = fallbackVoiceRef
+                            fallbackVoiceRef = fallbackVoiceRef,
+                            lastDialogueVoiceRef = lastDialogueVoiceRef
                         )
                     }
                 }

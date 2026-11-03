@@ -58,7 +58,8 @@ internal object ReadAloudPrefetch {
         chapterIndex: Int,
         paragraphIndex: Int,
         ruleSet: CastingRuleSet,
-        fallbackVoiceRef: TtsVoiceRef?
+        fallbackVoiceRef: TtsVoiceRef?,
+        lastDialogueVoiceRef: TtsVoiceRef? = null
     ) {
         if (!shouldPrefetch(builtinActive)) return
         var waitedMs = 0L
@@ -88,9 +89,17 @@ internal object ReadAloudPrefetch {
             )
         }.getOrNull()?.toneID.orEmpty()
             .let { resolvePrefetchVoice(it, fallbackVoiceRef?.voiceId.orEmpty()) }
+        // 与主循环同一稳定性口径：下一段是未识别对白时沿用上一句角色音色，
+        // 否则缓存键会与播放期实际音色不一致（预取落空）且听起来会"跳回旁白音"
+        val effectiveVoice = stableDialogueVoice(
+            isNarration = nextSegment.tag == CastingTag.NARRATION,
+            hasRole = nextHit != null,
+            lastDialogueVoice = lastDialogueVoiceRef,
+            current = TtsVoiceRef(nextVoice, nextVoice, TtsVoiceRef.CHANNEL_SYSTEM)
+        )?.voiceId.orEmpty()
         runCatching {
             BuiltinTtsRuntime.prefetchAsync(
-                nextSpeech, nextVoice, (AppConfig.ttsSpeechRate + 5) / 10f
+                nextSpeech, effectiveVoice, (AppConfig.ttsSpeechRate + 5) / 10f
             )
         }
     }

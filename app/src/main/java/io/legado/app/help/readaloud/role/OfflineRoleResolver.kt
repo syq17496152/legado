@@ -345,12 +345,20 @@ object OfflineRoleResolver {
         //      该步只在同段没有任何显式归属时启用；模型若已明确给出"非登记角色"名字则不得猜测。
         val window = windowSignal
         if (window != null && window.modelReady && !modelCueRejected) {
-            nearestMention(window.persons, windowQuoteIndex, windowQuoteIndex)
-                ?.let { name ->
-                    matchName(name, nameMap)?.let {
-                        return Assigned(it.name, it.id, "ner-window", CONF_NER_WINDOW)
+            // 稳定闸（2026-11-03 用户反馈"音色乱跳"）：窗口里出现**多个已登记角色**时，
+            // 最近的 PER 很可能只是"被提到的人"而不是说话人（如"张三看着李四。"后接李四对白）。
+            // 此时宁可不判（交给对话锁/轮转保持对话连贯），也不要在一段对话里来回切换两个音色。
+            val registeredIds = window.persons
+                .mapNotNull { matchName(it.name, nameMap)?.id }
+                .distinct()
+            if (registeredIds.size == 1) {
+                nearestMention(window.persons, windowQuoteIndex, windowQuoteIndex)
+                    ?.let { name ->
+                        matchName(name, nameMap)?.let {
+                            return Assigned(it.name, it.id, "ner-window", CONF_NER_WINDOW)
+                        }
                     }
-                }
+            }
         }
 
         // ⑦ 对话轮转（换段后的无名对白：在 ≤3 已知角色中取与上一句不同的一个）

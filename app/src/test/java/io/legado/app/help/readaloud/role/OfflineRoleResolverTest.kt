@@ -613,4 +613,33 @@ class OfflineRoleResolverTest {
         assertEquals("李四", result.segments[0].characterName)
         assertEquals("ner-cue", result.segments[0].reason)
     }
+
+    /**
+     * 音色稳定性（2026-11-03 用户反馈"多个音色乱跳"）：
+     * 近场窗口里同时出现两个已登记角色时，最近的 PER 可能只是"被提到的人"，
+     * 此时不得按最近名字归因，宁可不猜（交给锁/轮转保持对话连贯）。
+     */
+    @Test
+    fun `窗口内多个已登记角色时不按最近名字归因`() {
+        val paragraphs = listOf("张三看着李四，没有说话。", "“你先走吧。”")
+        val signals: (String) -> NerTextEngine.ParagraphSignals = { text ->
+            val atZhang = text.indexOf("张三")
+            val atLi = text.indexOf("李四")
+            NerTextEngine.ParagraphSignals(
+                modelReady = true,
+                persons = buildList {
+                    if (atZhang >= 0) add(NerTextEngine.Mention("张三", atZhang, atZhang + 2))
+                    if (atLi >= 0) add(NerTextEngine.Mention("李四", atLi, atLi + 2))
+                }
+            )
+        }
+        val result = OfflineRoleResolver.resolve(
+            paragraphs,
+            listOf(unit("u1", 1, 0, 7, cueBefore = "张三看着李四，没有说话。\n", roleType = "character")),
+            characters,
+            emptyMap(),
+            signals
+        )
+        assertTrue("多角色窗口不得按最近名字抢判", result.segments[0].characterName.isBlank())
+    }
 }

@@ -43,8 +43,9 @@ object OfflineRoleCacheStore {
      * v3：字典 cue 收紧为「仅本段名字」（跨段名字交模型窗口判定）⇒ 同输入旧缓存会得到不同结果。
      * v4：新增「跨段近场模型 PER」判定（ner-window）⇒ 无 cue 对白的归属结果不同，必须重算。
      * v5：模型 cue 回看窗口 3→5 词元 + 复杂词性不阻断 ⇒ 更多段落由模型 cue 判定，结果不同。
+     * v6：跨段近场 PER 增加"窗口内仅一个已登记角色"稳定闸 ⇒ 多角色场景不再按最近名字乱切。
      */
-    const val MODE_PREFIX = "offline-ner-v5"
+    const val MODE_PREFIX = "offline-ner-v6"
     private const val SCHEMA = "playback-v1"
 
     fun mode(): String = "$MODE_PREFIX|${ReadAloudRolePreprocessor.VERSION}"
