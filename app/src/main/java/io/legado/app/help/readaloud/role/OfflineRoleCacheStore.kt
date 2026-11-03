@@ -44,8 +44,9 @@ object OfflineRoleCacheStore {
      * v4：新增「跨段近场模型 PER」判定（ner-window）⇒ 无 cue 对白的归属结果不同，必须重算。
      * v5：模型 cue 回看窗口 3→5 词元 + 复杂词性不阻断 ⇒ 更多段落由模型 cue 判定，结果不同。
      * v6：跨段近场 PER 增加"窗口内仅一个已登记角色"稳定闸 ⇒ 多角色场景不再按最近名字乱切。
+     * v7：模型 cue 增加"人名+说话动词紧邻"宽松分支（引号紧贴动词时不再退回字典正则）。
      */
-    const val MODE_PREFIX = "offline-ner-v6"
+    const val MODE_PREFIX = "offline-ner-v7"
     private const val SCHEMA = "playback-v1"
 
     fun mode(): String = "$MODE_PREFIX|${ReadAloudRolePreprocessor.VERSION}"

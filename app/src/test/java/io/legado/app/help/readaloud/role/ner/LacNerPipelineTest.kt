@@ -194,6 +194,39 @@ class LacNerPipelineTest {
         assertEquals(listOf("零点"), LacNerPostProcessor.cueCandidates(tokens).map { it.name })
     }
 
+    /** 引号紧贴说话动词、没有独立冒号词元时，模型 cue 仍要成立（否则会退回字典正则） */
+    @Test
+    fun `引号紧贴动词时模型 cue 仍成立`() {
+        val tokens = listOf(
+            LacDecoder.Token("张三", "nr", 0, 2),
+            LacDecoder.Token("说道", "v", 2, 4),
+            LacDecoder.Token("“", "w", 4, 5)
+        )
+        assertEquals(listOf("张三"), LacNerPostProcessor.cueCandidates(tokens).map { it.name })
+    }
+
+    /** 宽松 cue 不得跨代词：他说道 → 不产生 cue */
+    @Test
+    fun `宽松 cue 不跨代词`() {
+        val tokens = listOf(
+            LacDecoder.Token("张三", "nr", 0, 2),
+            LacDecoder.Token("他", "r", 2, 3),
+            LacDecoder.Token("说", "v", 3, 4),
+            LacDecoder.Token("“", "w", 4, 5)
+        )
+        assertTrue(LacNerPostProcessor.cueCandidates(tokens).isEmpty())
+    }
+
+    /** 宽松 cue 只认人名类标签：普通名词（风声）+ 动词、且无冒号/引号 ⇒ 不产生 cue */
+    @Test
+    fun `宽松 cue 不认普通名词`() {
+        val tokens = listOf(
+            LacDecoder.Token("风声", "n", 0, 2),
+            LacDecoder.Token("道", "v", 2, 3)
+        )
+        assertTrue(LacNerPostProcessor.cueCandidates(tokens).isEmpty())
+    }
+
     @Test
     fun `形容词与高频组合不得被 cue 兜底误收`() {
         val adjectives = listOf(

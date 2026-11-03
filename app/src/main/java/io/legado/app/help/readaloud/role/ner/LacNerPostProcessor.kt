@@ -80,6 +80,18 @@ object LacNerPostProcessor {
                 }
             }
             if (index == 0 || !isSpeechVerb(token.word)) return@forEachIndexed
+            // 宽松模型 cue（2026-11-03）：网文常把引号紧贴说话动词，LAC 未必产出独立的"："词元，
+            // 旧的"必须有冒号/引号标记"会把模型 cue 丢掉、退回字典正则（用户明确要求以模型为主）。
+            // 只要"人名类词元 + 说话动词"紧邻出现，就按模型 cue 处理；代词 r 不在人名类，天然排除。
+            if (token.label !in mergedNameLabels) {
+                val prev = tokens[index - 1]
+                if (prev.label in lenientPersonLabels) {
+                    spanOf(prev.word, prev.start)?.let {
+                        spans.add(it)
+                        return@forEachIndexed
+                    }
+                }
+            }
             if (!hasDialogueMarker(tokens, index)) return@forEachIndexed
             // 网文常见"张三笑着说 / 李四冷笑着道"：人名与说话动词之间夹动作/助词，
             // 只取紧邻前一词会漏掉 ⇒ 回看至多 5 个词元找最近的名词性词元（模型标签驱动，不是正则）。
@@ -106,6 +118,9 @@ object LacNerPostProcessor {
 
     /** 人名回看窗口（词元数）：5 覆盖"人名 + 动作短语（4~5 词元）+ 说话动词"的网文句式 */
     private const val NAME_BACK_SPAN = 5
+
+    /** 宽松 cue 允许的紧邻人名标签（比 [cueLabelAllowed] 更严：只认人名类，不含普通名词 n） */
+    private val lenientPersonLabels = setOf("PER", "nr", "nz", "nh", "nhd", "nhs")
 
     private fun isSpeechVerb(word: String): Boolean =
         speechVerbSuffixes.any { word.endsWith(it) }
