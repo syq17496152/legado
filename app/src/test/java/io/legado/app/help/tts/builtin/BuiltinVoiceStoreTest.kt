@@ -101,6 +101,29 @@ class BuiltinVoiceStoreTest {
     }
 
     @Test
+    fun `多说话人档播种 sid 音色且幂等`() {
+        val store = BuiltinVoiceStore(temp.newFolder("speakers"))
+        val first = store.ensureSpeakers("multi", BuiltinModelProfile.ENGINE_VITS, 3, "音色")
+        assertEquals(3, first)
+        val seeded = store.list()
+        assertEquals(listOf(1, 2, 3), seeded.map { it.sid }.sorted())
+        assertTrue(seeded.all { it.profileId == "multi" })
+        assertTrue(seeded.all { it.engine == BuiltinModelProfile.ENGINE_VITS })
+        assertTrue(seeded.all { it.readOnly })
+        // 第二次播种不再新增（用户可能已手工改过名称，不得重复写入）
+        assertEquals(0, store.ensureSpeakers("multi", BuiltinModelProfile.ENGINE_VITS, 3, "音色"))
+        assertEquals(3, store.list().size)
+    }
+
+    @Test
+    fun `多说话人档扩容只补缺失 sid`() {
+        val store = BuiltinVoiceStore(temp.newFolder("speakers-grow"))
+        assertEquals(2, store.ensureSpeakers("multi", BuiltinModelProfile.ENGINE_VITS, 2, "音色"))
+        assertEquals(1, store.ensureSpeakers("multi", BuiltinModelProfile.ENGINE_VITS, 3, "音色"))
+        assertEquals(listOf(1, 2, 3), store.list().map { it.sid }.sorted())
+    }
+
+    @Test
     fun `损坏索引自愈为空索引`() {
         val root = temp.newFolder("broken")
         java.io.File(root, "index.json").writeText("{bad-json")

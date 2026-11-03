@@ -32,7 +32,9 @@ class BuiltinVoiceRef(
     val referenceAudio: FloatArray? = null,
     val referenceSampleRate: Int = 0,
     val referenceText: String = "",
-    val numSteps: Int = 0
+    val numSteps: Int = 0,
+    /** 多说话人档内置音色编号（0 = 引擎默认音色） */
+    val sid: Int = 0
 )
 
 /**
@@ -102,7 +104,8 @@ class SherpaTtsEngine {
         if (text.isBlank()) return false
         val config = GenerationConfig(
             speed = speed.coerceIn(0.5f, 2.0f),
-            sid = 0,
+            // 多说话人档（aishell3/Kokoro）按音色 sid 切换；克隆档与单声档恒 0
+            sid = voiceRef?.sid ?: 0,
             referenceAudio = voiceRef?.referenceAudio,
             referenceSampleRate = voiceRef?.referenceSampleRate ?: 0,
             referenceText = voiceRef?.referenceText.orEmpty(),

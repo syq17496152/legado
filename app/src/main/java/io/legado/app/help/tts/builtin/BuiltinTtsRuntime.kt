@@ -161,6 +161,19 @@ object BuiltinTtsRuntime {
             if (seeded) return
             runCatching { BuiltinVoiceAssets.seed(appContext.assets, voiceStore) }
                 .onFailure { LogUtils.e(TAG, "内置音色播种失败：${it.message}") }
+            // 多说话人档：模型就绪即播种 sid 音色索引（无需用户导入音色包即可多角色，2.6）
+            runCatching {
+                modelManager.profiles()
+                    .filter { it.multiSpeaker && modelManager.state(it) == BuiltinEngineState.READY }
+                    .forEach { profile ->
+                        voiceStore.ensureSpeakers(
+                            profileId = profile.id,
+                            engine = profile.engine,
+                            count = profile.speakerCount,
+                            namePrefix = profile.speakerNamePrefix.ifBlank { profile.title }
+                        )
+                    }
+            }.onFailure { LogUtils.e(TAG, "内置多音色播种失败：${it.message}") }
             seeded = true
         }
     }
@@ -183,7 +196,9 @@ object BuiltinTtsRuntime {
             profiles.firstOrNull { it.id == id }?.takeIf { modelManager.state(it) == BuiltinEngineState.READY }
         }
         stored.takeIf { it.isNotBlank() }?.let { id -> ready(id)?.let { return it } }
-        listOf("clone", "fast").forEach { id -> ready(id)?.let { return it } }
+        // 默认优先级（offline-tts-llm-productization 1.2）：multi（174 音色、30MB）> fast > clone
+        // clone 是「按需定制」档，不再抢占默认位（旧实现 clone 在前，导致默认落到 RTF 5.54 的慢档）
+        listOf("multi", "fast", "clone").forEach { id -> ready(id)?.let { return it } }
         return profiles.firstOrNull { modelManager.state(it) == BuiltinEngineState.READY }
     }
 
@@ -217,6 +232,19 @@ object BuiltinTtsRuntime {
                 Gson().toJson(EngineStateFile(profileId, System.currentTimeMillis()))
             )
         }.onFailure { LogUtils.e(TAG, "写入激活档失败：${it.message}") }
+        // 切到多说话人档时补播 sid 音色：模型可能是在本会话内刚下载完成的（首次 init 时还没就绪）
+        runCatching {
+            modelManager.profile(profileId)
+                ?.takeIf { it.multiSpeaker && modelManager.state(it) == BuiltinEngineState.READY }
+                ?.let { profile ->
+                    voiceStore.ensureSpeakers(
+                        profileId = profile.id,
+                        engine = profile.engine,
+                        count = profile.speakerCount,
+                        namePrefix = profile.speakerNamePrefix.ifBlank { profile.title }
+                    )
+                }
+        }.onFailure { LogUtils.e(TAG, "切换档位时播种多音色失败：${it.message}") }
     }
 
     fun voices(): List<BuiltinVoice> {
@@ -279,11 +307,11 @@ object BuiltinTtsRuntime {
             lastError = "未下载离线语音包"
             return null
         }
-        val voice = voiceStore.find(voiceName) ?: voices().firstOrNull()
+        val voice = resolveVoice(profile, voiceName)
         // T8.2：繁体章节先简化再送引擎（只影响合成，正文显示不变）
         val normalizedText = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
-        // 单声档（vits/matcha）音色不参与合成，缓存键固定，避免同音频多份缓存
-        val voiceKey = if (profile.requiresReference) voice?.voiceName.orEmpty() else "single"
+        // 单声档（vits/matcha）音色不参与合成，缓存键固定；多说话人档必须按 sid 分键（否则换声播放旧音频）
+        val voiceKey = voiceKeyOf(profile, voice)
         val gain = voice?.gainMultiplier ?: 1.0f
         val key = BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalizedText, gain)
         if (!bypassCache) {
@@ -398,15 +426,14 @@ object BuiltinTtsRuntime {
         var synthesized = 0
         var failed = 0
         val profile = activeProfile()
-        val voiceList = voices()
         units.forEachIndexed { index, unit ->
             if (profile == null) {
                 failed++
                 onProgress(index + 1)
                 return@forEachIndexed
             }
-            val voice = voiceStore.find(unit.voiceName) ?: voiceList.firstOrNull()
-            // 与实时合成共用同一键口径（含单声档 voiceKey=single 与音色增益），否则幂等判定永远不命中
+            val voice = resolveVoice(profile, unit.voiceName)
+            // 与实时合成共用同一键口径（含单声档 voiceKey=single / 多说话人 sid 与音色增益），否则幂等判定永远不命中
             val key = cacheKeyOf(profile, voice, rate, unit.text)
             if (cache.contains(key)) {
                 hit++
@@ -528,12 +555,26 @@ object BuiltinTtsRuntime {
         }.getOrDefault(true)
     }
 
+    /** 音色解析（I-6）：逻辑单源在 [BuiltinVoiceRouting]（纯函数，可 JVM 单测） */
+    private fun resolveVoice(profile: BuiltinModelProfile, voiceName: String): BuiltinVoice? =
+        BuiltinVoiceRouting.pick(profile, voiceStore.list(), voiceName)
+
+    /** 缓存分键口径（实时合成与预合成都必须走这里，否则幂等判定/换声会错配缓存） */
+    private fun voiceKeyOf(profile: BuiltinModelProfile, voice: BuiltinVoice?): String =
+        BuiltinVoiceRouting.voiceKey(profile, voice)
+
     private fun buildVoiceRef(
         profile: BuiltinModelProfile,
         voice: BuiltinVoice?
     ): BuiltinVoiceRef? {
-        if (!profile.requiresReference) return null
         if (voice == null) return null
+        if (voice.engineOrDefault() != profile.engine) return null
+        // 多说话人档（vits + speakerCount>1）：只需要 sid，不需要参考音频
+        if (!profile.requiresReference) {
+            return if (voice.sid > 0) {
+                BuiltinVoiceRef(id = voice.id, displayName = voice.displayName, sid = voice.sid)
+            } else null
+        }
         val key = "${profile.id}:${voice.id}"
         referenceCache[key]?.let { return it }
         if (!voiceStore.exists(voice)) return null
@@ -559,7 +600,7 @@ object BuiltinTtsRuntime {
         rate: Float,
         text: String
     ): String {
-        val voiceKey = if (profile.requiresReference) voice?.voiceName.orEmpty() else "single"
+        val voiceKey = voiceKeyOf(profile, voice)
         val normalized = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
         return BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalized, voice?.gainMultiplier ?: 1.0f)
     }

@@ -28,10 +28,21 @@ data class BuiltinVoice(
     val age: String = "",
     val readOnly: Boolean = false,
     val profileId: String = "",
-    val createdAt: Long = 0
+    val createdAt: Long = 0,
+    /**
+     * 音色所属引擎（I-6 硬约束：绑定音色必须与当前引擎档位一致）。
+     * 存量（2026-11-03 之前的 506/518 条只可能是 clone 档）为空 ⇒ 用 [engineOrDefault] 归一。
+     */
+    val engine: String = "",
+    /** 多说话人模型的内置音色编号（aishell3/Kokoro 档用；克隆档恒 0） */
+    val sid: Int = 0
 ) {
     /** 引擎侧绑定键（Voice.name） */
     val voiceName: String get() = "$id|${displayName}"
+
+    /** 存量迁移口径：早期只有 clone(zipvoice) 档，空 engine 一律按 zipvoice 解释（不重写索引，避免半写风险） */
+    fun engineOrDefault(): String =
+        engine.ifBlank { BuiltinModelProfile.ENGINE_ZIPVOICE }
 
     val displayName: String get() = name.ifBlank { id }
 
@@ -112,6 +123,34 @@ class BuiltinVoiceStore(private val root: File) {
         }
         save(current)
         return stored
+    }
+
+    /**
+     * 多说话人模型的**内置音色索引**播种（幂等）：模型包声明 `speakerCount` ⇒ 生成 `sid=1..N` 的音色条目，
+     * 不需要用户导入任何音色包即可多角色配声（offline-tts-llm-productization 2.6）。
+     * 这些条目没有参考音频（`refAudio` 空），只有 `sid`；合成时走引擎的 speaker id 分支。
+     */
+    @Synchronized
+    fun ensureSpeakers(profileId: String, engine: String, count: Int, namePrefix: String): Int {
+        if (profileId.isBlank() || engine.isBlank() || count <= 0) return 0
+        val current = list()
+        val existingSids = current.filter { it.profileId == profileId && it.sid > 0 }
+            .map { it.sid }.toSet()
+        val missing = (1..count).filter { it !in existingSids }
+        if (missing.isEmpty()) return 0
+        val additions = missing.map { sid ->
+            BuiltinVoice(
+                id = "$profileId-s$sid",
+                name = "$namePrefix $sid",
+                origin = BuiltinVoice.ORIGIN_PRESET,
+                readOnly = true,
+                profileId = profileId,
+                engine = engine,
+                sid = sid
+            )
+        }
+        upsertAll(additions)
+        return additions.size
     }
 
     /**

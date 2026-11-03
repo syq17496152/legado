@@ -23,7 +23,11 @@ data class BuiltinModelProfile(
     val sources: List<String> = emptyList(),
     val license: String = "",
     /** vits 档的单声兜底音色显示名（无参考音频时使用） */
-    val fallbackVoiceName: String = ""
+    val fallbackVoiceName: String = "",
+    /** 多说话人档的内置音色数（aishell3=174 / Kokoro 中文=100；0 或 1 表示单声档） */
+    val speakerCount: Int = 0,
+    /** 播种内置音色时的名称前缀（如「艾舍尔」；空则用 title） */
+    val speakerNamePrefix: String = ""
 ) {
     val valid: Boolean
         get() = id.isNotBlank() && title.isNotBlank() &&
@@ -32,6 +36,10 @@ data class BuiltinModelProfile(
     /** 只有克隆档需要参考音频；vits/matcha 为单声档 */
     val requiresReference: Boolean
         get() = engine == ENGINE_ZIPVOICE
+
+    /** 是否多说话人档（可按 sid 切换内置音色，无需参考音频） */
+    val multiSpeaker: Boolean
+        get() = !requiresReference && speakerCount > 1
 
     companion object {
         const val ENGINE_VITS = "vits"
