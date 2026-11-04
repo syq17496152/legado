@@ -695,4 +695,25 @@ class OfflineRoleResolverTest {
         )
         assertEquals(2, alignedOutOfRange!!.segments.size)
     }
+
+    /**
+     * A2：角色画像新增「年龄带」只是叠加信息，不参与归因打分 ——
+     * 带上年龄带前后，同一段文本的归属结果必须完全一致（防"为了语速把角色配错"）。
+     */
+    @Test
+    fun `角色年龄带不改变归因结果`() {
+        val paragraphs = listOf("张三说：“跟我走。”")
+        val units = listOf(unit("u1", 0, 4, paragraphs[0].length, cueBefore = "张三说："))
+        val base = OfflineRoleResolver.resolve(paragraphs, units, characters, emptyMap())
+        val aged = OfflineRoleResolver.resolve(
+            paragraphs,
+            units,
+            characters.map { it.copy(ageBand = "old") },
+            emptyMap()
+        )
+        assertEquals(
+            base.segments.map { it.characterName to it.roleType },
+            aged.segments.map { it.characterName to it.roleType }
+        )
+    }
 }

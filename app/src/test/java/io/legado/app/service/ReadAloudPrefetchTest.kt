@@ -57,4 +57,31 @@ class ReadAloudPrefetchTest {
         assertEquals("旁白音色", ReadAloudPrefetch.resolvePrefetchVoice("", "旁白音色"))
         assertEquals("", ReadAloudPrefetch.resolvePrefetchVoice("", ""))
     }
+
+    /**
+     * A2：预取语速必须与播放期同算 —— 分层生效时用 base×layer；基准未知/模板显式 rate 时按各自口径。
+     */
+    @Test
+    fun `预取语速与播放期同算`() {
+        val plain = io.legado.app.help.readaloud.casting.CastingProsody()
+        // 基准已知：0.95 层 ⇒ 0.95
+        assertEquals(
+            0.95f,
+            ReadAloudPrefetch.prefetchRate(plain, 0.95f, 1.0f, fallback = 1.0f),
+            0.0001f
+        )
+        // 基准未知（跟系统/自定义引擎语速）⇒ 回落全局，不做分层
+        assertEquals(
+            1.0f,
+            ReadAloudPrefetch.prefetchRate(plain, 0.95f, rateBase = null, fallback = 1.0f),
+            0.0001f
+        )
+        // 模板显式 rate 优先
+        val explicit = io.legado.app.help.readaloud.casting.CastingProsody(rate = 1.2f)
+        assertEquals(
+            1.2f,
+            ReadAloudPrefetch.prefetchRate(explicit, 0.95f, 1.0f, fallback = 1.0f),
+            0.0001f
+        )
+    }
 }

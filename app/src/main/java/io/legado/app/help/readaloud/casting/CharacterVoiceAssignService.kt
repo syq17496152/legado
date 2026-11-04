@@ -6,6 +6,8 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.book.characterBookKey
+import io.legado.app.help.character.BookCharacterProfileMeta
+import io.legado.app.help.readaloud.ReadAloudRateLayer
 import io.legado.app.help.readaloud.role.BookAliasStore
 import io.legado.app.help.readaloud.role.FixedRoles
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
@@ -419,11 +421,20 @@ object CharacterVoiceAssignService {
                             character.identity.takeIf { it.length in 2..8 }
                         ),
                         gender = BookCharacter.normalizeGender(character.gender),
-                        roleLevel = character.roleLevel
+                        roleLevel = character.roleLevel,
+                        // A2：语速分层所需的年龄带（角色卡年纪 + 身份词，未知为空）
+                        ageBand = ageBandOf(character)
                     )
                 }
             }.getOrDefault(emptyList())
         }
+
+    /** A2 年龄带口径（抽成函数便于单测锁定：年纪文本 + 身份词） */
+    internal fun ageBandOf(character: BookCharacter): String =
+        ReadAloudRateLayer.ageBandOf(
+            age = BookCharacterProfileMeta.ageOf(character),
+            identity = character.identity
+        )
 
     /** 角色配音页一行（T5.4）：角色 + 当前绑定音色 + 撞音标记 */
     data class RoleVoiceRow(

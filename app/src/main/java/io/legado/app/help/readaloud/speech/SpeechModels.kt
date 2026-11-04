@@ -47,6 +47,14 @@ data class SpeechRoute(
     val isConfigured: Boolean
         get() = engineValue.isNotBlank() || toneID.isNotBlank() || speakerName.isNotBlank()
 
+    /**
+     * 情绪是否真的会生效（A7）：只有 HTTP TTS 目录里登记了 emotionTag 并且请求会带上它；
+     * 系统 TTS / 内置离线引擎（sherpa/piper/Kokoro）都不支持情绪 token ——
+     * 字段保留（协议兼容），但 UI 与朗读计划不再把无效情绪当成卖点展示。
+     */
+    val supportsEmotion: Boolean
+        get() = engineSupportsEmotion(engineType) && emotionTag.isNotBlank()
+
     fun withEmotion(emotion: SpeechEmotion?): SpeechRoute {
         return if (emotion?.valid == true) {
             copy(emotionName = emotion.emotionName, emotionTag = emotion.emotionTag)
@@ -76,6 +84,9 @@ data class SpeechRoute(
         const val ENGINE_HTTP = "http"
         const val SOURCE_AUTO = "auto"
         const val SOURCE_MANUAL = "manual"
+
+        /** 引擎能力（A7）：情绪 token 只有 HTTP TTS 通道会下发；内置/系统引擎不支持 */
+        fun engineSupportsEmotion(engineType: String): Boolean = engineType == ENGINE_HTTP
 
         fun fromJson(json: String?): SpeechRoute {
             if (json.isNullOrBlank()) return SpeechRoute()

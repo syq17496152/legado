@@ -24,7 +24,9 @@ object OfflineRoleResolver {
         val name: String,
         val aliases: List<String> = emptyList(),
         val gender: String = "",
-        val roleLevel: Int = 0
+        val roleLevel: Int = 0,
+        /** A2 语速分层用：child / old / ""（由角色卡年纪+身份推断） */
+        val ageBand: String = ""
     )
 
     data class RoleHit(

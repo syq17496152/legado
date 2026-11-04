@@ -3,6 +3,7 @@ package io.legado.app.help.readaloud
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -85,5 +86,36 @@ class ReadAloudPendingStateTest {
             ReadAloudSpeechPlanner.planKey("book-1", null, emptyList(), "cache-1"),
             keyWithoutScript
         )
+    }
+
+    /**
+     * A2 语速分层：旁白/主角 1.0、老人儿童 0.95、激烈短句 1.05；±5% 硬上限。
+     * 基准未知（跟系统语速/自定义引擎参数）时绝不猜，原样返回模板韵律。
+     */
+    @Test
+    fun rateLayerIsBoundedAndRespectsUnknownBase() {
+        assertEquals(ReadAloudRateLayer.AGE_OLD, ReadAloudRateLayer.ageBandOf("60岁", ""))
+        assertEquals(ReadAloudRateLayer.AGE_OLD, ReadAloudRateLayer.ageBandOf("", "老者"))
+        assertEquals(ReadAloudRateLayer.AGE_CHILD, ReadAloudRateLayer.ageBandOf("十二岁", ""))
+        assertEquals(ReadAloudRateLayer.AGE_CHILD, ReadAloudRateLayer.ageBandOf("", "少女"))
+        assertEquals("", ReadAloudRateLayer.ageBandOf("三十岁", "书生"))
+
+        assertTrue(ReadAloudRateLayer.isIntenseSpeech("“住手！”"))
+        assertFalse(ReadAloudRateLayer.isIntenseSpeech("“你来了。”"))
+        assertFalse("长句不算激烈对白", ReadAloudRateLayer.isIntenseSpeech("“岂有此理，我一定要讨个说法，你们等着瞧！”"))
+
+        assertEquals(ReadAloudRateLayer.NORMAL, ReadAloudRateLayer.layerOf(true, 2, ReadAloudRateLayer.AGE_OLD, true), 0.0001f)
+        assertEquals(ReadAloudRateLayer.SOFT, ReadAloudRateLayer.layerOf(false, 0, ReadAloudRateLayer.AGE_CHILD, false), 0.0001f)
+        assertEquals(ReadAloudRateLayer.INTENSE, ReadAloudRateLayer.layerOf(false, 0, "", true), 0.0001f)
+        assertEquals(ReadAloudRateLayer.NORMAL, ReadAloudRateLayer.layerOf(false, 2, "", false), 0.0001f)
+        // 分层倍率本身夹在 ±5%
+        assertTrue(ReadAloudRateLayer.layerOf(false, 0, "", true) <= 1.05f + 0.0001f)
+
+        val plain = io.legado.app.help.readaloud.casting.CastingProsody()
+        assertSame("基准未知不得改韵律", plain, ReadAloudRateLayer.mergeProsody(plain, 0.95f, null))
+        val explicit = io.legado.app.help.readaloud.casting.CastingProsody(rate = 1.2f)
+        assertSame("用户模板显式 rate 优先", explicit, ReadAloudRateLayer.mergeProsody(explicit, 0.95f, 1.0f))
+        assertEquals(0.95f, ReadAloudRateLayer.mergeProsody(plain, 0.95f, 1.0f).rate, 0.0001f)
+        assertEquals(1.425f, ReadAloudRateLayer.mergeProsody(plain, 0.95f, 1.5f).rate, 0.0001f)
     }
 }

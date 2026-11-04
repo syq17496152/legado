@@ -308,8 +308,8 @@ object BuiltinTtsRuntime {
             return null
         }
         val voice = resolveVoice(profile, voiceName)
-        // T8.2：繁体章节先简化再送引擎（只影响合成，正文显示不变）
-        val normalizedText = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
+        // 读音归一唯一入口（T8.2 简繁 → 用户词典 → A6 数字/年份/单位；只影响送引擎文本）
+        val normalizedText = speechTextOf(text)
         // 单声档（vits/matcha）音色不参与合成，缓存键固定；多说话人档必须按 sid 分键（否则换声播放旧音频）
         val voiceKey = voiceKeyOf(profile, voice)
         val gain = voice?.gainMultiplier ?: 1.0f
@@ -339,6 +339,8 @@ object BuiltinTtsRuntime {
                     for (chunk in chunks) {
                         if (requestGeneration != currentGeneration()) return@withLock null
                         val ref = buildVoiceRef(profile, voice)
+                        // 离线 TTS 回调按整段一次返回（非流式）；A4 包络按段头尾应用
+                        val chunkSampleRate = engineInstance.sampleRate()
                         val success = engineInstance.synthesize(
                             text = chunk.text,
                             voiceRef = ref,
@@ -348,8 +350,10 @@ object BuiltinTtsRuntime {
                             onSamples = { samples ->
                                 // T8.1：出流前响度归一 + 音色增益 + 峰值限制（跨音色听感一致）
                                 val adjusted = BuiltinLoudnessNormalizer.apply(samples, gain)
-                                pcmOut.write(PcmAudioUtils.floatToPcm16(adjusted))
-                                audioSamples += adjusted.size
+                                // A4：段间 80ms 淡入淡出，消除拼接爆音（短段原样返回，不削没语气词）
+                                val enveloped = PcmAudioUtils.applyEdgeEnvelope(adjusted, chunkSampleRate)
+                                pcmOut.write(PcmAudioUtils.floatToPcm16(enveloped))
+                                audioSamples += enveloped.size
                             }
                         )
                         if (!success) {
@@ -593,7 +597,7 @@ object BuiltinTtsRuntime {
         return ref
     }
 
-    /** 缓存键单源口径：实时合成与预合成必须一致（含单声档 voiceKey、音色增益、简繁归一） */
+    /** 缓存键单源口径：实时合成与预合成必须一致（含单声档 voiceKey、音色增益、读音归一） */
     private fun cacheKeyOf(
         profile: BuiltinModelProfile,
         voice: BuiltinVoice?,
@@ -601,9 +605,18 @@ object BuiltinTtsRuntime {
         text: String
     ): String {
         val voiceKey = voiceKeyOf(profile, voice)
-        val normalized = pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
+        val normalized = speechTextOf(text)
         return BuiltinCacheKeys.key(profile.id, voiceKey, rate, normalized, voice?.gainMultiplier ?: 1.0f)
     }
+
+    /**
+     * 读音归一链唯一入口：简繁归一 → 用户发音词典 → 数字/年份/单位（A6）。
+     * 合成与缓存键**必须**共用本方法，否则「缓存键按旧文本、合成按新文本」会读到别人的音频。
+     */
+    private fun speechTextOf(text: String): String =
+        BuiltinNumberNormalizer.normalize(
+            pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
+        )
 
     private fun splitRules(): List<Regex> {
         val file = paths.splitRulesFile

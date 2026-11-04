@@ -10,10 +10,12 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.MediaHelp
 import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.readaloud.ReadAloudRateLayer
 import io.legado.app.help.readaloud.ReadAloudRoleBadge
 import io.legado.app.help.readaloud.bgm.ReadAloudBgmPlayer
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
@@ -526,6 +528,8 @@ class TTSReadAloudService : BaseReadAloudService() {
         // 音色稳定性锚点按章重置：上一章的角色音色不得带进新章的对白
         lastDialogueVoiceRef = null
         val chapterIndex = textChapter.chapter.index
+        // A2 语速分层：章开始取一次角色画像（含年龄带），逐段复用，避免在朗读循环里查库
+        var roleCharacters: List<OfflineRoleResolver.RoleCharacter> = emptyList()
         if (builtinActive) {
             runCatching {
                 // AD-16：章开始自动累积角色（离线 NER 模型识别；fail-open，不阻断播放）。
@@ -550,7 +554,7 @@ class TTSReadAloudService : BaseReadAloudService() {
                         OfflineRoleResolver.clearMemory(roleBookKey)
                     }
                 }
-                val roleCharacters = CharacterVoiceAssignService.roleCharacters(roleBookKey)
+                roleCharacters = CharacterVoiceAssignService.roleCharacters(roleBookKey)
                 if (roleCharacters.isNotEmpty()) {
                     OfflineRoleResolver.ensure(
                         bookKey = roleBookKey,
@@ -570,6 +574,16 @@ class TTSReadAloudService : BaseReadAloudService() {
                 }
             }.onFailure { AppLog.put("离线角色归因准备失败：${it.message}") }
         }
+        // A2 语速分层：角色画像索引（按 id / 归一化名）＋ 基准语速。
+        // 基准未知（跟系统语速 or 用户给该引擎单独调过语速）时不做分层 —— 不猜，避免覆盖用户设置。
+        val roleById = roleCharacters.associateBy { it.id }
+        val roleByName = roleCharacters.associateBy { OfflineRoleResolver.normalizeName(it.name) }
+        val rateLayerBase: Float? = runCatching {
+            if (AppConfig.ttsFlowSys) return@runCatching null
+            val params = TtsEngineParamsStore.get(ReadAloud.currentRoute.engineValue)
+            if (params.speechRate != 1.0f) return@runCatching null
+            (AppConfig.ttsSpeechRate + 5) / 10f
+        }.getOrNull()
         // 音色泄漏防护（P1，2026-10-31 铁证）：SystemEngineSource.applyVoice 只在 voiceId 非空时 setVoice，
         // 没有 toneID 的旁白/对白会沿用上一段角色音色（实测旁白段 voice=b6_m_youth=张三音色）。
         // 内置引擎激活时给"未绑定音色"的段补一个显式 voiceRef：旁白优先取本书 fixed_roles.narrator，否则引擎首音。
@@ -672,6 +686,28 @@ class TTSReadAloudService : BaseReadAloudService() {
                 // 韵律送达（P1-14）：取命中规则配置的韵律（0=跟随全局），不再恒传默认全零
                 val ruleProsody = ruleSet.rules.firstOrNull { it.tag == segment.tag }?.prosody
                     ?: CastingProsody()
+                // A2 语速分层：旁白/主角 1.0、老人儿童 0.95、激烈短句 1.05（±5%）。
+                // 模板显式 rate 优先；基准未知（跟系统/自定义引擎语速）时 mergeProsody 原样返回，不猜。
+                val roleProfile = roleHit?.let { hit ->
+                    when {
+                        hit.characterId > 0L -> roleById[hit.characterId]
+                        hit.characterName.isNotBlank() ->
+                            roleByName[OfflineRoleResolver.normalizeName(hit.characterName)]
+                        else -> null
+                    }
+                }
+                val rateLayer = ReadAloudRateLayer.layerOf(
+                    narrator = segment.tag == CastingTag.NARRATION,
+                    roleLevel = roleProfile?.roleLevel ?: BookCharacter.ROLE_NORMAL,
+                    ageBand = roleProfile?.ageBand.orEmpty(),
+                    intense = segment.tag != CastingTag.NARRATION &&
+                        ReadAloudRateLayer.isIntenseSpeech(speechText)
+                )
+                val effectiveProsody = ReadAloudRateLayer.mergeProsody(
+                    prosody = ruleProsody,
+                    layer = rateLayer,
+                    baseRate = rateLayerBase
+                )
                 val utteranceId = "${AppConst.APP_TAG}mr_${p}_${segment.offsetInParagraph}"
                 // F8/2.26+2.27：逐段诊断计数（voiceMiss=该段将用引擎默认音）
                 TtsMultiRoleDiagnostics.countSegment(
@@ -686,14 +722,17 @@ class TTSReadAloudService : BaseReadAloudService() {
                     tag = segment.tag.toString(),
                     sourceRoute = sourceRoute,
                     voiceDisplayName = voiceRef?.displayName,
-                    prosody = ruleProsody,
+                    prosody = effectiveProsody,
                     utteranceId = utteranceId
                 )
                 // T3.1：起播前预热首段（首段没有"上一段"可预取）；命中缓存后首段起播不再等合成
                 if (ReadAloudTrace.needsWarm(builtinActive)) {
                     runCatching {
                         BuiltinTtsRuntime.prefetch(
-                            speechText, voiceRef?.voiceId.orEmpty(), (AppConfig.ttsSpeechRate + 5) / 10f
+                            speechText,
+                            voiceRef?.voiceId.orEmpty(),
+                            effectiveProsody.rate.takeIf { it > 0f }
+                                ?: ((AppConfig.ttsSpeechRate + 5) / 10f)
                         )
                     }
                     ReadAloudTrace.markWarmed()
@@ -713,7 +752,11 @@ class TTSReadAloudService : BaseReadAloudService() {
                             paragraphIndex = p,
                             ruleSet = ruleSet,
                             fallbackVoiceRef = fallbackVoiceRef,
-                            lastDialogueVoiceRef = lastDialogueVoiceRef
+                            lastDialogueVoiceRef = lastDialogueVoiceRef,
+                            // A2：与主循环同一语速基准与角色画像，预取缓存键才不会落空
+                            rateBase = rateLayerBase,
+                            roleById = roleById,
+                            roleByName = roleByName
                         )
                     }
                 }
@@ -721,7 +764,7 @@ class TTSReadAloudService : BaseReadAloudService() {
                 val completed = source.utterance(
                     speechText,
                     voiceRef,
-                    ruleProsody,
+                    effectiveProsody,
                     utteranceId
                 )
                 ReadAloudTrace.end(gapStart, utteranceId)

@@ -9,7 +9,13 @@ import java.util.Locale
  */
 object BuiltinCacheKeys {
 
-    /** key = md5("bt|<profile>|<voiceName>|<rateKey>|<gainKey>|<normalizedText>") */
+    /**
+     * 缓存命名空间版本：改变「音频内容」的规则升版必须换前缀，否则旧音频会以旧效果播放。
+     * v2 = A4 段间 80ms 包络 + A6 数字/年份/单位读音归一（2026-11-04）
+     */
+    private const val CACHE_VERSION = "bt2"
+
+    /** key = md5("bt2|<profile>|<voiceName>|<rateKey>|<gainKey>|<normalizedText>") */
     fun key(
         profile: String,
         voiceName: String,
@@ -18,7 +24,7 @@ object BuiltinCacheKeys {
         gain: Float = 1.0f
     ): String {
         return BuiltinHash.md5Hex(
-            "bt|$profile|$voiceName|${rateKey(rate)}|${gainKey(gain)}|${normalize(text)}"
+            "$CACHE_VERSION|$profile|$voiceName|${rateKey(rate)}|${gainKey(gain)}|${normalize(text)}"
         )
     }
 

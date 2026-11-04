@@ -282,4 +282,27 @@ class CastSceneStateTest {
         )
         assertEquals("", legacy.scriptLine)
     }
+
+    /**
+     * A7 情绪诚实：朗读设置页的引擎摘要只展示"真的会生效"的情绪（HTTP 且带 emotionTag）；
+     * 内置/系统引擎即使角色卡带情绪字段，也不得在设置页摘要里出现。
+     */
+    @Test
+    fun `情绪摘要只在支持情绪的引擎展示`() {
+        val builtin = io.legado.app.help.readaloud.speech.SpeechRoute(
+            engineType = io.legado.app.help.readaloud.speech.SpeechRoute.ENGINE_DEFAULT,
+            speakerName = "内置女声",
+            emotionName = "开心",
+            emotionTag = "happy"
+        )
+        assertFalse("内置引擎情绪不生效，摘要不应展示", builtin.supportsEmotion)
+
+        val http = io.legado.app.help.readaloud.speech.SpeechRoute(
+            engineType = io.legado.app.help.readaloud.speech.SpeechRoute.ENGINE_HTTP,
+            engineValue = "42",
+            emotionName = "开心",
+            emotionTag = "happy"
+        )
+        assertTrue("HTTP 且带 emotionTag 才允许展示", http.supportsEmotion)
+    }
 }

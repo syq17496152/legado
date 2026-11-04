@@ -155,6 +155,9 @@ object ReadAloudSpeechPlanner {
                 }
                 val characterId = character?.id ?: segment.characterId
                 val route = routeForSegment(character, segment)
+                val emotionSupported = route?.let {
+                    SpeechRoute.engineSupportsEmotion(it.engineType)
+                } == true
                 val plannedCue = ReadAloudCue(
                     index = plannedItems.size,
                     text = text,
@@ -171,7 +174,12 @@ object ReadAloudSpeechPlanner {
                     characterId = characterId,
                     characterName = displayName,
                     avatar = character?.avatar.orEmpty(),
-                    emotionName = segment.emotionName.ifBlank { route?.emotionName.orEmpty() },
+                    // A7 情绪诚实：内置/系统引擎不支持情绪 token ⇒ 计划里不携带，UI 也就不会展示无效情绪
+                    emotionName = if (emotionSupported) {
+                        segment.emotionName.ifBlank { route?.emotionName.orEmpty() }
+                    } else {
+                        ""
+                    },
                     roleLevel = character?.roleLevel ?: BookCharacter.ROLE_NORMAL,
                     leftSide = true,
                     narrator = segment.roleType == "narrator" || displayName == "旁白",
@@ -247,6 +255,8 @@ object ReadAloudSpeechPlanner {
         if (!route.isConfigured) return null
         val emotionName = segment.emotionName.trim()
         val emotionTag = segment.emotionTag.trim()
+        // A7：引擎不支持情绪时，不把脚本情绪写进路由（否则 UI 显示"有情绪"但听到的没有任何变化）
+        if (!SpeechRoute.engineSupportsEmotion(route.engineType)) return route
         return if (emotionName.isNotBlank() || emotionTag.isNotBlank()) {
             route.copy(emotionName = emotionName, emotionTag = emotionTag)
         } else {

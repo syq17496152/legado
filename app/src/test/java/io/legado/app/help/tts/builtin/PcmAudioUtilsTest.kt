@@ -1,6 +1,7 @@
 package io.legado.app.help.tts.builtin
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.sin
@@ -55,5 +56,29 @@ class PcmAudioUtilsTest {
         val quiet = floatArrayOf(0.1f, -0.2f)
         val normalized = PcmAudioUtils.normalizePeak(quiet, 0.9f)
         assertEquals(0.2f, normalized.maxOf { kotlin.math.abs(it) }, 0.0001f)
+    }
+
+    /**
+     * A4：段间 80ms 增益包络 —— 段首尾必须被压到 0（消除拼接爆音），中段保持原样；
+     * 极短段（不足两倍淡入长度）原样返回，避免把语气词削没。
+     */
+    @Test
+    fun `段间包络压平头尾且不改中段`() {
+        val sampleRate = 16000
+        val samples = FloatArray(sampleRate / 2) { 0.5f } // 500ms 恒定信号
+        val out = PcmAudioUtils.applyEdgeEnvelope(samples, sampleRate)
+        val fade = sampleRate * PcmAudioUtils.EDGE_FADE_MS / 1000
+        assertEquals(0f, out[0], 0.0001f)
+        assertEquals(0f, out[out.lastIndex], 0.0001f)
+        assertEquals("中段不得衰减", 0.5f, out[fade + 100], 0.0001f)
+        // 淡入段线性递增（第一个采样之后开始变响）
+        assertTrue(out[1] < out[fade - 1])
+    }
+
+    @Test
+    fun `极短音频不做包络`() {
+        val samples = floatArrayOf(0.5f, 0.5f, 0.5f)
+        assertSame(samples, PcmAudioUtils.applyEdgeEnvelope(samples, 16000))
+        assertSame(samples, PcmAudioUtils.applyEdgeEnvelope(samples, 0))
     }
 }

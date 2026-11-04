@@ -104,4 +104,34 @@ class SpeechRouteResolveTest {
         assertTrue("须改走单源封装", sanitizer.contains("flattenSpeakers(httpTTS.speakersJson)"))
         assertTrue("须改走单源封装", repository.contains("flattenSpeakers(httpTts.speakersJson)"))
     }
+
+    /**
+     * A7 情绪诚实：内置/系统引擎不支持情绪 token，不得把「情绪」当成可用能力展示；
+     * 只有 HTTP TTS 且确实登记了 emotionTag 才算生效。
+     */
+    @Test
+    fun emotionOnlyEffectiveOnHttpRouteWithTag() {
+        assertFalse(SpeechRoute.engineSupportsEmotion(SpeechRoute.ENGINE_SYSTEM))
+        assertFalse(SpeechRoute.engineSupportsEmotion(SpeechRoute.ENGINE_DEFAULT))
+        assertTrue(SpeechRoute.engineSupportsEmotion(SpeechRoute.ENGINE_HTTP))
+
+        val builtin = SpeechRoute(
+            engineType = SpeechRoute.ENGINE_DEFAULT,
+            speakerName = "内置女声",
+            emotionName = "开心",
+            emotionTag = "happy"
+        )
+        assertFalse("内置引擎即使带情绪字段也不生效", builtin.supportsEmotion)
+
+        val httpWithoutTag = SpeechRoute(engineType = SpeechRoute.ENGINE_HTTP, engineValue = "42")
+        assertFalse("HTTP 路由未配置情绪标签时不生效", httpWithoutTag.supportsEmotion)
+
+        val httpEmotional = SpeechRoute(
+            engineType = SpeechRoute.ENGINE_HTTP,
+            engineValue = "42",
+            emotionName = "开心",
+            emotionTag = "happy"
+        )
+        assertTrue(httpEmotional.supportsEmotion)
+    }
 }

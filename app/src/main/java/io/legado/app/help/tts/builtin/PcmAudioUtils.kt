@@ -201,6 +201,31 @@ object PcmAudioUtils {
     }
 
     /**
+     * 段间增益包络（A4）：PCM 缓存拼接处 80ms 线性淡入/淡出，消除爆音与突兀起落。
+     *
+     * 只在「单段 PCM 的头尾」做，不插入额外静音；短音频（不足两倍淡入长度）原样返回，
+     * 避免把极短语气词整体削没。纯函数（不改入参）。
+     */
+    fun applyEdgeEnvelope(samples: FloatArray, sampleRate: Int, fadeMs: Int = EDGE_FADE_MS): FloatArray {
+        if (samples.size < 4 || sampleRate <= 0 || fadeMs <= 0) return samples
+        val fade = (sampleRate.toLong() * fadeMs / 1000).toInt()
+            .coerceAtLeast(1)
+            .coerceAtMost(samples.size / 2)
+        if (fade <= 0) return samples
+        return FloatArray(samples.size) { index ->
+            val gain = when {
+                index < fade -> index.toFloat() / fade
+                index >= samples.size - fade -> (samples.size - 1 - index).toFloat() / fade
+                else -> 1f
+            }
+            samples[index] * gain
+        }
+    }
+
+    /** 段间淡入淡出时长（A4：80ms） */
+    const val EDGE_FADE_MS = 80
+
+    /**
      * 基频（F0）中位数估计：分帧 + 归一化自相关峰值（60~400Hz 搜索范围）。
      * 用于音色自动打标（AD-12）：男 85~165 / 女 165~300。
      */

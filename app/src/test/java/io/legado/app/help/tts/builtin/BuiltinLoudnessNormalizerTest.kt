@@ -68,4 +68,28 @@ class BuiltinLoudnessNormalizerTest {
         assertEquals("-6.0dB", BuiltinLoudnessNormalizer.gainDbText(0.5f))
         assertEquals("6.0dB", BuiltinLoudnessNormalizer.gainDbText(2.0f))
     }
+
+    /**
+     * A3 验收：跨音色平均响度差 ≤2dB（设计 §1.8）。
+     * 两个音色原始能量差近 9dB，归一后必须落在同一目标附近；接近目标的音色保持原样（不抖动）。
+     */
+    @Test
+    fun `跨音色归一后平均响度差不超过2dB`() {
+        val quiet = BuiltinLoudnessNormalizer.apply(constant(0.06f))
+        val loud = BuiltinLoudnessNormalizer.apply(constant(0.16f))
+        val near = BuiltinLoudnessNormalizer.apply(constant(0.12f))
+
+        val db = { value: Float ->
+            20f * kotlin.math.log10(value / BuiltinLoudnessNormalizer.TARGET_RMS)
+        }
+        val quietRms = BuiltinLoudnessNormalizer.rms(quiet)
+        val loudRms = BuiltinLoudnessNormalizer.rms(loud)
+        val nearRms = BuiltinLoudnessNormalizer.rms(near)
+        assertTrue(
+            "两个偏远音色归一后应接近目标：$quietRms / $loudRms",
+            abs(db(quietRms)) <= 2f && abs(db(loudRms)) <= 2f
+        )
+        // 阈值内（+1.6dB）不调整：避免为每个音色引入无意义增益抖动
+        assertEquals(0.12f, nearRms, 0.001f)
+    }
 }

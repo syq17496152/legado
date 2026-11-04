@@ -269,7 +269,10 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
                 route.speakerName
                     .takeIf { it.isNotBlank() && it != engineName }
                     ?.let(::add)
-                route.emotionName.takeIf { it.isNotBlank() }?.let(::add)
+                // A7 情绪诚实：内置/系统引擎没有情绪 token，摘要里不再展示无效情绪
+                route.emotionName
+                    .takeIf { it.isNotBlank() && SpeechRoute.engineSupportsEmotion(route.engineType) }
+                    ?.let(::add)
             }.joinToString(" · ")
         }
 

@@ -648,4 +648,29 @@ class CharacterVoiceAssignServiceTest {
         assertFalse(result.blocked)
         assertTrue(result.message.contains("选角模板"))
     }
+
+    /**
+     * A2：角色年龄带由「年纪 + 身份词」推断；未知返回空（不做分层，绝不按名字瞎猜）。
+     */
+    @Test
+    fun `角色年龄带用于语速分层`() {
+        assertEquals(
+            io.legado.app.help.readaloud.ReadAloudRateLayer.AGE_OLD,
+            CharacterVoiceAssignService.ageBandOf(
+                BookCharacter(id = 1, name = "张伯", identity = "老者")
+            )
+        )
+        assertEquals(
+            io.legado.app.help.readaloud.ReadAloudRateLayer.AGE_CHILD,
+            CharacterVoiceAssignService.ageBandOf(
+                BookCharacter(id = 2, name = "小李", identity = "少年")
+            )
+        )
+        assertEquals(
+            "",
+            CharacterVoiceAssignService.ageBandOf(
+                BookCharacter(id = 3, name = "王五", identity = "书生")
+            )
+        )
+    }
 }

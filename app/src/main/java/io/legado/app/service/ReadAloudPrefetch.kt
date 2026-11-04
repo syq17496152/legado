@@ -1,6 +1,9 @@
 package io.legado.app.service
 
+import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.ReadAloudRateLayer
+import io.legado.app.help.readaloud.casting.CastingProsody
 import io.legado.app.help.readaloud.casting.CastingRuleSet
 import io.legado.app.help.readaloud.casting.CastingSegment
 import io.legado.app.help.readaloud.casting.CastingTag
@@ -59,7 +62,11 @@ internal object ReadAloudPrefetch {
         paragraphIndex: Int,
         ruleSet: CastingRuleSet,
         fallbackVoiceRef: TtsVoiceRef?,
-        lastDialogueVoiceRef: TtsVoiceRef? = null
+        lastDialogueVoiceRef: TtsVoiceRef? = null,
+        /** A2 语速分层：与主循环同一基准/画像，预取缓存键必须与播放期一致，否则预取永远落空 */
+        rateBase: Float? = null,
+        roleById: Map<Long, OfflineRoleResolver.RoleCharacter> = emptyMap(),
+        roleByName: Map<String, OfflineRoleResolver.RoleCharacter> = emptyMap()
     ) {
         if (!shouldPrefetch(builtinActive)) return
         var waitedMs = 0L
@@ -97,9 +104,33 @@ internal object ReadAloudPrefetch {
             lastDialogueVoice = lastDialogueVoiceRef,
             current = TtsVoiceRef(nextVoice, nextVoice, TtsVoiceRef.CHANNEL_SYSTEM)
         )?.voiceId.orEmpty()
+        // A2：下一段的有效语速必须与播放期同算 —— 否则缓存键不同，预取落空 ⇒ 段间又回到 1~2s 现合成
+        val nextProsody = ruleSet.rules.firstOrNull { it.tag == nextSegment.tag }?.prosody
+            ?: CastingProsody()
+        val nextProfile = nextHit?.let { hit ->
+            when {
+                hit.characterId > 0L -> roleById[hit.characterId]
+                hit.characterName.isNotBlank() ->
+                    roleByName[OfflineRoleResolver.normalizeName(hit.characterName)]
+                else -> null
+            }
+        }
+        val nextLayer = ReadAloudRateLayer.layerOf(
+            narrator = nextSegment.tag == CastingTag.NARRATION,
+            roleLevel = nextProfile?.roleLevel ?: BookCharacter.ROLE_NORMAL,
+            ageBand = nextProfile?.ageBand.orEmpty(),
+            intense = nextSegment.tag != CastingTag.NARRATION &&
+                ReadAloudRateLayer.isIntenseSpeech(nextSpeech)
+        )
+        val nextRate = prefetchRate(
+            prosody = nextProsody,
+            layer = nextLayer,
+            rateBase = rateBase,
+            fallback = (AppConfig.ttsSpeechRate + 5) / 10f
+        )
         runCatching {
             BuiltinTtsRuntime.prefetchAsync(
-                nextSpeech, effectiveVoice, (AppConfig.ttsSpeechRate + 5) / 10f
+                nextSpeech, effectiveVoice, nextRate
             )
         }
     }
@@ -110,4 +141,18 @@ internal object ReadAloudPrefetch {
      */
     internal fun resolvePrefetchVoice(toneId: String, fallbackVoiceId: String): String =
         if (toneId.isBlank()) fallbackVoiceId else toneId
+
+    /**
+     * A2：下一段有效语速（预取与播放必须同算）。
+     * 已合并分层的 prosody rate 优先；否则回落全局语速（基准未知时就是全局，不做分层）。
+     */
+    internal fun prefetchRate(
+        prosody: CastingProsody,
+        layer: Float,
+        rateBase: Float?,
+        fallback: Float
+    ): Float {
+        val merged = ReadAloudRateLayer.mergeProsody(prosody, layer, rateBase)
+        return merged.rate.takeIf { it > 0f } ?: fallback
+    }
 }
