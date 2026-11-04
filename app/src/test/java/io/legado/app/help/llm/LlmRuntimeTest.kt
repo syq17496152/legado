@@ -2,11 +2,14 @@ package io.legado.app.help.llm
 
 import com.arm.aichat.InferenceEngine
 import com.arm.aichat.UnsupportedArchitectureException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -124,6 +127,23 @@ class LlmRuntimeTest {
         assertEquals(LlmRuntime.LlmErrorCode.TIMEOUT, result.errorCode)
         assertEquals(LlmRuntime.Phase.ERROR, runtime.snapshot.value.phase)
         // 超时不是永久损坏：再次生成仍会尝试（不会被 no-op 锁死）
+        val retry = runtime.generate("prompt", timeoutMs = 10_000)
+        assertTrue(retry.ok)
+    }
+
+    @Test
+    fun `显式取消映射 CANCELLED 且引擎仍可用`() = runBlocking {
+        val runtime = LlmRuntime(
+            FakeBinding(pieces = listOf("a", "b", "c", "d"), delayPerPieceMs = 300),
+            tickingClock()
+        )
+        assertTrue(runtime.load("/m.gguf").ok)
+        val job = launch(Dispatchers.Default) { runtime.generate("prompt", timeoutMs = 10_000) }
+        delay(120)
+        job.cancelAndJoin()
+        // 取消 ≠ 故障：不落 ERROR，且下一次生成仍然可用（否则取消一次就把本地 AI 用废）
+        assertEquals(LlmRuntime.Phase.READY, runtime.snapshot.value.phase)
+        assertTrue(runtime.isReady)
         val retry = runtime.generate("prompt", timeoutMs = 10_000)
         assertTrue(retry.ok)
     }

@@ -5,6 +5,7 @@ import com.arm.aichat.AiChat
 import com.arm.aichat.InferenceEngine
 import com.arm.aichat.UnsupportedArchitectureException
 import com.arm.aichat.isModelLoaded
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +46,8 @@ class LlmRuntime(
         NOT_LOADED,
         TIMEOUT,
         EMPTY_OUTPUT,
+        /** 调用方显式取消（:llm 侧 MSG_CANCEL / 服务销毁）：不代表引擎故障 */
+        CANCELLED,
         IO,
         UNKNOWN
     }
@@ -108,6 +111,10 @@ class LlmRuntime(
                     errorCode = LlmErrorCode.UNSUPPORTED_ARCH,
                     message = "模型架构不受支持"
                 )
+            } catch (e: CancellationException) {
+                // 显式取消（非超时）：回到未加载态，不把状态打成 ERROR（否则下次自检会误报引擎坏了）
+                _snapshot.value = Snapshot(Phase.UNINITIALIZED, modelPath)
+                Result(elapsedMs = clock() - started, errorCode = LlmErrorCode.CANCELLED, message = "已取消")
             } catch (e: Exception) {
                 fail(LlmErrorCode.UNKNOWN, e.localizedMessage ?: e.javaClass.simpleName)
                 Result(
@@ -174,6 +181,15 @@ class LlmRuntime(
                 tokenCount = tokens,
                 errorCode = LlmErrorCode.TIMEOUT,
                 message = "生成超时"
+            )
+        } catch (e: CancellationException) {
+            // 显式取消：引擎仍可用，状态回到 READY（超时已在上一个分支单独处理）
+            _snapshot.value = Snapshot(Phase.READY, _snapshot.value.modelPath)
+            Result(
+                elapsedMs = clock() - started,
+                tokenCount = tokens,
+                errorCode = LlmErrorCode.CANCELLED,
+                message = "已取消"
             )
         } catch (e: Exception) {
             fail(LlmErrorCode.UNKNOWN, e.localizedMessage ?: e.javaClass.simpleName)

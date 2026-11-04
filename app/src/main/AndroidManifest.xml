@@ -776,6 +776,13 @@
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 
+        <!-- 端侧 LLM 推理宿主（design AD-11）：独立 `:llm` 进程，
+             native OOM/crash 不传染主进程的朗读链路；只允许应用内绑定，绝不导出 -->
+        <service
+            android:name=".help.llm.LlmService"
+            android:process=":llm"
+            android:exported="false" />
+
         <service
             android:name=".service.CacheBookService"
             android:foregroundServiceType="dataSync" />

@@ -35,6 +35,9 @@ temp/
 output/
 .zcode/
 
+# 端侧 LLM POC 的宿主交叉编译目录（llama.cpp 构建产物，可重建）
+build-android-x86/
+
 # 参考项目源码（Rimchars/legado 等，不提交远端）
 archive-ref/
 docs/temp-analysis/
