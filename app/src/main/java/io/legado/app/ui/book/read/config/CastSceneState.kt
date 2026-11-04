@@ -39,7 +39,9 @@ data class SceneSnapshot(
     /** 三步引导（引擎 / 音色 / 开听） */
     val guideSteps: List<GuideStep> = emptyList(),
     /** 资源概览一行（音色 · 模板 · 配乐 · 占用），空串则不显示 */
-    val resourceLine: String = ""
+    val resourceLine: String = "",
+    /** 本章剧本状态行（3.7：未生成/生成中/已生成/降级），空串则不显示 */
+    val scriptLine: String = ""
 )
 
 object CastSceneState {
@@ -136,6 +138,7 @@ object CastSceneState {
      * @param templateCount 选角模板数（资源概览）
      * @param bgmCount 已启用配乐数（资源概览）
      * @param storageBytes 离线资产占用（模型+音色+缓存）
+     * @param scriptStatusLabel 本章剧本状态文案（3.7；空串 = 不展示）
      */
     fun evaluate(
         engineReady: Boolean,
@@ -148,7 +151,8 @@ object CastSceneState {
         voiceCount: Int = 0,
         templateCount: Int = 0,
         bgmCount: Int = 0,
-        storageBytes: Long = 0L
+        storageBytes: Long = 0L,
+        scriptStatusLabel: String = ""
     ): SceneSnapshot {
         val selected = cardOf(activeTemplateId)
         val multiSubtitle = if (characterCount <= 0) {
@@ -171,8 +175,13 @@ object CastSceneState {
             selected == CARD_CUSTOM ->
                 "当前为自定义模板「${customName.ifBlank { "未命名" }}」· 可在「选角模板」里更换"
             selected == CARD_MULTI && storyboardSegments <= 0 ->
-                if (characterCount <= 0) "角色识别：未开始" else "角色识别：已完成 · 本章还没有分镜"
-            selected == CARD_MULTI -> "角色识别：已完成 · 本章 $storyboardSegments 段分镜"
+                if (characterCount <= 0) {
+                    "角色识别：未开始"
+                } else {
+                    "角色识别：已完成 · 本章还没有分镜" + scriptStatusHint(scriptStatusLabel)
+                }
+            selected == CARD_MULTI ->
+                "角色识别：已完成 · 本章 $storyboardSegments 段分镜" + scriptStatusHint(scriptStatusLabel)
             else -> "当前为「${cards.first { it.selected }.title}」；需要更细的模板可在「选角模板」里改"
         }
         // 4.11 开箱即用（spec R2）：离线引擎未就绪也**不阻塞** —— 主按钮直接可听（回落系统语音），
@@ -194,7 +203,16 @@ object CastSceneState {
             assignedCount = assignedCount,
             storyboardSegments = storyboardSegments,
             guideSteps = guideSteps(engineReady, voiceCount, hasBook),
-            resourceLine = resourceLine(voiceCount, templateCount, bgmCount, storageBytes)
+            resourceLine = resourceLine(voiceCount, templateCount, bgmCount, storageBytes),
+            scriptLine = if (selected == CARD_MULTI && scriptStatusLabel.isNotBlank()) {
+                "本章剧本：$scriptStatusLabel"
+            } else {
+                ""
+            }
         )
     }
+
+    /** 状态行里的剧本提示（3.7）：只在多角色卡展示，避免单声/双声用户被无关状态干扰 */
+    private fun scriptStatusHint(label: String): String =
+        if (label.isBlank()) "" else " · 本章剧本：$label"
 }

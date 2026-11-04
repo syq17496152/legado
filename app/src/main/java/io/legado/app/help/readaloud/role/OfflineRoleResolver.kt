@@ -506,7 +506,7 @@ object OfflineRoleResolver {
         memory[memoryKey(bookKey, chapterIndex)]
 
     /**
-     * 章开始准备：内存优先 → 落库缓存 → 现算并落库。
+     * 章开始准备：**剧本优先** → 内存 → 落库缓存 → 现算并落库（3.6 读取顺序）。
      * 零网络；失败不阻断播放（返回空表，播放期走模板兜底）。
      */
     suspend fun ensure(
@@ -519,6 +519,18 @@ object OfflineRoleResolver {
         forceRecompute: Boolean = false
     ): List<OfflineRoleSegment> {
         val key = memoryKey(bookKey, chapterIndex)
+        // 3.6 第一层：章节剧本（AI 增强结果）。文件小，仍放 IO，避免服务主线程做磁盘读
+        val scripted = withContext(Dispatchers.IO) {
+            runCatching {
+                ChapterScriptPlayback.readForPlayback(bookKey, chapterIndex, paragraphs)
+                    ?.let { ChapterScriptPlayback.align(it, paragraphs) }
+                    ?.let { ChapterScriptPlayback.toOfflineSegments(it) }
+            }.getOrNull()
+        }
+        if (!scripted.isNullOrEmpty()) {
+            memory[key] = scripted
+            return scripted
+        }
         if (!forceRecompute) {
             memory[key]?.let { if (it.isNotEmpty()) return it }
             OfflineRoleCacheStore.read(bookKey, chapterIndex, paragraphs)?.let { cachedSegments ->

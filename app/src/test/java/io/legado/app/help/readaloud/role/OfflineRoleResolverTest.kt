@@ -642,4 +642,57 @@ class OfflineRoleResolverTest {
         )
         assertTrue("多角色窗口不得按最近名字抢判", result.segments[0].characterName.isBlank())
     }
+
+    /**
+     * 3.6：剧本 → 播报的转换口径。`ensure` 第一层就是读剧本，
+     * 这里锁死「剧本段能原样变成归因段」以及「剧本与正文不对齐时必须回落」。
+     */
+    @Test
+    fun `剧本段映射为归因段 不对齐时回落`() {
+        val paragraphs = listOf("“走吧。”张三说。", "他推开门。")
+        val script = ChapterScriptBuilder.build(
+            bookKey = "b",
+            chapterIndex = 1,
+            paragraphs = paragraphs,
+            segments = listOf(
+                OfflineRoleSegment(
+                    paragraphIndex = 0,
+                    start = 1,
+                    end = 5,
+                    roleType = "character",
+                    characterName = "张三",
+                    characterId = 1L,
+                    confidence = 0.9,
+                    reason = "ner-cue"
+                ),
+                OfflineRoleSegment(
+                    paragraphIndex = 1,
+                    start = 0,
+                    end = 3,
+                    roleType = "narrator",
+                    confidence = 0.5,
+                    reason = "unknown"
+                )
+            ),
+            ruleVersion = "r1",
+            source = "mixed"
+        )
+        val aligned = ChapterScriptPlayback.align(script, paragraphs)
+        assertNotNull(aligned)
+        val segments = ChapterScriptPlayback.toOfflineSegments(aligned!!)
+        assertEquals(2, segments.size)
+        assertEquals("张三", segments[0].characterName)
+        assertEquals("character", segments[0].roleType)
+        // 剧本层把细分 reason 收敛为可诊断来源（ner-cue ⇒ ner），播报侧拿到同口径
+        assertEquals("ner", segments[0].reason)
+        assertEquals("narrator", segments[1].roleType)
+        // 段数变化（正文新增一段）⇒ 剧本不可用，必须回落缓存/规则
+        assertNull(ChapterScriptPlayback.align(script, paragraphs + "第三段"))
+        // 段区间越界（正文改动后残留）⇒ 越界段剔除
+        val alignedOutOfRange = ChapterScriptPlayback.align(
+            script.copy(segments = script.segments + script.segments.first().copy(start = 90, end = 120)),
+            paragraphs
+        )
+        assertEquals(2, alignedOutOfRange!!.segments.size)
+    }
 }

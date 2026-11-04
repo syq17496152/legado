@@ -148,6 +148,7 @@ import io.legado.app.help.readaloud.ReadAloudSpeakerLoudnessManager
 import io.legado.app.help.readaloud.ReadAloudSpeechPlanItem
 import io.legado.app.help.readaloud.ReadAloudSpeechPlanner
 import io.legado.app.help.readaloud.ReadAloudPlaybackState
+import io.legado.app.help.readaloud.role.ChapterScriptPlayback
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.help.readaloud.speech.SpeechVoiceEngineGroup
@@ -1180,6 +1181,21 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
             append(':')
             append(baseCues.sumOf { it.text.length })
         }
+        val characterBookKey = book.characterBookKey()
+        // 3.6：剧本优先。单元表与服务端 contentList 同源，保证同一个指纹口径；
+        // 未命中/不对齐即 null ⇒ 朗读计划回落缓存/规则（与旧行为一致，不阻塞起播）。
+        val chapterScript = if (multiRoleEnabled) {
+            ChapterScriptPlayback.readForPlayback(
+                bookKey = characterBookKey,
+                chapterIndex = chapterSequence,
+                paragraphs = ChapterScriptPlayback.unitsOf(chapter, readAloudByPage)
+            )
+        } else {
+            null
+        }
+        val scriptKey = chapterScript?.let {
+            "${it.contentHash}|${it.source}|${it.generatedAt}|${it.segments.size}"
+        }
         val modelKey = listOf(
             book.bookUrl,
             book.name,
@@ -1201,23 +1217,25 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
             roleCache?.voiceHash.orEmpty(),
             roleCache?.segmentsJson?.length?.toString().orEmpty(),
             roleCache?.segmentsJson?.hashCode()?.toString().orEmpty(),
+            scriptKey.orEmpty(),
             audioInfo.fingerprint
         ).joinToString("|")
         chapterModelCache?.takeIf { it.key == modelKey }?.let { return it }
         val chapterKey = "${book.bookUrl}:$chapterSequence"
-        val characterBookKey = book.characterBookKey()
         val speechPlan = ReadAloudSpeechPlanner.build(
             bookUrl = characterBookKey,
             chapter = chapter,
             baseCues = baseCues,
             multiRoleEnabled = multiRoleEnabled,
-            roleCacheKey = roleCacheKey
+            roleCacheKey = roleCacheKey,
+            chapterScript = chapterScript
         )
         val planKey = ReadAloudSpeechPlanner.planKey(
             bookUrl = characterBookKey,
             chapter = chapter,
             cues = speechPlan.cues,
-            roleCacheKey = roleCacheKey
+            roleCacheKey = roleCacheKey,
+            scriptKey = scriptKey
         )
         val totalLength = chapter.lastPage
             ?.let { it.chapterPosition + it.charSize }

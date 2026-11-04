@@ -111,6 +111,9 @@ class BuiltinTtsPaths(
     /** filesDir/legado_rules/（与 CloneTTS 生态互通：fixed_roles.json / book/<key>.json） */
     val rulesRoot: File = File(filesRoot, "legado_rules")
 
+    /** filesDir/scripts/（章节剧本：<bookKey>/<chapterIndex>.json；可重建缓存，不进备份） */
+    val scriptsDir: File = File(filesRoot, "scripts")
+
     /** cacheDir/builtin_tts/（与 http 通道 TtsCacheKeys 命名空间隔离，见 AD-04） */
     val cacheDir: File = File(cacheRoot, "builtin_tts")
 

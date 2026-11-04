@@ -53,6 +53,7 @@ import io.legado.app.ui.book.read.config.casting.TtsCastingManageFragment
 import io.legado.app.help.readaloud.role.BookAliasStore
 import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
+import io.legado.app.help.readaloud.role.ScriptStatusBus
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
@@ -144,7 +145,9 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         val bgmTrackCount: Int,
         val voiceCount: Int = 0,
         val templateCount: Int = 0,
-        val storageBytes: Long = 0L
+        val storageBytes: Long = 0L,
+        /** 3.7 本章剧本状态（未生成/生成中/已生成/降级），无书为空串 */
+        val scriptStatusLabel: String = ""
     )
 
     private suspend fun reloadState() {
@@ -161,7 +164,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             voiceCount = facts.voiceCount,
             templateCount = facts.templateCount,
             bgmCount = facts.bgmTrackCount,
-            storageBytes = facts.storageBytes
+            storageBytes = facts.storageBytes,
+            scriptStatusLabel = facts.scriptStatusLabel
         )
         bgmEnabled = AppConfig.aiReadAloudBgmEnabled
         bgmTrackCount = facts.bgmTrackCount
@@ -187,6 +191,14 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                 .getOrDefault(0)
         } else {
             0
+        }
+        // 3.7 剧本状态：有推送用推送，否则按磁盘剧本推导（已生成/降级/未生成）
+        val scriptStatusLabel = if (bookKey != null && chapter != null) {
+            runCatching {
+                ScriptStatusBus.labelOf(ScriptStatusBus.resolve(bookKey, chapter.chapter.index))
+            }.getOrDefault("")
+        } else {
+            ""
         }
         val activeId = TtsCastingStore.activeTemplateId()
         // G-43：DAO 读取必须显式 IO 包裹（静态门禁按函数体扫描，不能只依赖外层 withContext）
@@ -224,7 +236,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             bgmTrackCount = bgmTrackCount,
             voiceCount = voiceCount,
             templateCount = templateCount,
-            storageBytes = storageBytes
+            storageBytes = storageBytes,
+            scriptStatusLabel = scriptStatusLabel
         )
     }
 
@@ -471,6 +484,15 @@ private fun CastSceneScreen(
                     SceneStat("${snapshot.characterCount}", "识别角色", Modifier.weight(1f))
                     SceneStat("${snapshot.assignedCount}", "已配音色", Modifier.weight(1f))
                     SceneStat("${snapshot.storyboardSegments}", "本章分镜", Modifier.weight(1f))
+                }
+                // 3.7 剧本状态：未生成/生成中/已生成/降级 —— 不改变起播能力，只把"AI 有没有接管"说清楚
+                if (snapshot.scriptLine.isNotBlank()) {
+                    Text(
+                        text = snapshot.scriptLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
                 // 资源概览：让用户在本页就知道"有什么、占多少"，并可一键进「声音资源」看清来源分类
                 if (snapshot.resourceLine.isNotBlank()) {

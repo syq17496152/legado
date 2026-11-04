@@ -3,6 +3,9 @@ package io.legado.app.help.readaloud
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.ai.AiReadAloudRoleService
+import io.legado.app.help.readaloud.role.ChapterScript
+import io.legado.app.help.readaloud.role.ChapterScriptPlayback
+import io.legado.app.help.readaloud.role.ScriptSegment
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechRouteSanitizer
 import io.legado.app.ui.book.read.page.entities.ReadAloudCue
@@ -39,7 +42,8 @@ object ReadAloudSpeechPlanner {
         bookUrl: String?,
         chapter: TextChapter?,
         cues: List<ReadAloudCue>,
-        roleCacheKey: String? = null
+        roleCacheKey: String? = null,
+        scriptKey: String? = null
     ): String {
         return buildString {
             append(bookUrl.orEmpty())
@@ -57,15 +61,25 @@ object ReadAloudSpeechPlanner {
             append(cues.sumOf { it.text.length })
             append('|')
             append(roleCacheKey.orEmpty())
+            append('|')
+            append(scriptKey.orEmpty())
         }
     }
 
+    /**
+     * 朗读计划（3.6）：段来源按「ChapterScript → OfflineRoleCacheStore → 规则」读取。
+     *
+     * - [chapterScript] 由调用方从磁盘读取后注入（计划层不碰文件，便于 JVM 单测锁定映射）；
+     * - 剧本命中且与正文对齐 ⇒ 用剧本段；未命中/不对齐 ⇒ 原缓存链路；两者都没有 ⇒ 规则兜底（整段旁白）。
+     * - 对外结构 [ReadAloudSpeechPlan] 不变。
+     */
     fun build(
         bookUrl: String?,
         chapter: TextChapter,
         baseCues: List<ReadAloudCue>,
         multiRoleEnabled: Boolean,
-        roleCacheKey: String? = null
+        roleCacheKey: String? = null,
+        chapterScript: ChapterScript? = null
     ): ReadAloudSpeechPlan {
         if (baseCues.isEmpty()) {
             return ReadAloudSpeechPlan(emptyList(), emptyList(), emptyList())
@@ -99,18 +113,29 @@ object ReadAloudSpeechPlanner {
         val characters = appDb.bookCharacterDao.characters(bookUrl)
         val byId = characters.associateBy { it.id }
         val byName = charactersByNormalizedName(characters)
-        val assignedSegmentsByCue = AiReadAloudRoleService.assignedSegmentsByCue(
-            bookUrl = bookUrl,
-            chapterIndex = chapter.chapter.index,
-            cacheKey = roleCacheKey
-        )
+        // 3.6 读取顺序第一层：章节剧本（与正文对齐后才采用）；不对齐/未命中 ⇒ 第二层缓存
+        val scriptGroups = chapterScript
+            ?.let { ChapterScriptPlayback.align(it, baseCues.map { cue -> cue.text }) }
+            ?.let { ChapterScriptPlayback.groupsByParagraph(it) }
+        val assignedSegmentsByCue = if (scriptGroups == null) {
+            AiReadAloudRoleService.assignedSegmentsByCue(
+                bookUrl = bookUrl,
+                chapterIndex = chapter.chapter.index,
+                cacheKey = roleCacheKey
+            )
+        } else {
+            emptyMap()
+        }
         val plannedItems = arrayListOf<ReadAloudSpeechPlanItem>()
         baseCues.forEachIndexed { cueIndex, cue ->
             val beforeSize = plannedItems.size
+            // 剧本段优先；该段无剧本条目时由 completeCueSegments 用规则补旁白，与旧链路同语义
+            val rawSegments = scriptGroups?.get(cueIndex)?.map { it.toPlannerSegment() }
+                ?: assignedSegmentsByCue[cueIndex].orEmpty()
             val segments = completeCueSegments(
                 cueIndex = cueIndex,
                 cueText = cue.text,
-                rawSegments = assignedSegmentsByCue[cueIndex].orEmpty()
+                rawSegments = rawSegments
             )
             segments.forEach { segment ->
                 val text = cue.text.substring(segment.start, segment.end)
@@ -290,6 +315,28 @@ object ReadAloudSpeechPlanner {
         } else {
             "name:$roleType:$characterName"
         }
+    }
+
+    /**
+     * 剧本段 → 计划段：只做字段映射，不改区间（区间已由 [ChapterScriptPlayback.align] 校验）。
+     * 情绪走 `emotionName`（`emotionTag` 保留给后续情绪档位，不在本层推断）。
+     */
+    private fun ScriptSegment.toPlannerSegment(): AiReadAloudRoleService.Segment {
+        return AiReadAloudRoleService.Segment(
+            paragraphIndex = paragraphIndex,
+            start = start,
+            end = end,
+            roleType = when (roleType) {
+                "narration", "narrator" -> "narrator"
+                "thought" -> "thought"
+                else -> "character"
+            },
+            characterName = characterName,
+            characterId = characterId,
+            confidence = confidence,
+            emotionName = emotion,
+            emotionTag = ""
+        )
     }
 
     private fun completeCueSegments(

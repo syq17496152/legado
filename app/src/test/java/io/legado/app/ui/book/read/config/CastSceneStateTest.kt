@@ -233,4 +233,53 @@ class CastSceneStateTest {
         assertFalse(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_MONO, 0, 0))
         assertFalse(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_DUAL, 3, 0))
     }
+
+    @Test
+    fun `剧本状态在多角色页可见且不干扰其它卡`() {
+        // 3.7：状态行与「本章准备」的剧本行都必须给出同一句状态
+        val multi = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 2,
+            assignedCount = 2,
+            storyboardSegments = 13,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            scriptStatusLabel = "生成中…"
+        )
+        assertTrue(multi.statusLine.contains("本章剧本：生成中…"))
+        assertEquals("本章剧本：生成中…", multi.scriptLine)
+
+        // 剧本未生成时不空口承诺（明确写"未生成"，而不是留白让人误以为已生效）
+        val none = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 2,
+            assignedCount = 2,
+            storyboardSegments = 0,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            scriptStatusLabel = "未生成"
+        )
+        assertTrue(none.statusLine.contains("本章剧本：未生成"))
+        assertEquals("本章剧本：未生成", none.scriptLine)
+
+        // 单声/双声卡不展示剧本行（剧本只影响多角色配声，避免无关信息干扰）
+        val mono = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 2,
+            assignedCount = 2,
+            storyboardSegments = 13,
+            activeTemplateId = CastSceneState.TEMPLATE_MONO,
+            scriptStatusLabel = "已生成（AI 增强）· 12 段"
+        )
+        assertEquals("", mono.scriptLine)
+        assertFalse(mono.statusLine.contains("本章剧本："))
+
+        // 缺省调用方（未传状态）行为不变
+        val legacy = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 2,
+            assignedCount = 2,
+            storyboardSegments = 13,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI
+        )
+        assertEquals("", legacy.scriptLine)
+    }
 }

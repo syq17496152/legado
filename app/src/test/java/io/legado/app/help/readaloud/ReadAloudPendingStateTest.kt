@@ -1,6 +1,8 @@
 package io.legado.app.help.readaloud
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -47,5 +49,41 @@ class ReadAloudPendingStateTest {
         state.cancel()
         assertFalse(state.isPending)
         assertFalse(state.consumeIfPending(chapterReady = true))
+    }
+
+    /**
+     * 3.6：计划缓存的 key 必须带剧本指纹 —— 否则「AI 剧本更新后，页面仍显示旧的角色分配」，
+     * 而用户完全无从判断（看起来就是"剧本没生效"）。
+     */
+    @Test
+    fun planKeyChangesWithChapterScript() {
+        val keyWithoutScript = ReadAloudSpeechPlanner.planKey(
+            bookUrl = "book-1",
+            chapter = null,
+            cues = emptyList(),
+            roleCacheKey = "cache-1"
+        )
+        val keyWithScript = ReadAloudSpeechPlanner.planKey(
+            bookUrl = "book-1",
+            chapter = null,
+            cues = emptyList(),
+            roleCacheKey = "cache-1",
+            scriptKey = "hash|mixed|1000|6"
+        )
+        val keyWithOtherScript = ReadAloudSpeechPlanner.planKey(
+            bookUrl = "book-1",
+            chapter = null,
+            cues = emptyList(),
+            roleCacheKey = "cache-1",
+            scriptKey = "hash2|mixed|1000|6"
+        )
+        assertNotEquals(keyWithoutScript, keyWithScript)
+        assertNotEquals(keyWithScript, keyWithOtherScript)
+        assertTrue(keyWithScript.contains("hash|mixed|1000|6"))
+        assertFalse(keyWithoutScript.contains("mixed"))
+        assertEquals(
+            ReadAloudSpeechPlanner.planKey("book-1", null, emptyList(), "cache-1"),
+            keyWithoutScript
+        )
     }
 }

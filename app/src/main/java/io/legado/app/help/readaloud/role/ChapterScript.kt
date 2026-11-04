@@ -24,6 +24,9 @@ data class ChapterScript(
     val generatedAt: Long = 0,
     /** rule | local-ai | online | mixed */
     val source: String = "rule",
+    /** 模型失败/超时后的降级结果（source=rule）；UI 状态据此显示「降级」而不是「已生成」 */
+    val degraded: Boolean = false,
+    val degradeReason: String = "",
     val segments: List<ScriptSegment> = emptyList()
 ) {
 
@@ -121,6 +124,9 @@ object ChapterScriptBuilder {
         segments: List<OfflineRoleSegment>,
         ruleVersion: String,
         overrides: Map<String, ScriptSegment> = emptyMap(),
+        source: String = "rule",
+        degraded: Boolean = false,
+        degradeReason: String = "",
         now: Long = System.currentTimeMillis()
     ): ChapterScript {
         val mapped = segments.map { segment ->
@@ -156,7 +162,9 @@ object ChapterScriptBuilder {
             paragraphHashes = paragraphs.map { hashOf(it) },
             ruleVersion = ruleVersion,
             generatedAt = now,
-            source = "rule",
+            source = source,
+            degraded = degraded,
+            degradeReason = degradeReason,
             segments = mapped
         )
     }
