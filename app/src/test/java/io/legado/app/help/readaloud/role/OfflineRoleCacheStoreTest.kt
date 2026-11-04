@@ -76,4 +76,17 @@ class OfflineRoleCacheStoreTest {
             draft.contentHash
         )
     }
+
+    /** 3.5 调度策略：后台过久必须释放（避免模型常驻耗尽内存） */
+    @Test
+    fun `剧本调度在后台过久时释放`() {
+        assertEquals(
+            ScriptSchedulerPolicy.Decision.RELEASE,
+            ScriptSchedulerPolicy.decide(ScriptSchedulerPolicy.Facts(backgroundMinutes = 12))
+        )
+        assertEquals(
+            ScriptSchedulerPolicy.Decision.RUN,
+            ScriptSchedulerPolicy.decide(ScriptSchedulerPolicy.Facts(backgroundMinutes = 5))
+        )
+    }
 }

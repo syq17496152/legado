@@ -550,6 +550,21 @@ class CharacterVoiceAssignServiceTest {
         assertEquals(EffectiveReadAloudConfig.DEFAULT_SPEECH_RATE, builtinLayer.speechRate.value)
     }
 
+    /** 6.1 AI 任务路由：未允许云端时本地不可用必须返回 NONE，而不是偷偷出端 */
+    @Test
+    fun `AI 任务路由不越权使用云端`() {
+        val facts = AiTaskRouter.Facts(
+            localEnabled = false,
+            localReady = false,
+            onlineConfigured = true,
+            onlineAllowed = false
+        )
+        val route = AiTaskRouter.route(AiTaskRouter.Policy.LOCAL, facts)
+        assertEquals(AiTaskRouter.Executor.NONE, route.executor)
+        assertFalse(route.available)
+        assertTrue(route.reason.contains("未允许云端"))
+    }
+
     // ---- 4.7 智能多角色一键编排 ----
 
     private fun facts(
