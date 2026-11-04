@@ -115,6 +115,12 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                                 putExtra(BuiltinTtsActivity.EXTRA_TAB, BuiltinTtsActivity.TAB_ENGINE)
                             }
                         },
+                        // 4.6：角色配音 / 开书向导入口收敛到听书中心高级区（深链二级页页签，不复制实现）
+                        onOpenPage = { tabKey ->
+                            startActivity<BuiltinTtsActivity> {
+                                putExtra(BuiltinTtsActivity.EXTRA_TAB, tabKey)
+                            }
+                        },
                         onPrimary = ::primaryAction
                     )
                 }
@@ -409,6 +415,8 @@ private fun CastSceneScreen(
     onOpenStoryboard: () -> Unit,
     onOpenTuning: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    /** 4.6：按 `PageTab.key` 深链到二级页（角色配音 / 开书向导） */
+    onOpenPage: (String) -> Unit,
     onPrimary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -590,6 +598,17 @@ private fun CastSceneScreen(
                 ) {
                     AssistChip(onClick = onOpenTuning, label = { Text("语速音调") })
                     AssistChip(onClick = onOpenDiagnostics, label = { Text("诊断") })
+                }
+                // 4.6：角色配音 / 开书向导从二级页收敛到此处（key 与 PageTab 单源）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CastSceneState.advancedPageEntries.forEach { (tabKey, label) ->
+                        AssistChip(onClick = { onOpenPage(tabKey) }, label = { Text(label) })
+                    }
                 }
             }
             if (busy) {

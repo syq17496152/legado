@@ -307,6 +307,24 @@ class CastSceneStateTest {
     }
 
     /**
+     * 4.6 二级页职责收敛：听书中心高级区的入口 key 必须能深链命中真实页签，
+     * 否则点了无反应（两套字符串漂移是这类"入口消失"故障的根因）。
+     */
+    @Test
+    fun `高级区入口 key 与二级页页签单源`() {
+        val entries = CastSceneState.advancedPageEntries
+        assertEquals("高级区只保留角色配音与开书向导两个入口", 2, entries.size)
+        entries.forEach { (tabKey, label) ->
+            assertTrue("入口 $tabKey 必须能落在二级页", PageTab.ofKey(tabKey) != null)
+            assertTrue("入口文案不能为空", label.isNotBlank())
+        }
+        // 制作/调试类页签不在这里（留在「引擎与音色」页），避免听书中心变成第二个设置页
+        assertEquals(listOf("roles", "wizard"), entries.map { it.first })
+        assertEquals(PageTab.ROLES, PageTab.ofKey(entries[0].first))
+        assertEquals(PageTab.WIZARD, PageTab.ofKey(entries[1].first))
+    }
+
+    /**
      * 4.9：音色分组带「连播试听」次要动作；新增「AI 剧本与本地模型」分组并可清除；
      * 两条删除路径都必须先给出「删什么/不影响什么」的影响提示。
      */

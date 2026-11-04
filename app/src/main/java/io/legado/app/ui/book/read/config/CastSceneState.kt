@@ -104,6 +104,15 @@ object CastSceneState {
     }
 
     /**
+     * 4.6 二级页职责收敛：制作/调试留在「引擎与音色」页，角色配音与开书向导的**入口**
+     * 收敛到听书中心高级区；key 与 `PageTab.key` 单源（深链），避免两套字符串漂移。
+     */
+    val advancedPageEntries: List<Pair<String, String>> = listOf(
+        "roles" to "角色配音",
+        "wizard" to "开书向导"
+    )
+
+    /**
      * 使用提示（纯函数可单测）：首次进本页的人不用去翻文档，
      * 也顺带把"开听后怎么回来改"说清楚（页面内容偏短，空区靠它填得有意义）。
      */
