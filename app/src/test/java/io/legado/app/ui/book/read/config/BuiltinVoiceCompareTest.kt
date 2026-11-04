@@ -68,4 +68,31 @@ class BuiltinVoiceCompareTest {
         assertEquals("这是青年的声音，听听喜欢哪一个。", plan?.get(1)?.first)
         assertEquals("b|内置·女·青年", plan?.get(1)?.second)
     }
+
+    /**
+     * 4.9 分组连播试听：取前 5 个可用音色（跳过空 id 脏数据），每段用短示范句；
+     * 超过 5 个不再延长（扫听超过 5 个就应去管理页筛选）。
+     */
+    @Test
+    fun `分组连播取前五个并跳过脏数据`() {
+        val voices = listOf(
+            voice("a", "内置·男·少年"),
+            BuiltinVoice(id = "", name = "脏数据"),
+            voice("b", "内置·女·青年"),
+            voice("c", "女声三"),
+            voice("d", "女声四"),
+            voice("e", "女声五"),
+            voice("f", "女声六")
+        )
+        val plan = BuiltinVoiceCompare.groupPlan(voices)
+        assertEquals(BuiltinVoiceCompare.GROUP_PREVIEW_LIMIT, plan?.size)
+        assertEquals("这是少年的声音。", plan?.get(0)?.first)
+        assertEquals("a|内置·男·少年", plan?.get(0)?.second)
+        // 空 id 被跳过 ⇒ 第二段是 b，而不是脏数据
+        assertEquals("b|内置·女·青年", plan?.get(1)?.second)
+        assertEquals(2, BuiltinVoiceCompare.groupPlan(voices, limit = 2)?.size)
+
+        assertNull("无可用音色返回 null", BuiltinVoiceCompare.groupPlan(emptyList()))
+        assertNull(BuiltinVoiceCompare.groupPlan(listOf(BuiltinVoice(id = "", name = "脏"))))
+    }
 }

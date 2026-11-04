@@ -23,11 +23,13 @@ enum class AssetStatus { READY, MISSING, PARTIAL }
 enum class AssetAction {
     MANAGE_ENGINE,
     MANAGE_VOICE,
+    PREVIEW_VOICES,
     IMPORT_NER,
     MANAGE_TEMPLATE,
     MANAGE_BGM,
     MANAGE_TEXT,
-    CLEAR_CACHE
+    CLEAR_CACHE,
+    CLEAR_AI_DATA
 }
 
 data class AssetGroup(
@@ -37,7 +39,10 @@ data class AssetGroup(
     val source: AssetSource,
     val status: AssetStatus,
     val action: AssetAction,
-    val actionLabel: String
+    val actionLabel: String,
+    /** 次要动作（如音色分组「连播试听」）；null = 不显示第二个按钮 */
+    val secondaryAction: AssetAction? = null,
+    val secondaryLabel: String = ""
 )
 
 data class AssetFacts(
@@ -53,6 +58,10 @@ data class AssetFacts(
     val modelBytes: Long = 0L,
     val voiceBytes: Long = 0L,
     val cacheBytes: Long = 0L,
+    /** 章节剧本（草案）占用：可重建缓存，清除不影响音色与角色绑定 */
+    val scriptBytes: Long = 0L,
+    /** 本地 AI 模型占用（有则计；无则为 0） */
+    val aiModelBytes: Long = 0L,
     /** 音色画像覆盖率（5.1）：性别/年龄有标注的比例，决定配声"性别硬约束"能起多大作用 */
     val voiceGenderPercent: Int = 0,
     val voiceAgePercent: Int = 0
@@ -63,7 +72,8 @@ data class AssetFacts(
 data class VoiceAssetCenterUi(
     val headerLine: String,
     val groups: List<AssetGroup>,
-    val canClearCache: Boolean
+    val canClearCache: Boolean,
+    val canClearAiData: Boolean = false
 )
 
 object VoiceAssetCenterState {
@@ -95,7 +105,10 @@ object VoiceAssetCenterState {
                 source = AssetSource.IMPORT,
                 status = if (facts.voiceCount > 0) AssetStatus.READY else AssetStatus.MISSING,
                 action = AssetAction.MANAGE_VOICE,
-                actionLabel = if (facts.voiceCount > 0) "去管理" else "去导入"
+                actionLabel = if (facts.voiceCount > 0) "去管理" else "去导入",
+                // 4.9：分组连播试听 —— 不用逐个点进列表，先在资源页快速扫听前几个
+                secondaryAction = AssetAction.PREVIEW_VOICES.takeIf { facts.voiceCount > 0 },
+                secondaryLabel = "连播试听"
             ),
             AssetGroup(
                 id = "ner",
@@ -154,15 +167,47 @@ object VoiceAssetCenterState {
                 status = if (facts.cacheBytes > 0) AssetStatus.READY else AssetStatus.MISSING,
                 action = AssetAction.CLEAR_CACHE,
                 actionLabel = if (facts.cacheBytes > 0) "清理" else "已干净"
+            ),
+            AssetGroup(
+                id = "ai",
+                title = "AI 剧本与本地模型",
+                summary = if (facts.scriptBytes + facts.aiModelBytes > 0) {
+                    "剧本草案 ${mb(facts.scriptBytes)}MB / 本地模型 ${mb(facts.aiModelBytes)}MB；" +
+                            "清除后保留音色与角色绑定"
+                } else {
+                    "暂无剧本草案与本地模型"
+                },
+                source = AssetSource.DOWNLOAD,
+                status = if (facts.scriptBytes + facts.aiModelBytes > 0) {
+                    AssetStatus.READY
+                } else {
+                    AssetStatus.MISSING
+                },
+                action = AssetAction.CLEAR_AI_DATA,
+                actionLabel = if (facts.scriptBytes + facts.aiModelBytes > 0) "清除" else "已干净"
             )
         )
         return VoiceAssetCenterUi(
             headerLine = "离线资产共 ${mb(facts.totalBytes)}MB（模型 ${mb(facts.modelBytes)}MB / " +
                     "音色 ${mb(facts.voiceBytes)}MB / 缓存 ${mb(facts.cacheBytes)}MB）",
             groups = groups,
-            canClearCache = facts.cacheBytes > 0
+            canClearCache = facts.cacheBytes > 0,
+            canClearAiData = facts.scriptBytes + facts.aiModelBytes > 0
         )
     }
+
+    /** 删除前影响提示（清合成缓存）：必须说明"删什么、不影响什么、下次会怎样" */
+    fun clearCacheImpactText(cacheBytes: Long): String =
+        "将删除约 ${mb(cacheBytes)}MB 已合成音频。\n" +
+                "• 只影响缓存：下次朗读会重新合成，首段可能稍慢\n" +
+                "• 音色、选角模板、配乐、章节剧本都不会被删除"
+
+    /** 删除前影响提示（清 AI 数据）：保留音色与角色绑定（用户私有数据） */
+    fun clearAiImpactText(scriptBytes: Long, aiModelBytes: Long): String =
+        "将删除约 ${mb(scriptBytes + aiModelBytes)}MB 的 AI 数据（章节剧本草案 + 本地模型）。\n" +
+                "• 已生成剧本会回到「未生成」，朗读自动回落到规则结果\n" +
+                "• 音色、角色与音色的绑定、选角模板、配乐都会保留\n" +
+                "• 本地模型删除后需重新导入/下载才能再用本地 AI"
 
     private fun textSummary(facts: AssetFacts): String = when {
         facts.dictReady && facts.splitRulesReady -> "发音词典与切分规则都已配置"

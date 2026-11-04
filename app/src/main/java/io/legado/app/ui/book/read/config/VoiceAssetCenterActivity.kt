@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.config
 
 import android.view.View
+import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,8 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.readaloud.role.ChapterScriptStore
+import io.legado.app.help.readaloud.role.ScriptStatusBus
 import io.legado.app.help.readaloud.role.ner.NerModelManager
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.ui.book.read.config.casting.TtsCastingManageFragment
@@ -38,6 +41,7 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 声音资源中心（offline-tts-llm-productization 4.9 首批）：
@@ -93,6 +97,9 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
             }.getOrDefault(0)
         }
         val paths = runCatching { BuiltinTtsRuntime.paths() }.getOrNull()
+        // 4.9：剧本草案与本地模型的占用（AI 数据可一键清除，音色/绑定保留）
+        val scriptBytes = dirBytes(paths?.scriptsDir)
+        val aiModelBytes = dirBytes(paths?.filesRoot?.let { File(it, "models/llm") })
         // 5.1 覆盖率：性别/年龄有标注的比例（决定性别硬约束的实际效果，用户需要知道）
         val coverage = runCatching { CharacterVoiceAssignService.coverage(voices) }
             .getOrDefault(CharacterVoiceAssignService.VoiceCoverage(0, 0, 0))
@@ -113,9 +120,19 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
             modelBytes = storage.modelBytes,
             voiceBytes = storage.voiceBytes,
             cacheBytes = storage.cacheBytes,
+            scriptBytes = scriptBytes,
+            aiModelBytes = aiModelBytes,
             voiceGenderPercent = coverage.genderPercent,
             voiceAgePercent = coverage.agePercent
         )
+    }
+
+    /** 目录递归占用（不存在/无权限 ⇒ 0，资源页不能因此崩） */
+    private fun dirBytes(dir: File?): Long {
+        if (dir == null || !dir.isDirectory) return 0L
+        return runCatching {
+            dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        }.getOrDefault(0L)
     }
 
     private fun handleAction(action: AssetAction) {
@@ -130,17 +147,77 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
 
             AssetAction.MANAGE_BGM -> startActivity<ReadAloudBgmManageActivity>()
 
-            AssetAction.CLEAR_CACHE -> lifecycleScope.launch {
-                withContext(Dispatchers.IO) {
-                    runCatching { BuiltinTtsRuntime.cache().clear() }
-                }.onSuccess {
-                    toastOnUi("已清理合成缓存")
-                }.onFailure {
-                    toastOnUi("清理失败：${it.message}")
+            // 4.9 分组连播试听：走与单条试听同一套「先切音色再播」，最多 5 个
+            AssetAction.PREVIEW_VOICES -> {
+                val voices = runCatching { BuiltinTtsRuntime.voices() }.getOrDefault(emptyList())
+                val count = BuiltinVoiceCompare.previewGroup(this, voices)
+                toastOnUi(
+                    if (count > 0) "开始连播试听 $count 个音色" else "还没有可用音色：先导入音色包或录制"
+                )
+            }
+
+            // 删除前影响提示（4.9）：先讲清"删什么/不影响什么/下次会怎样"，再执行
+            AssetAction.CLEAR_CACHE -> confirmThen(
+                title = "清理合成缓存",
+                message = VoiceAssetCenterState.clearCacheImpactText(
+                    runCatching { BuiltinTtsRuntime.storageBreakdown().cacheBytes }.getOrDefault(0L)
+                )
+            ) {
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        runCatching { BuiltinTtsRuntime.cache().clear() }
+                    }.onSuccess {
+                        toastOnUi("已清理合成缓存")
+                    }.onFailure {
+                        toastOnUi("清理失败：${it.message}")
+                    }
+                    reload()
                 }
-                reload()
+            }
+
+            // 清除 AI 数据：只删剧本草案与本地模型，音色/角色绑定/模板/配乐全部保留
+            AssetAction.CLEAR_AI_DATA -> confirmThen(
+                title = "清除 AI 数据",
+                message = VoiceAssetCenterState.clearAiImpactText(
+                    runCatching {
+                        dirBytes(runCatching { BuiltinTtsRuntime.paths() }.getOrNull()?.scriptsDir)
+                    }.getOrDefault(0L),
+                    runCatching {
+                        dirBytes(
+                            runCatching { BuiltinTtsRuntime.paths() }.getOrNull()?.filesRoot
+                                ?.let { File(it, "models/llm") }
+                        )
+                    }.getOrDefault(0L)
+                )
+            ) {
+                lifecycleScope.launch {
+                    val removedScripts = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val paths = BuiltinTtsRuntime.paths()
+                            // retention=0 ⇒ 删除全部章节剧本/索引，但**不动 overrides.json**（用户手改）
+                            val removed = ChapterScriptStore(paths.scriptsDir)
+                                .cleanup(retentionMs = 0L, now = System.currentTimeMillis())
+                            val models = File(paths.filesRoot, "models/llm")
+                            if (models.isDirectory) models.deleteRecursively()
+                            removed
+                        }.getOrDefault(0)
+                    }
+                    ScriptStatusBus.clearAll()
+                    toastOnUi("已清除 $removedScripts 章剧本与本地模型（音色与绑定已保留）")
+                    reload()
+                }
             }
         }
+    }
+
+    /** 危险动作统一入口：先弹影响提示，用户确认后才执行 */
+    private fun confirmThen(title: String, message: String, action: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("确定") { _, _ -> action() }
+            .show()
     }
 }
 
@@ -211,10 +288,21 @@ private fun AssetGroupCard(group: AssetGroup, onAction: (AssetAction) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp)
         )
-        AssistChip(
-            onClick = { onAction(group.action) },
-            label = { Text(group.actionLabel) },
-            modifier = Modifier.padding(top = 8.dp)
-        )
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AssistChip(
+                onClick = { onAction(group.action) },
+                label = { Text(group.actionLabel) }
+            )
+            // 4.9：次要动作（音色分组「连播试听」），与主操作并列但不抢视觉
+            group.secondaryAction?.let { secondary ->
+                AssistChip(
+                    onClick = { onAction(secondary) },
+                    label = { Text(group.secondaryLabel) }
+                )
+            }
+        }
     }
 }

@@ -716,4 +716,16 @@ class OfflineRoleResolverTest {
             aged.segments.map { it.characterName to it.roleType }
         )
     }
+
+    /**
+     * 4.9「清除 AI 数据」：剧本文件删掉后，内存里的状态也必须一起清空 ——
+     * 否则听书中心仍显示「已生成」，用户会以为没清干净。
+     */
+    @Test
+    fun `清除AI数据时状态总线一起清空`() {
+        ScriptStatusBus.done("book-9", 1, segments = 3, source = "mixed", now = 100L)
+        assertEquals(ScriptPhase.READY, ScriptStatusBus.statusOf("book-9", 1).phase)
+        ScriptStatusBus.clearAll()
+        assertEquals(ScriptPhase.NONE, ScriptStatusBus.statusOf("book-9", 1).phase)
+    }
 }

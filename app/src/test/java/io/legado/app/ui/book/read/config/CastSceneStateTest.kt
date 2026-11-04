@@ -305,4 +305,51 @@ class CastSceneStateTest {
         )
         assertTrue("HTTP 且带 emotionTag 才允许展示", http.supportsEmotion)
     }
+
+    /**
+     * 4.9：音色分组带「连播试听」次要动作；新增「AI 剧本与本地模型」分组并可清除；
+     * 两条删除路径都必须先给出「删什么/不影响什么」的影响提示。
+     */
+    @Test
+    fun `资源页新增试听与清除AI数据`() {
+        val ui = VoiceAssetCenterState.build(
+            AssetFacts(
+                engineReady = true,
+                profileTitle = "极速单声",
+                voiceCount = 6,
+                importedVoiceCount = 6,
+                templateCount = 3,
+                cacheBytes = 12L * 1024 * 1024,
+                scriptBytes = 5L * 1024 * 1024,
+                aiModelBytes = 400L * 1024 * 1024
+            )
+        )
+        val voice = ui.groups.first { it.id == "voice" }
+        assertEquals(AssetAction.MANAGE_VOICE, voice.action)
+        assertEquals(AssetAction.PREVIEW_VOICES, voice.secondaryAction)
+        assertEquals("连播试听", voice.secondaryLabel)
+
+        val ai = ui.groups.first { it.id == "ai" }
+        assertEquals(AssetAction.CLEAR_AI_DATA, ai.action)
+        assertEquals("清除", ai.actionLabel)
+        assertTrue(ai.summary.contains("保留音色与角色绑定"))
+        assertTrue(ui.canClearAiData)
+        assertTrue(ui.canClearCache)
+
+        // 删除前影响提示：必须写明"保留音色/模板"，避免用户以为一键清空全部配置
+        assertTrue(
+            VoiceAssetCenterState.clearCacheImpactText(12L * 1024 * 1024)
+                .contains("音色、选角模板、配乐、章节剧本都不会被删除")
+        )
+        val aiImpact = VoiceAssetCenterState.clearAiImpactText(
+            5L * 1024 * 1024,
+            400L * 1024 * 1024
+        )
+        assertTrue(aiImpact.contains("音色、角色与音色的绑定"))
+        assertTrue(aiImpact.contains("规则结果"))
+        // 无 AI 数据时分组仍存在，但动作显示"已干净"且不提供清除
+        val emptyAi = VoiceAssetCenterState.build(AssetFacts())
+        assertEquals("已干净", emptyAi.groups.first { it.id == "ai" }.actionLabel)
+        assertFalse(emptyAi.canClearAiData)
+    }
 }

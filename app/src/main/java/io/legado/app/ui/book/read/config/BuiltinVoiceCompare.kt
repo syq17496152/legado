@@ -73,6 +73,26 @@ object BuiltinVoiceCompare {
     }
 
     /**
+     * 纯函数（JVM 可测）：分组连播试听计划 —— 取前 [limit] 个可用音色，
+     * 每段一句短示范（与单条试听同一文案），便于在资源页快速扫听。
+     */
+    internal fun groupPlan(voices: List<BuiltinVoice>, limit: Int = GROUP_PREVIEW_LIMIT): List<Pair<String, String>>? {
+        val usable = voices.filter { it.id.isNotBlank() && it.voiceName.isNotBlank() }
+        if (usable.isEmpty()) return null
+        return usable.take(limit.coerceIn(1, GROUP_PREVIEW_LIMIT))
+            .map { previewTextFor(it.displayName) to it.voiceName }
+    }
+
+    /**
+     * 分组连播试听（4.9）：返回实际起播的段数；0 表示没有可用音色（调用方应提示先导入）。
+     */
+    fun previewGroup(context: Context, voices: List<BuiltinVoice>, limit: Int = GROUP_PREVIEW_LIMIT): Int {
+        val plan = groupPlan(voices, limit) ?: return 0
+        start(plan, context)
+        return plan.size
+    }
+
+    /**
      * 开始对比；返回 false 表示可用音色不足 2 个（调用方应提示用户先导入更多音色）。
      */
     fun compare(context: Context, voices: List<BuiltinVoice>): Boolean {
@@ -142,4 +162,7 @@ object BuiltinVoiceCompare {
     }
 
     private const val UTTERANCE_ID = "compare_voice"
+
+    /** 分组连播上限：超过 5 个扫听就变成了"听音色马拉松"，不如去管理页筛选 */
+    internal const val GROUP_PREVIEW_LIMIT = 5
 }

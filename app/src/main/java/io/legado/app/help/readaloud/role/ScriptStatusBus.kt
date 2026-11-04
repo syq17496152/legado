@@ -114,6 +114,11 @@ object ScriptStatusBus {
         statuses.keys.filter { it.startsWith("$bookKey|") }.forEach { statuses.remove(it) }
     }
 
+    /** 清除全部状态（资源页「清除 AI 数据」后，剧本回到未生成） */
+    fun clearAll() {
+        statuses.clear()
+    }
+
     /** 订阅（返回取消函数）；UI 离开页面必须调用，避免旧页面持有泄漏 */
     fun observe(listener: (ScriptStatus) -> Unit): () -> Unit {
         listeners.add(listener)

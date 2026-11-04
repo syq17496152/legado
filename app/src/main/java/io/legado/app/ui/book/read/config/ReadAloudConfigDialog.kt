@@ -99,6 +99,7 @@ private const val KEY_READ_ALOUD_LOUDNESS_RESET = "readAloudSpeakerLoudnessReset
 private const val KEY_READ_ALOUD_TUNING_RESET = "readAloudTuningReset"
 private const val KEY_MEDIA_BUTTON_PER_NEXT = "mediaButtonPerNext"
 private const val KEY_SYS_TTS_CONFIG = "sysTtsConfig"
+private const val KEY_VOICE_ASSET_CENTER = "voiceAssetCenter"
 private const val SPEAKER_MANAGE_SUMMARY =
     "管理多角色可用发言人；未绑定或失效时朗读会自动回退到默认配音，不在正文里反复提示"
 
@@ -776,6 +777,13 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
                 title = getString(R.string.sys_tts_config),
                 summary = getString(R.string.sys_tts_config_summary),
                 onClick = { IntentHelp.openTTSSetting() }
+            ),
+            // 4.9：朗读设置页的一级入口（离线语音/音色/模型/模板/配乐的来源与占用，一处看清）
+            action(
+                key = KEY_VOICE_ASSET_CENTER,
+                title = "声音资源中心",
+                summary = "离线语音、音色、人名模型、选角模板与配乐：标注可重下 / 需备份",
+                onClick = { startActivity<VoiceAssetCenterActivity>() }
             ),
             // R5：只重置数值/策略项，资产（引擎/密钥/音色/发言人分组）保持不变
             action(
