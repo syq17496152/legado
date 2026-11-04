@@ -1,5 +1,8 @@
 package io.legado.app.help.readaloud.casting
 
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.LocalLlmPrefs
+
 /**
  * AI 任务路由（6.1）：同一任务按「本地 / 云端 / 关闭」策略选择执行方，并统一回传 `source` 便于溯源。
  *
@@ -36,6 +39,46 @@ object AiTaskRouter {
             }
 
         val available: Boolean get() = executor != Executor.NONE
+
+        /** 面向用户的中文来源标签（UI 与结果消息共用，避免两套写法） */
+        val sourceLabel: String
+            get() = when (executor) {
+                Executor.LOCAL -> "本地"
+                Executor.ONLINE -> "云端"
+                Executor.NONE -> "未启用"
+            }
+    }
+
+    /** 本地偏慢止损线（tok/s，低于此值长文本任务才考虑回落云端） */
+    const val SLOW_TOK_PER_SEC = 2f
+
+    /**
+     * 6.4 接线：调用方只提供「该任务云端是否已配置」，本地开关/就绪/速度统一从这里取，
+     * 避免每个服务各写一套布尔组合（判定漂移会让"关了还用云端"这类问题复现）。
+     */
+    fun routeFor(onlineConfigured: Boolean): Route {
+        val policy = when (LocalLlmPrefs.policyOf(AppConfig.aiTaskPolicy)) {
+            LocalLlmPrefs.POLICY_OFF -> Policy.OFF
+            LocalLlmPrefs.POLICY_ONLINE -> Policy.ONLINE
+            else -> Policy.LOCAL
+        }
+        val localEnabled = AppConfig.localLlmEnabled
+        val localReady = localEnabled &&
+                AppConfig.localLlmProfileId.isNotBlank() &&
+                AppConfig.localLlmUnsupportedReason.isBlank()
+        val speed = AppConfig.localLlmSpeedTokPerSec
+        return route(
+            policy = policy,
+            facts = Facts(
+                localEnabled = localEnabled,
+                localReady = localReady,
+                // speed=0 表示还没自检过，不能据此判慢（否则首次使用必定回落云端）
+                localSlow = localReady && speed > 0f && speed < SLOW_TOK_PER_SEC,
+                onlineConfigured = onlineConfigured,
+                // 云端模型由用户自行配置，沿用既有行为允许使用（正文出端边界见 6.5）
+                onlineAllowed = true
+            )
+        )
     }
 
     fun route(policy: Policy, facts: Facts): Route = when (policy) {

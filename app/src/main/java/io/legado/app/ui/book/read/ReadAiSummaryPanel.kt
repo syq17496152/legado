@@ -57,6 +57,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.ai.AiChapterSummaryService
 import io.legado.app.help.ai.AiTaskKeepAlive
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.casting.AiTaskRouter
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.main.ai.AiMarkdownRender
 import io.legado.app.ui.main.ai.compose.AiComposeStyle
@@ -134,7 +135,7 @@ class ReadAiSummaryPanel @JvmOverloads constructor(
         input = AiChapterSummaryService.SummaryInput(book, chapter, content)
         uiState = SummaryUiState(
             title = "${book.name.ifBlank { "当前书籍" }} - ${chapter.title.ifBlank { "当前章节" }}",
-            modelLabel = currentModelLabel(),
+            modelLabel = modelLabelWithSource(),
             summary = "正在读取缓存...",
             requesting = false
         )
@@ -257,7 +258,7 @@ class ReadAiSummaryPanel @JvmOverloads constructor(
             summary = summary.summary,
             requesting = false,
             cached = fromCache,
-            modelLabel = currentModelLabel(),
+            modelLabel = modelLabelWithSource(),
             statusLines = if (fromCache) listOf("已读取缓存") else listOf("总结完成")
         )
     }
@@ -282,7 +283,7 @@ class ReadAiSummaryPanel @JvmOverloads constructor(
             }
         ) { index ->
             AppConfig.aiSummaryModelId = models[index].id
-            uiState = uiState.copy(modelLabel = currentModelLabel())
+            uiState = uiState.copy(modelLabel = modelLabelWithSource())
         }
     }
 
@@ -293,6 +294,14 @@ class ReadAiSummaryPanel @JvmOverloads constructor(
             ?.takeIf { it.isNotBlank() }
         return providerName?.let { "${model.modelId} - $it" } ?: model.modelId
     }
+
+    /** 6.4 来源可解释：模型名后面标出这次实际用的执行方（本地 / 云端 / 未启用） */
+    private fun modelLabelWithSource(): String = summaryModelLabel(
+        base = currentModelLabel(),
+        sourceLabel = AiTaskRouter.routeFor(
+            onlineConfigured = AppConfig.aiSummaryModelConfig != null
+        ).sourceLabel
+    )
 
     private fun handleDrag(event: MotionEvent): Boolean {
         val parentView = parent as? ViewGroup ?: return false
@@ -553,3 +562,10 @@ private fun SummaryMarkdown(
         }
     )
 }
+
+/**
+ * 6.4 章节总结的来源标签（纯函数可单测）：模型名 + 「来源：本地/云端/未启用」。
+ * 抽出来是为了让"模型选择"和"结果展示"两处文案同源，避免一处带来源一处不带。
+ */
+internal fun summaryModelLabel(base: String, sourceLabel: String): String =
+    if (base.isBlank()) "来源：$sourceLabel" else "$base · 来源：$sourceLabel"

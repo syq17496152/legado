@@ -4,9 +4,11 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookAiChapterSummary
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.casting.AiTaskRouter
 import io.legado.app.ui.main.ai.AiChatMessage
 import io.legado.app.utils.MD5Utils
 import kotlinx.coroutines.Dispatchers.IO
@@ -55,6 +57,9 @@ object AiChapterSummaryService {
         }
         val content = input.content.trim()
         require(content.isNotBlank()) { "当前章节正文为空" }
+        // 6.4：统一走 AI 任务路由（策略关闭时明确不可用，不静默换执行方）
+        val route = AiTaskRouter.routeFor(onlineConfigured = AppConfig.aiSummaryModelConfig != null)
+        if (!route.available) throw NoStackTraceException("AI 总结不可用：${route.reason}")
         val summaryText = if (content.length <= DIRECT_LIMIT) {
             summarizeChunk(input, content, chunkIndex = 1, chunkCount = 1, onPartial, onStatus)
         } else {

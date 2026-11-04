@@ -7,6 +7,7 @@ import io.legado.app.data.entities.ReadAloudBgmAssignmentCache
 import io.legado.app.data.entities.ReadAloudBgmGroup
 import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.casting.AiTaskRouter
 import io.legado.app.help.readaloud.role.ReadAloudSoundEffectCandidate
 import io.legado.app.help.readaloud.role.ReadAloudSoundEffectPreprocessor
 import io.legado.app.ui.book.read.page.entities.ReadAloudCue
@@ -106,6 +107,14 @@ object AiReadAloudBgmService {
             ?: return@withContext EnsureResult(ReadAloudBgmAssignmentCache.STATUS_FAILED, message = "未配置多角色模型")
         if (AppConfig.aiProviderForModel(modelConfig)?.baseUrl.isNullOrBlank()) {
             return@withContext EnsureResult(ReadAloudBgmAssignmentCache.STATUS_FAILED, message = "模型供应商不可用")
+        }
+        // 6.4：与章节总结同源的任务路由（策略关闭时明确不可用，不静默换执行方）
+        val route = AiTaskRouter.routeFor(onlineConfigured = true)
+        if (!route.available) {
+            return@withContext EnsureResult(
+                ReadAloudBgmAssignmentCache.STATUS_FAILED,
+                message = "智能配乐不可用：${route.reason}"
+            )
         }
         val currentBook = book ?: return@withContext EnsureResult(ReadAloudBgmAssignmentCache.STATUS_FAILED, message = "书籍为空")
         val currentChapter = textChapter
@@ -227,7 +236,8 @@ object AiReadAloudBgmService {
                 status = ReadAloudBgmAssignmentCache.STATUS_SUCCESS,
                 assignmentCount = audio.assignments.size,
                 soundEffectCount = audio.soundEffects.size,
-                message = "智能音频已缓存",
+                // 6.4 来源可解释：用户能看出这次配乐是本地还是云端生成
+                message = "智能音频已缓存 · 来源：${route.sourceLabel}",
                 cacheKey = key.cacheKey
             )
         } catch (throwable: Throwable) {
