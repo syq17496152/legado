@@ -909,6 +909,11 @@
             android:name=".ui.book.read.config.VoiceAssetCenterActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false" />
+        <!-- 本地 AI 设置（2.4）：启用/导入/自检/任务策略 -->
+        <activity
+            android:name=".ui.book.read.config.LlmSettingsActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
         <!-- 朗读用量记录 -->
         <activity
             android:name=".ui.book.read.config.AiReadAloudUsageRecordActivity"

@@ -37,6 +37,12 @@ GRADLE_PATCHES = [
     ('-DGGML_CPU_ALL_VARIANTS=ON', '-DGGML_CPU_ALL_VARIANTS=OFF'),
 ]
 
+# 追加参数（不是替换，需显式判重）：KleidiAI 走 CMake FetchContent 从 GitHub 拉源码包，
+# 配置阶段网络不可达会直接失败；本仓只要纯 CPU 后端。
+KLEIDIAI_ARG = 'arguments += "-DGGML_CPU_KLEIDIAI=OFF"'
+KLEIDIAI_ANCHOR = 'arguments += "-DGGML_LLAMAFILE=OFF"'
+OPENMP_ARG = 'arguments += "-DGGML_OPENMP=OFF"'
+
 LOGGING_OLD = """static inline int ai_should_log(int prio) {
     return __android_log_is_loggable(prio, LOG_TAG, LOG_MIN_LEVEL);
 }"""
@@ -58,10 +64,13 @@ def check() -> int:
     missing = [old for old, _ in GRADLE_PATCHES if old in text]
     log = LOGGING.read_text(encoding="utf-8") if LOGGING.is_file() else ""
     log_missing = LOGGING_OLD in log
-    if missing or log_missing:
-        print("[FAIL] 未打补丁：gradle=%d 处、logging=%s" % (len(missing), log_missing))
+    kleidiai_missing = KLEIDIAI_ARG not in text
+    openmp_missing = OPENMP_ARG not in text
+    if missing or log_missing or kleidiai_missing or openmp_missing:
+        print("[FAIL] 未打补丁：gradle=%d 处、logging=%s、kleidiai=%s、openmp=%s"
+              % (len(missing), log_missing, kleidiai_missing, openmp_missing))
         return 1
-    print("[OK] 补丁已就位（gradle 4 处 + logging 1 处）")
+    print("[OK] 补丁已就位（gradle 4 处 + kleidiai 1 处 + openmp 1 处 + logging 1 处）")
     return 0
 
 
@@ -75,6 +84,18 @@ def apply() -> int:
         if old in text:
             text = text.replace(old, new)
             changed += 1
+    if KLEIDIAI_ARG not in text and KLEIDIAI_ANCHOR in text:
+        text = text.replace(
+            KLEIDIAI_ANCHOR,
+            KLEIDIAI_ANCHOR + "\n                " + KLEIDIAI_ARG
+        )
+        changed += 1
+    if OPENMP_ARG not in text and KLEIDIAI_ARG in text:
+        text = text.replace(
+            KLEIDIAI_ARG,
+            KLEIDIAI_ARG + "\n                " + OPENMP_ARG
+        )
+        changed += 1
     GRADLE.write_text(text, encoding="utf-8")
     if LOGGING.is_file():
         log = LOGGING.read_text(encoding="utf-8")
