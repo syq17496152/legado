@@ -105,6 +105,20 @@ object Backup {
     /** 朗读角色规则（`filesDir/legado_rules`：`fixed_roles.json` + `book/<key>.json`），同批纳入备份 */
     internal const val LEGADO_RULES_DIR = "legado_rules"
 
+    /** 端侧 LLM 模型（`filesDir/models/llm`）：体积 ≥300MB 且可重新下载/导入 ⇒ **不进备份** */
+    internal const val LLM_MODELS_DIR = "models/llm"
+
+    /** 章节剧本（`filesDir/scripts`）：可重建缓存 ⇒ **不进备份**（按 AD-03 取舍：整目录排除） */
+    internal const val SCRIPT_CACHE_DIR = "scripts"
+
+    /** 6.5 备份边界：这些目录一律不复制进备份包（防未来有人顺手加目录时把体积/缓存带进来） */
+    private val BACKUP_EXCLUDED_DIRS = setOf(LLM_MODELS_DIR, SCRIPT_CACHE_DIR)
+
+    internal fun isExcludedFromBackup(relativePath: String): Boolean {
+        val path = relativePath.trim('/')
+        return BACKUP_EXCLUDED_DIRS.any { excluded -> path == excluded || path.startsWith("$excluded/") }
+    }
+
     val backupPath: String by lazy {
         appCtx.filesDir.getFile("backup").createFolderIfNotExist().absolutePath
     }
@@ -272,11 +286,13 @@ object Backup {
      * 反向映射见 `Restore.restoreTtsVoiceAssets`；目录项范式与 `bg` / `readAloudAudio` 一致。
      */
     internal suspend fun stageTtsVoices(rootPath: String) {
+        if (isExcludedFromBackup(TTS_VOICES_DIR)) return
         copyDirTo(File(appCtx.filesDir, TTS_VOICES_DIR), File(rootPath, TTS_VOICES_DIR))
     }
 
     /** 2026-11-01：朗读角色规则纳入备份（整目录原样复制到 `<根>/legado_rules`） */
     internal suspend fun stageLegadoRules(rootPath: String) {
+        if (isExcludedFromBackup(LEGADO_RULES_DIR)) return
         copyDirTo(File(appCtx.filesDir, LEGADO_RULES_DIR), File(rootPath, LEGADO_RULES_DIR))
     }
 

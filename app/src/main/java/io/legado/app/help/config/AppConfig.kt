@@ -1162,6 +1162,37 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
     """.trimIndent()
 
+    // ---- 端侧小模型与 AI 任务策略（offline-tts-llm-productization 1.2）----
+    // 默认关闭：模型档位未选定前不得让 UI 显示「本地 AI 已可用」；
+    // 启用必须同时具备档位 id（否则是「开了但没模型」的假就绪）。
+
+    var localLlmEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.localLlmEnabled, false) &&
+                LocalLlmPrefs.enabledOrDefault(true, localLlmProfileId)
+        set(value) = appCtx.putPrefBoolean(
+            PreferKey.localLlmEnabled,
+            LocalLlmPrefs.enabledOrDefault(value, localLlmProfileId)
+        )
+
+    var localLlmProfileId: String
+        get() = appCtx.getPrefString(PreferKey.localLlmProfileId) ?: ""
+        set(value) = appCtx.putPrefString(PreferKey.localLlmProfileId, value)
+
+    /** 自检实测速度（tok/s）；0 = 未测。存字符串避免额外偏好类型。 */
+    var localLlmSpeedTokPerSec: Float
+        get() = (appCtx.getPrefString(PreferKey.localLlmSpeedTokPerSec) ?: "").toFloatOrNull() ?: 0f
+        set(value) = appCtx.putPrefString(PreferKey.localLlmSpeedTokPerSec, value.toString())
+
+    /** 设备不达标/模型不可用的可读原因（设置页直接展示，不留"未知错误"） */
+    var localLlmUnsupportedReason: String
+        get() = appCtx.getPrefString(PreferKey.localLlmUnsupportedReason) ?: ""
+        set(value) = appCtx.putPrefString(PreferKey.localLlmUnsupportedReason, value)
+
+    /** AI 任务策略：local（本地优先，云端需用户允许）/ online / off（空=local） */
+    var aiTaskPolicy: String
+        get() = LocalLlmPrefs.policyOf(appCtx.getPrefString(PreferKey.aiTaskPolicy))
+        set(value) = appCtx.putPrefString(PreferKey.aiTaskPolicy, LocalLlmPrefs.policyOf(value))
+
     var aiReadAloudRoleEnabled: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.aiReadAloudRoleEnabled, false) &&
                 aiReadAloudRoleModelConfig != null

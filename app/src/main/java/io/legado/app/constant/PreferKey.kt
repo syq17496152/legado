@@ -551,6 +551,12 @@ object PreferKey {
     const val readAloudSpeakerLoudnessEnabled = "readAloudSpeakerLoudnessEnabled"
     const val readAloudTargetVoiceVolume = "readAloudTargetVoiceVolume"
     const val readAloudMaxSpeakerGain = "readAloudMaxSpeakerGain"
+    // 1.2 端侧小模型与 AI 任务策略（离线 TTS 产品化）
+    const val localLlmEnabled = "localLlmEnabled"
+    const val localLlmProfileId = "localLlmProfileId"
+    const val localLlmSpeedTokPerSec = "localLlmSpeedTokPerSec"
+    const val localLlmUnsupportedReason = "localLlmUnsupportedReason"
+    const val aiTaskPolicy = "aiTaskPolicy"
     const val readAloudNarratorBaseGain = "readAloudNarratorBaseGain"
     const val readAloudSpeakerLoudnessStats = "readAloudSpeakerLoudnessStats"
     const val aiReadAloudAutoCreateCharacters = "aiReadAloudAutoCreateCharacters"

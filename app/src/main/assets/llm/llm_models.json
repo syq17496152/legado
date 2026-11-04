@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-04",
+  "note": "端侧小模型档位目录（1.2）。sha256 留空表示尚未锁定发行文件；选定后由 scripts/publish 或下载器回填。distribution=download 可重新下载，import 必须用户自备文件。",
+  "profiles": [
+    {
+      "id": "qwen3-0.6b-q4",
+      "title": "Qwen3 0.6B（推荐）",
+      "family": "qwen3",
+      "quant": "Q4_K_M",
+      "sizeBytes": 397000000,
+      "sha256": "",
+      "distribution": "download",
+      "contextTokens": 4096,
+      "chatTemplate": "chatml",
+      "stopTokens": ["<|im_end|>", "<|endoftext|>"],
+      "license": "Apache-2.0",
+      "sourceUrl": "",
+      "recommended": true
+    },
+    {
+      "id": "qwen3.5-0.8b-q4",
+      "title": "Qwen3.5 0.8B",
+      "family": "qwen3.5",
+      "quant": "Q4_K_M",
+      "sizeBytes": 520000000,
+      "sha256": "",
+      "distribution": "download",
+      "contextTokens": 4096,
+      "chatTemplate": "chatml",
+      "stopTokens": ["<|im_end|>", "<|endoftext|>"],
+      "license": "Apache-2.0",
+      "sourceUrl": "",
+      "recommended": false
+    },
+    {
+      "id": "minicpm4-0.5b-q4",
+      "title": "MiniCPM4 0.5B（低配备选）",
+      "family": "minicpm4",
+      "quant": "Q4_K_M",
+      "sizeBytes": 330000000,
+      "sha256": "",
+      "distribution": "download",
+      "contextTokens": 4096,
+      "chatTemplate": "minicpm",
+      "stopTokens": ["<|im_end|>"],
+      "license": "Apache-2.0",
+      "sourceUrl": "",
+      "recommended": false
+    },
+    {
+      "id": "minicpm5-1b-q4",
+      "title": "MiniCPM5 1B（高质量）",
+      "family": "minicpm5",
+      "quant": "Q4_K_M",
+      "sizeBytes": 700000000,
+      "sha256": "",
+      "distribution": "download",
+      "contextTokens": 4096,
+      "chatTemplate": "minicpm",
+      "stopTokens": ["<|im_end|>"],
+      "license": "Apache-2.0",
+      "sourceUrl": "",
+      "recommended": false
+    }
+  ]
+}

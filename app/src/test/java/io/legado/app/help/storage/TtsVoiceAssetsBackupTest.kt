@@ -118,4 +118,22 @@ class TtsVoiceAssetsBackupTest {
         assertTrue(AssetCatalog.mustImport.any { it.kind == AssetManifest.KIND_VOICE })
         assertTrue(AssetCatalog.mustImport.any { it.id == "split-rules" })
     }
+
+    /**
+     * 6.5 备份边界：本地大模型（≥300MB，可重下/导入）与章节剧本（可重建）**不进备份**；
+     * 音色库与角色规则（用户私有）仍必须进备份 —— 两者不能一刀切。
+     */
+    @Test
+    fun `AI 模型与章节剧本不进备份`() {
+        assertTrue(Backup.isExcludedFromBackup(Backup.LLM_MODELS_DIR))
+        assertTrue(Backup.isExcludedFromBackup("models/llm/qwen3-0.6b-q4/model.gguf"))
+        assertTrue(Backup.isExcludedFromBackup(Backup.SCRIPT_CACHE_DIR))
+        assertTrue(Backup.isExcludedFromBackup("scripts/book-1/12.json"))
+
+        assertFalse("音色参考音频必须进备份", Backup.isExcludedFromBackup(Backup.TTS_VOICES_DIR))
+        assertFalse("角色规则必须进备份", Backup.isExcludedFromBackup(Backup.LEGADO_RULES_DIR))
+        // 防前缀误伤：models 下其它资产（如 NER）不因 llm 规则被排除
+        assertFalse(Backup.isExcludedFromBackup("models/ner"))
+        assertFalse(Backup.isExcludedFromBackup("scriptsX/1.json"))
+    }
 }
