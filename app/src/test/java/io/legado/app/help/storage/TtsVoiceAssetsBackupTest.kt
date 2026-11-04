@@ -106,4 +106,16 @@ class TtsVoiceAssetsBackupTest {
         assertFalse("缺失源不得产出空音色目录", File(root, Backup.TTS_VOICES_DIR).exists())
         assertFalse("缺失源不得产出空规则目录", File(root, Backup.LEGADO_RULES_DIR).exists())
     }
+
+    /** 4.10：备份口径必须与资源分类一致——音色参考音频/规则属"需备份"，模型属"可重下" */
+    @Test
+    fun `资源分类与备份口径一致`() {
+        val voiceEntry = AssetCatalog.entryOf("voices-imported")
+        assertTrue("导入音色必须登记为需备份", voiceEntry?.distribution == AssetManifest.DIST_IMPORT)
+        val modelEntry = AssetCatalog.entryOf("tts-fast")
+        assertTrue("语音包可重下，不应进备份清单", modelEntry?.distribution == AssetManifest.DIST_DOWNLOAD)
+        // 需备份集合必须覆盖音色与规则（与上面两条安装/还原用例同一口径）
+        assertTrue(AssetCatalog.mustImport.any { it.kind == AssetManifest.KIND_VOICE })
+        assertTrue(AssetCatalog.mustImport.any { it.id == "split-rules" })
+    }
 }
