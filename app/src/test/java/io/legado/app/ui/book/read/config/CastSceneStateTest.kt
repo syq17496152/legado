@@ -357,6 +357,39 @@ class CastSceneStateTest {
     }
 
     /**
+     * 1.7 顶部胶囊：引擎档位 + 剧本三态（未生成/就绪/降级）必须一眼说完，
+     * 且未开书时不能出现「系统语音 · 剧本未生成」这种无意义胶囊。
+     */
+    @Test
+    fun `顶部胶囊按引擎与剧本状态映射`() {
+        assertEquals("极速单声 · 剧本就绪", CastSceneState.capsuleText("极速单声", true, true, false))
+        assertEquals("离线引擎 · 剧本降级", CastSceneState.capsuleText("", true, true, true))
+        assertEquals("系统语音 · 剧本未生成", CastSceneState.capsuleText("极速单声", false, false, false))
+
+        val withBook = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 2,
+            assignedCount = 2,
+            storyboardSegments = 10,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            engineTitle = "极速单声",
+            scriptReady = true
+        )
+        assertEquals("极速单声 · 剧本就绪", withBook.capsule)
+
+        val noBook = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 0,
+            assignedCount = 0,
+            storyboardSegments = 0,
+            activeTemplateId = null,
+            hasBook = false,
+            engineTitle = "极速单声"
+        )
+        assertEquals("未开书不展示剧本胶囊", "", noBook.capsule)
+    }
+
+    /**
      * 4.1/7.7 低端机与本地 AI 关闭：AI 入口「不出现」而不是灰色；已有 AI 数据例外，
      * 否则清完模型手机上也看不到清理入口，遗留数据永远占空间。
      */

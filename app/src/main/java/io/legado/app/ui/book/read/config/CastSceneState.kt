@@ -49,7 +49,9 @@ data class SceneSnapshot(
     /** 本章剧本状态行（3.7：未生成/生成中/已生成/降级），空串则不显示 */
     val scriptLine: String = "",
     /** 高级区可见入口（4.1）：按有无书/引擎是否就绪收敛，避免"点进去也做不了事" */
-    val advancedEntries: List<SceneAdvancedEntry> = emptyList()
+    val advancedEntries: List<SceneAdvancedEntry> = emptyList(),
+    /** 1.7 顶部胶囊：引擎档位 + 剧本来源（空串 = 不展示） */
+    val capsule: String = ""
 )
 
 object CastSceneState {
@@ -120,6 +122,29 @@ object CastSceneState {
         "wizard" to "开书向导"
     )
 
+    /**
+     * 1.7 顶部胶囊（纯函数可单测）：一次说完「现在用什么引擎、剧本到哪一步」。
+     * 剧本三态与 `ScriptStatusBus` 对齐（未生成 / 已生成 / 降级），不额外造第四种说法。
+     */
+    fun capsuleText(
+        engineTitle: String,
+        engineReady: Boolean,
+        scriptReady: Boolean,
+        scriptDegraded: Boolean
+    ): String {
+        val engine = if (engineReady) {
+            engineTitle.ifBlank { "离线引擎" }
+        } else {
+            "系统语音"
+        }
+        val script = when {
+            !scriptReady -> "剧本未生成"
+            scriptDegraded -> "剧本降级"
+            else -> "剧本就绪"
+        }
+        return "$engine · $script"
+    }
+
     /** 低端机门槛（README：「低端 4GB 三卡可用，本地 AI 入口不出现」）：RAM < 8GB 不开放端侧大模型 */
     const val LOW_END_RAM_MB = 8000L
 
@@ -187,6 +212,9 @@ object CastSceneState {
      * @param bgmCount 已启用配乐数（资源概览）
      * @param storageBytes 离线资产占用（模型+音色+缓存）
      * @param scriptStatusLabel 本章剧本状态文案（3.7；空串 = 不展示）
+     * @param engineTitle 当前离线档位名（1.7 胶囊）
+     * @param scriptReady 本章剧本已生成（1.7 胶囊）
+     * @param scriptDegraded 本章剧本降级（1.7 胶囊）
      */
     fun evaluate(
         engineReady: Boolean,
@@ -200,7 +228,10 @@ object CastSceneState {
         templateCount: Int = 0,
         bgmCount: Int = 0,
         storageBytes: Long = 0L,
-        scriptStatusLabel: String = ""
+        scriptStatusLabel: String = "",
+        engineTitle: String = "",
+        scriptReady: Boolean = false,
+        scriptDegraded: Boolean = false
     ): SceneSnapshot {
         val selected = cardOf(activeTemplateId)
         val multiSubtitle = if (characterCount <= 0) {
@@ -257,7 +288,13 @@ object CastSceneState {
             } else {
                 ""
             },
-            advancedEntries = advancedEntriesOf(hasBook, engineReady)
+            advancedEntries = advancedEntriesOf(hasBook, engineReady),
+            // 1.7：胶囊只在有书时才有意义（未开书时剧本状态无从谈起）
+            capsule = if (hasBook) {
+                capsuleText(engineTitle, engineReady, scriptReady, scriptDegraded)
+            } else {
+                ""
+            }
         )
     }
 

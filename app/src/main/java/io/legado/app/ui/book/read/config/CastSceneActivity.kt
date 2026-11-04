@@ -53,6 +53,7 @@ import io.legado.app.ui.book.read.config.casting.TtsCastingManageFragment
 import io.legado.app.help.readaloud.role.BookAliasStore
 import io.legado.app.help.readaloud.role.OfflineCharacterDiscovery
 import io.legado.app.help.readaloud.role.OfflineRoleResolver
+import io.legado.app.help.readaloud.role.ScriptPhase
 import io.legado.app.help.readaloud.role.ScriptStatusBus
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
@@ -153,7 +154,11 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         val templateCount: Int = 0,
         val storageBytes: Long = 0L,
         /** 3.7 本章剧本状态（未生成/生成中/已生成/降级），无书为空串 */
-        val scriptStatusLabel: String = ""
+        val scriptStatusLabel: String = "",
+        /** 1.7 顶部胶囊：档位名 + 剧本两态 */
+        val engineTitle: String = "",
+        val scriptReady: Boolean = false,
+        val scriptDegraded: Boolean = false
     )
 
     private suspend fun reloadState() {
@@ -171,7 +176,10 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             templateCount = facts.templateCount,
             bgmCount = facts.bgmTrackCount,
             storageBytes = facts.storageBytes,
-            scriptStatusLabel = facts.scriptStatusLabel
+            scriptStatusLabel = facts.scriptStatusLabel,
+            engineTitle = facts.engineTitle,
+            scriptReady = facts.scriptReady,
+            scriptDegraded = facts.scriptDegraded
         )
         bgmEnabled = AppConfig.aiReadAloudBgmEnabled
         bgmTrackCount = facts.bgmTrackCount
@@ -199,13 +207,14 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             0
         }
         // 3.7 剧本状态：有推送用推送，否则按磁盘剧本推导（已生成/降级/未生成）
-        val scriptStatusLabel = if (bookKey != null && chapter != null) {
-            runCatching {
-                ScriptStatusBus.labelOf(ScriptStatusBus.resolve(bookKey, chapter.chapter.index))
-            }.getOrDefault("")
+        val scriptStatus = if (bookKey != null && chapter != null) {
+            runCatching { ScriptStatusBus.resolve(bookKey, chapter.chapter.index) }.getOrNull()
         } else {
-            ""
+            null
         }
+        val scriptStatusLabel = scriptStatus?.let {
+            runCatching { ScriptStatusBus.labelOf(it) }.getOrDefault("")
+        }.orEmpty()
         val activeId = TtsCastingStore.activeTemplateId()
         // G-43：DAO 读取必须显式 IO 包裹（静态门禁按函数体扫描，不能只依赖外层 withContext）
         val customName = activeId?.let { id ->
@@ -243,7 +252,11 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             voiceCount = voiceCount,
             templateCount = templateCount,
             storageBytes = storageBytes,
-            scriptStatusLabel = scriptStatusLabel
+            scriptStatusLabel = scriptStatusLabel,
+            engineTitle = activeProfile?.title.orEmpty(),
+            scriptReady = scriptStatus?.phase == ScriptPhase.READY ||
+                    scriptStatus?.phase == ScriptPhase.DEGRADED,
+            scriptDegraded = scriptStatus?.phase == ScriptPhase.DEGRADED
         )
     }
 
@@ -282,7 +295,13 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             importBuiltinTemplates()
             TtsCastingStore.setActiveTemplateId(template)
             busy = false
-            message = "已切换到「${snapshot.cards.firstOrNull { it.id == cardId }?.title.orEmpty()}」"
+            val title = snapshot.cards.firstOrNull { it.id == cardId }?.title.orEmpty()
+            // 1.7：朗读中换演播方式不热切当前段（避免半句换声），明确告知从下一段生效
+            message = if (BaseReadAloudService.isRun) {
+                "已切换到「$title」，从下一段起生效"
+            } else {
+                "已切换到「$title」"
+            }
             reloadState()
         }
     }
@@ -431,8 +450,11 @@ private fun CastSceneScreen(
                 title = "听书中心",
                 subtitle = "选一种演播方式，一次点开就能听；更多设置收在下面「高级」",
                 trailing = {
+                    // 1.7 胶囊：引擎档位 + 剧本来源（未开书/无剧本时给引擎结论，不留空胶囊）
                     StatusPill(
-                        text = if (snapshot.engineReady) "离线就绪" else "未就绪",
+                        text = snapshot.capsule.ifBlank {
+                            if (snapshot.engineReady) "离线就绪" else "未就绪"
+                        },
                         tone = if (snapshot.engineReady) StatusTone.POSITIVE else StatusTone.WARNING
                     )
                 }
