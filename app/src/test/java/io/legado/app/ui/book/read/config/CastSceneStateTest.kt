@@ -222,4 +222,15 @@ class CastSceneStateTest {
         assertFalse(CastSceneState.canEnableBgm(0))
         assertTrue(CastSceneState.canEnableBgm(1))
     }
+
+    @Test
+    fun `一键编排触发条件与主按钮文案同源`() {
+        // 多角色卡且未识别/未配声 ⇒ 主按钮是「识别角色并开始」，点击必须走一键编排
+        assertTrue(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_MULTI, 0, 0))
+        assertTrue(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_MULTI, 3, 0))
+        assertFalse(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_MULTI, 3, 3))
+        // 单声/双声卡不需要编排（直接用当前引擎朗读）
+        assertFalse(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_MONO, 0, 0))
+        assertFalse(CastSceneState.needsOneTapPrepare(CastSceneState.CARD_DUAL, 3, 0))
+    }
 }

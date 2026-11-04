@@ -55,22 +55,45 @@ object BuiltinVoiceCompare {
     }
 
     /**
+     * 纯函数（JVM 可测）：单段试听句（5.3 换音色候选用）——一句到底，不出现"选哪个"的问句。
+     */
+    internal fun previewTextFor(name: String): String {
+        val tail = name.substringAfterLast('·', name).filterNot { it.isWhitespace() }.take(NAME_LIMIT)
+        return "这是${tail}的声音。"
+    }
+
+    /**
+     * 单音色试听（5.3 换音色选用）：与 [compare] 共用同一套「先切音色再播、播完自动 shutdown」，
+     * 只是播放段数为 1；返回 false 表示该音色没有可用的引擎绑定键。
+     */
+    fun preview(context: Context, voice: BuiltinVoice): Boolean {
+        if (voice.voiceName.isBlank()) return false
+        start(listOf(previewTextFor(voice.displayName) to voice.voiceName), context)
+        return true
+    }
+
+    /**
      * 开始对比；返回 false 表示可用音色不足 2 个（调用方应提示用户先导入更多音色）。
      */
     fun compare(context: Context, voices: List<BuiltinVoice>): Boolean {
         val plan = plan(voices) ?: return false
+        start(plan, context)
+        return true
+    }
+
+    /** 起播计划（段 = 示范句 to 引擎音色名）：已有引擎直接重播，首次调用时异步初始化 */
+    private fun start(plan: List<Pair<String, String>>, context: Context) {
         this.plan = plan
         index = 0
         val app = context.applicationContext
         val existing = tts
         if (existing != null) {
             startAt(existing, 0)
-            return true
+            return
         }
         tts = TextToSpeech(app, { status ->
             if (status == TextToSpeech.SUCCESS) tts?.let { startAt(it, 0) }
         }, app.packageName)
-        return true
     }
 
     /** 播第 [at] 段：先切音色，再 FLUSH 播报（每段独立，避免队列早合成用错音色） */

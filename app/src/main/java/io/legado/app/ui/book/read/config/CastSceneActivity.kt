@@ -47,6 +47,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.bgm.ReadAloudBgmPlayer
 import io.legado.app.help.readaloud.casting.BuiltinCastingSetup
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
+import io.legado.app.help.readaloud.casting.ReadAloudOneTapFlow
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.ui.book.read.config.casting.TtsCastingManageFragment
 import io.legado.app.help.readaloud.role.BookAliasStore
@@ -268,20 +269,19 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             return
         }
         if (snapshot.selectedCard == CastSceneState.CARD_MULTI &&
-            snapshot.primaryLabel == "识别角色并开始"
+            CastSceneState.needsOneTapPrepare(
+                snapshot.selectedCard, snapshot.characterCount, snapshot.assignedCount
+            )
         ) {
             lifecycleScope.launch {
                 busy = true
                 message = "正在识别角色并配声…"
-                val ok = prepareMultiRole()
+                val result = prepareMultiRole()
                 busy = false
-                if (!ok) {
-                    message = "准备失败：请在阅读页打开一章后再试（或到管理页查看诊断）"
-                    reloadState()
-                    return@launch
-                }
+                message = result.message
                 reloadState()
-                startReading()
+                // 4.7：只有硬缺料（无书/无章节/无音色）才阻断；其余按提示继续起播
+                if (!result.blocked) startReading()
             }
             return
         }
@@ -293,34 +293,71 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         finish()
     }
 
-    /** 多角色就绪（与开书向导同一套服务）：发现角色 → 离线分镜 → 配声 → 激活内置模板 */
-    private suspend fun prepareMultiRole(): Boolean = withContext(Dispatchers.IO) {
-        val book = ReadBook.book ?: return@withContext false
-        val chapter = ReadBook.curTextChapter ?: return@withContext false
-        val bookKey = book.characterBookKey()
-        val paragraphs = chapter.paragraphs.map { it.text }
-        var characters = runCatching { CharacterVoiceAssignService.roleCharacters(bookKey) }
-            .getOrDefault(emptyList())
-        if (characters.isEmpty()) {
-            OfflineCharacterDiscovery.ensureCharacters(bookKey, paragraphs)
-            characters = runCatching { CharacterVoiceAssignService.roleCharacters(bookKey) }
+    /**
+     * 智能多角色一键编排（4.7）：识别角色 → 离线分镜（失败不阻断）→ 配声 → 激活内置模板，
+     * 再由 [ReadAloudOneTapFlow.plan] 统一翻译成「能起播」还是「先补哪一步」。
+     */
+    private suspend fun prepareMultiRole(): ReadAloudOneTapFlow.Result {
+        // Compose 状态只在主线程读，进 IO 前先取值
+        val engineReady = snapshot.engineReady
+        return withContext(Dispatchers.IO) {
+            val book = ReadBook.book
+                ?: return@withContext ReadAloudOneTapFlow.plan(
+                    ReadAloudOneTapFlow.Facts(engineReady, false, false, 0, 0, 0, 0)
+                )
+            val chapter = ReadBook.curTextChapter
+                ?: return@withContext ReadAloudOneTapFlow.plan(
+                    ReadAloudOneTapFlow.Facts(engineReady, true, false, voiceCountOf(), 0, 0, 0)
+                )
+            val bookKey = book.characterBookKey()
+            val paragraphs = chapter.paragraphs.map { it.text }
+            var characters = runCatching { CharacterVoiceAssignService.roleCharacters(bookKey) }
                 .getOrDefault(emptyList())
-        }
-        runCatching {
-            OfflineRoleResolver.ensure(
-                bookKey = bookKey,
-                chapterIndex = chapter.chapter.index,
-                chapterTitle = chapter.chapter.title,
-                paragraphs = paragraphs,
-                characters = characters,
-                aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+            if (characters.isEmpty()) {
+                OfflineCharacterDiscovery.ensureCharacters(bookKey, paragraphs)
+                characters = runCatching { CharacterVoiceAssignService.roleCharacters(bookKey) }
+                    .getOrDefault(emptyList())
+            }
+            runCatching {
+                OfflineRoleResolver.ensure(
+                    bookKey = bookKey,
+                    chapterIndex = chapter.chapter.index,
+                    chapterTitle = chapter.chapter.title,
+                    paragraphs = paragraphs,
+                    characters = characters,
+                    aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+                )
+            }.onFailure {
+                LogUtils.e("CastScene", "离线分镜失败：${it.stackTraceToString()}")
+            }
+            val assigned = runCatching {
+                CharacterVoiceAssignService.assignAll(this@CastSceneActivity, book)
+            }.getOrDefault(CharacterVoiceAssignService.AssignResult(emptyList()))
+            val activated = runCatching { BuiltinCastingSetup.ensureAndActivate(assets) }
+                .getOrDefault(false)
+            val storyboard = runCatching {
+                OfflineRoleResolver.cached(bookKey, chapter.chapter.index)?.size ?: 0
+            }.getOrDefault(0)
+            ReadAloudOneTapFlow.plan(
+                facts = ReadAloudOneTapFlow.Facts(
+                    engineReady = engineReady,
+                    hasBook = true,
+                    hasChapter = true,
+                    voiceCount = voiceCountOf(),
+                    characterCount = characters.size,
+                    assignedCount = assigned.assignments.size,
+                    storyboardSegments = storyboard
+                ),
+                templateActivated = activated
             )
-        }.onFailure {
-            LogUtils.e("CastScene", "离线分镜失败：${it.stackTraceToString()}")
         }
-        runCatching { CharacterVoiceAssignService.assignAll(this@CastSceneActivity, book) }
-        BuiltinCastingSetup.ensureAndActivate(assets)
     }
+
+    /** 可用音色数口径与三步引导一致：单声档按 1 计（引擎自带默认音，没有音色条目） */
+    private fun voiceCountOf(): Int = runCatching {
+        val active = BuiltinTtsRuntime.activeProfile() ?: return@runCatching 0
+        if (active.requiresReference || active.multiSpeaker) BuiltinTtsRuntime.voices().size else 1
+    }.getOrDefault(0)
 
     private suspend fun importBuiltinTemplates() {
         runCatching {

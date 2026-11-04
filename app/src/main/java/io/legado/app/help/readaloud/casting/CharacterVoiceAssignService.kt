@@ -432,7 +432,9 @@ object CharacterVoiceAssignService {
         val gender: String,
         val roleLevel: Int,
         val voiceName: String,
-        val voiceDisplayName: String
+        val voiceDisplayName: String,
+        /** 年龄线索（名字/身份/传记拼串）：换音色候选按年龄排序用（5.3） */
+        val ageHint: String = ""
     ) {
         val configured: Boolean get() = voiceName.isNotBlank() || voiceDisplayName.isNotBlank()
     }
@@ -447,7 +449,9 @@ object CharacterVoiceAssignService {
                     gender = BookCharacter.normalizeGender(character.gender),
                     roleLevel = character.roleLevel,
                     voiceName = route.toneID,
-                    voiceDisplayName = route.speakerName
+                    voiceDisplayName = route.speakerName,
+                    ageHint = listOf(character.name, character.identity, character.biography)
+                        .joinToString(" ")
                 )
             }.sortedWith(compareByDescending<RoleVoiceRow> { it.roleLevel }.thenBy { it.characterId })
         }.getOrDefault(emptyList())
@@ -487,8 +491,37 @@ object CharacterVoiceAssignService {
             appDb.bookCharacterDao.updateCharacter(
                 character.copy(speechRouteJson = route.toJson(), updatedAt = System.currentTimeMillis())
             )
+            // 同步书级固定绑定（fixed_roles）：否则下次「重新配声」按旧绑定把用户的选择改回去
+            BuiltinTtsRuntime.init(context)
+            val aliasStore = BookAliasStore(BuiltinTtsRuntime.paths().rulesRoot)
+            aliasStore.writeBook(
+                bookKey,
+                withManualRoleVoice(aliasStore.readBook(bookKey), character.name, voice.displayName)
+            )
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * 手动换音色写回固定绑定（纯函数，便于单测锁定语义）。
+     *
+     * 只在书级 `fixed_roles` 里改该角色这一条，其余条目原样保留（与 CloneTTS 同 schema）；
+     * 角色正好是男主/女主时同步更新 `_maleLeadVoice`/`_femaleLeadVoice`，避免这两项仍指向旧音色。
+     */
+    internal fun withManualRoleVoice(
+        current: FixedRoles,
+        characterName: String,
+        voiceDisplayName: String
+    ): FixedRoles {
+        if (characterName.isBlank() || voiceDisplayName.isBlank()) return current
+        val merged = LinkedHashMap(current.roles)
+        merged[characterName] = voiceDisplayName
+        val name = characterName.trim()
+        return current.copy(
+            maleLeadVoice = if (current.maleLead.trim() == name) voiceDisplayName else current.maleLeadVoice,
+            femaleLeadVoice = if (current.femaleLead.trim() == name) voiceDisplayName else current.femaleLeadVoice,
+            roles = merged
+        )
     }
 
     /** 名字/身份里的主角信号（T8.13）：用于给主角更高挑音优先级，不改变最终打分规则 */

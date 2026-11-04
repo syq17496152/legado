@@ -1,10 +1,13 @@
 ﻿package io.legado.app.help.readaloud.casting
 
 import io.legado.app.data.entities.BookCharacter
+import io.legado.app.help.readaloud.role.FixedRoles
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -417,5 +420,199 @@ class CharacterVoiceAssignServiceTest {
         assertEquals(CharacterVoiceAssignService.POOL_LEAD, byName.getValue("林凡").pool)
         assertEquals(CharacterVoiceAssignService.POOL_SUPPORT, byName.getValue("王猛").pool)
         assertEquals(CharacterVoiceAssignService.POOL_EXTRA, byName.getValue("路人甲").pool)
+    }
+
+    // ---- 5.3 换音色与试听 ----
+
+    /** 推荐模式：同性别音色存在时剔除异性；性别未知的音色保留（不替用户猜） */
+    @Test
+    fun `换音色推荐模式过滤异性且保留性别未知`() {
+        val unknown = BuiltinVoice(
+            id = "u1", name = "未标注", refAudio = "u1/prompt.wav", refText = "稿",
+            origin = BuiltinVoice.ORIGIN_ZIP
+        )
+        val pool = listOf(
+            voice("m1", "male", "youth", name = "男声甲"),
+            voice("f1", "female", "youth", name = "女声甲"),
+            voice("f2", "female", "aged", name = "女声乙"),
+            unknown
+        )
+        val recommend = VoiceSwitchCandidates.build(
+            voices = pool,
+            characterGender = BookCharacter.GENDER_MALE,
+            mode = VoiceSwitchCandidates.Mode.RECOMMEND
+        )
+        assertEquals(listOf("m1|男声甲", "u1|未标注"), recommend.map { it.voiceName })
+        // 全部模式一个都不隐藏（用户主动给角色配异性音色时仍可指定）
+        val all = VoiceSwitchCandidates.build(
+            voices = pool,
+            characterGender = BookCharacter.GENDER_MALE,
+            mode = VoiceSwitchCandidates.Mode.ALL
+        )
+        assertEquals(4, all.size)
+    }
+
+    /** 库里一个同性别音色都没有时不能过滤，否则角色"无人可换" */
+    @Test
+    fun `换音色推荐模式在无同性音色时不隐藏异性`() {
+        val pool = listOf(voice("f1", "female", "youth", name = "女声甲"))
+        val recommend = VoiceSwitchCandidates.build(
+            voices = pool,
+            characterGender = BookCharacter.GENDER_MALE
+        )
+        assertEquals(1, recommend.size)
+        assertEquals("female", recommend.first().profile.gender)
+    }
+
+    /** 年龄贴合排在前面；当前音色沉底（用户先看到"能换成什么"） */
+    @Test
+    fun `换音色候选按年龄贴合排序且当前音色沉底`() {
+        val teen = voice("m1", "male", "teen", name = "少年声")
+        val youth = voice("m2", "male", "youth", name = "青年声")
+        val candidates = VoiceSwitchCandidates.build(
+            voices = listOf(youth, teen),
+            characterGender = BookCharacter.GENDER_MALE,
+            ageHint = "十六岁少年",
+            currentVoiceName = youth.voiceName
+        )
+        assertEquals(listOf("m1|少年声", "m2|青年声"), candidates.map { it.voiceName })
+        val first = candidates.first()
+        assertTrue(first.ageMatch)
+        // 同性别 4 + 年龄贴合 3 + 未占用 2
+        assertEquals(9, first.score)
+        assertTrue(candidates.last().current)
+    }
+
+    /** 被同书其他角色占用的音色要标注"已占用"，且随机不会优先抽它 */
+    @Test
+    fun `换音色随机只在未占用的头部候选里抽且不选当前`() {
+        val pool = listOf(
+            voice("m1", "male", "youth", name = "甲"),
+            voice("m2", "male", "youth", name = "乙"),
+            voice("m3", "male", "youth", name = "丙")
+        )
+        val current = pool.first()
+        val candidates = VoiceSwitchCandidates.build(
+            voices = pool,
+            characterGender = BookCharacter.GENDER_MALE,
+            currentVoiceName = current.voiceName,
+            occupiedVoiceNames = setOf(pool[1].voiceName)
+        )
+        val byName = candidates.associateBy { it.voiceName }
+        assertTrue(byName.getValue(pool[1].voiceName).occupiedElsewhere)
+        assertFalse(byName.getValue(pool[2].voiceName).occupiedElsewhere)
+        assertTrue(byName.getValue(current.voiceName).current)
+        val picked = VoiceSwitchCandidates.randomPick(candidates)
+        assertNotNull(picked)
+        assertFalse(picked!!.current)
+        assertFalse(picked.occupiedElsewhere)
+        // 空候选不崩
+        assertNull(VoiceSwitchCandidates.randomPick(emptyList()))
+    }
+
+    /** 手动换音色必须写回书级固定绑定，否则下次「重新配声」按旧绑定改回去 */
+    @Test
+    fun `手动换音色写回固定绑定并保留其他条目`() {
+        val current = FixedRoles(
+            narrator = "旁白音",
+            maleLead = "陆沉",
+            maleLeadVoice = "旧男声",
+            femaleLead = "苏婉",
+            femaleLeadVoice = "旧女声",
+            roles = mapOf("陆沉" to "旧男声", "路人" to "旧路人声")
+        )
+        val updated = CharacterVoiceAssignService.withManualRoleVoice(current, "陆沉", "新男声")
+        assertEquals("新男声", updated.roles["陆沉"])
+        assertEquals("旧路人声", updated.roles["路人"])
+        assertEquals("新男声", updated.maleLeadVoice)
+        assertEquals("旧女声", updated.femaleLeadVoice)
+        assertEquals("旁白音", updated.narrator)
+        // 空参数不写脏数据
+        assertEquals(current, CharacterVoiceAssignService.withManualRoleVoice(current, " ", "新男声"))
+        assertEquals(current, CharacterVoiceAssignService.withManualRoleVoice(current, "陆沉", " "))
+    }
+
+    // ---- 4.7 智能多角色一键编排 ----
+
+    private fun facts(
+        engineReady: Boolean = true,
+        hasBook: Boolean = true,
+        hasChapter: Boolean = true,
+        voiceCount: Int = 4,
+        characterCount: Int = 3,
+        assignedCount: Int = 3,
+        storyboardSegments: Int = 10
+    ) = ReadAloudOneTapFlow.Facts(
+        engineReady = engineReady,
+        hasBook = hasBook,
+        hasChapter = hasChapter,
+        voiceCount = voiceCount,
+        characterCount = characterCount,
+        assignedCount = assignedCount,
+        storyboardSegments = storyboardSegments
+    )
+
+    @Test
+    fun `一键编排成功直接起播`() {
+        val result = ReadAloudOneTapFlow.plan(facts())
+        assertEquals(ReadAloudOneTapFlow.Step.START, result.step)
+        assertFalse(result.blocked)
+    }
+
+    /** 引擎未就绪不阻断：回落系统语音起播（与 4.11 开箱即用口径一致） */
+    @Test
+    fun `一键编排引擎未就绪不阻断`() {
+        val result = ReadAloudOneTapFlow.plan(facts(engineReady = false))
+        assertEquals(ReadAloudOneTapFlow.Step.ENGINE_FALLBACK, result.step)
+        assertFalse(result.blocked)
+        assertTrue(result.message.contains("系统语音"))
+    }
+
+    @Test
+    fun `一键编排无音色阻断并指引导入`() {
+        val result = ReadAloudOneTapFlow.plan(facts(voiceCount = 0))
+        assertEquals(ReadAloudOneTapFlow.Step.IMPORT_VOICE, result.step)
+        assertTrue(result.blocked)
+        assertTrue(result.message.contains("音色"))
+    }
+
+    @Test
+    fun `一键编排无角色阻断并指引识别`() {
+        val result = ReadAloudOneTapFlow.plan(facts(characterCount = 0))
+        assertEquals(ReadAloudOneTapFlow.Step.IDENTIFY_CHARACTER, result.step)
+        assertTrue(result.blocked)
+        assertTrue(result.message.contains("角色"))
+    }
+
+    /** 剧本（分镜）未就绪不阻断：先听，识别完成后自动换声 */
+    @Test
+    fun `一键编排剧本未就绪不阻断`() {
+        val result = ReadAloudOneTapFlow.plan(facts(storyboardSegments = 0))
+        assertEquals(ReadAloudOneTapFlow.Step.STORYBOARD_PENDING, result.step)
+        assertFalse(result.blocked)
+        assertTrue(result.message.contains("先直接听"))
+    }
+
+    /** 无书/无章节是硬缺料，必须优先于引擎与音色判定 */
+    @Test
+    fun `一键编排无书或无章节优先阻断`() {
+        val noBook = ReadAloudOneTapFlow.plan(
+            facts(hasBook = false, hasChapter = false, engineReady = false, voiceCount = 0)
+        )
+        assertEquals(ReadAloudOneTapFlow.Step.INSERT_BOOK, noBook.step)
+        assertTrue(noBook.blocked)
+
+        val noChapter = ReadAloudOneTapFlow.plan(facts(hasChapter = false, voiceCount = 0))
+        assertEquals(ReadAloudOneTapFlow.Step.OPEN_CHAPTER, noChapter.step)
+        assertTrue(noChapter.blocked)
+    }
+
+    /** 模板启用失败不阻断：用当前模板起播，并指路「选角模板」 */
+    @Test
+    fun `一键编排模板启用失败不阻断`() {
+        val result = ReadAloudOneTapFlow.plan(facts(), templateActivated = false)
+        assertEquals(ReadAloudOneTapFlow.Step.TEMPLATE_FALLBACK, result.step)
+        assertFalse(result.blocked)
+        assertTrue(result.message.contains("选角模板"))
     }
 }

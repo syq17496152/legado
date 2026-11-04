@@ -44,6 +44,29 @@ class BuiltinTextChunkerTest {
     }
 
     @Test
+    fun `语义停顿：省略号与破折号比对白收束更久，对白收束又比逗号更久`() {
+        assertEquals(BuiltinTextChunker.PAUSE_ELLIPSIS_MS, BuiltinTextChunker.semanticPause("他愣住了……"))
+        assertEquals(BuiltinTextChunker.PAUSE_ELLIPSIS_MS, BuiltinTextChunker.semanticPause("他愣住了..."))
+        assertEquals(BuiltinTextChunker.PAUSE_DASH_MS, BuiltinTextChunker.semanticPause("我想说——"))
+        assertEquals(BuiltinTextChunker.PAUSE_DIALOGUE_END_MS, BuiltinTextChunker.semanticPause("“走吧。”"))
+        assertEquals(BuiltinTextChunker.PAUSE_DIALOGUE_END_MS, BuiltinTextChunker.semanticPause("「不必了」"))
+        // 块末是收束引号 ⇒ 取对白档（换人语义优先于引号内的省略号）
+        assertEquals(BuiltinTextChunker.PAUSE_DIALOGUE_END_MS, BuiltinTextChunker.semanticPause("他说：“好吧……。”"))
+        // 普通句末/逗号不受影响（不与旧四档冲突）
+        assertEquals(BuiltinTextChunker.PAUSE_SENTENCE_MS, BuiltinTextChunker.semanticPause("结束。"))
+        assertEquals(BuiltinTextChunker.PAUSE_COMMA_MS, BuiltinTextChunker.semanticPause("然后，"))
+    }
+
+    @Test
+    fun `省略号与破折号会被切成独立停顿点（不是一拍到底）`() {
+        val chunks = BuiltinTextChunker.split("他盯着窗外犹豫了很长时间……最终还是把话咽了回去，屋子安静得可怕。")
+        // 两个「…」会被 rawSplit 拆成两个 piece，第二个并入下一块 ⇒ 断点块以单个「…」结尾
+        val breakChunk = chunks.firstOrNull { it.text.trimEnd().endsWith("…") && it.pauseMs > 0 }
+        assertTrue("省略号后未形成停顿点：${chunks.map { it.text }}", breakChunk != null)
+        assertEquals(BuiltinTextChunker.PAUSE_ELLIPSIS_MS, breakChunk!!.pauseMs)
+    }
+
+    @Test
     fun `超长段落按句内标点再切`() {
         val long = "这是一段很长的文字，".repeat(12) + "结束。"
         val chunks = BuiltinTextChunker.split(long)

@@ -86,6 +86,16 @@ class BuiltinTtsActivityTest {
         )
     }
 
+    /** 5.3 换音色试听：单段示范句取「·」之后的短名并截断 6 字，且不出现"选哪个"的问句 */
+    @Test
+    fun `换音色试听示范句按显示名截断且不成问句`() {
+        assertEquals("这是少年的声音。", BuiltinVoiceCompare.previewTextFor("内置·男·少年"))
+        assertEquals("这是清亮的声音。", BuiltinVoiceCompare.previewTextFor("清亮"))
+        assertEquals("这是一二三四五六的声音。", BuiltinVoiceCompare.previewTextFor("一二三四五六七八"))
+        // 对比试听仍是"选哪个"的问句（两种场景文案不能混用）
+        assertTrue(BuiltinVoiceCompare.sampleTextFor("内置·男·少年").contains("哪一个"))
+    }
+
     @Test
     fun `一键启用文案包含引擎 多角色 自检三段`() {
         assertEquals(

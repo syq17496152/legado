@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
+import io.legado.app.help.readaloud.casting.VoiceSwitchCandidates
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
@@ -294,30 +297,99 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
     }
     val target = selected
     if (target != null) {
+        var mode by remember(target.characterId) { mutableStateOf(VoiceSwitchCandidates.Mode.RECOMMEND) }
+        // 候选按画像过滤 + 排序（5.3）；「已占用」以同书其他角色的绑定为准
+        val candidates = remember(target, state.voices, state.roleRows, mode) {
+            val occupied = state.roleRows
+                .filter { it.characterId != target.characterId }
+                .map { it.voiceName }
+                .filter { it.isNotBlank() }
+                .toSet()
+            VoiceSwitchCandidates.build(
+                voices = state.voices,
+                characterGender = target.gender,
+                ageHint = target.ageHint,
+                currentVoiceName = target.voiceName,
+                occupiedVoiceNames = occupied,
+                mode = mode
+            )
+        }
+        val hiddenCount = state.voices.size - candidates.size
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text("给「${target.name}」换个音色") },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    state.voices.forEach { voice ->
-                        val isCurrent = voice.voiceName == target.voiceName
-                        TextButton(onClick = {
-                            onAction(PageAction.AssignVoice(target.characterId, voice.voiceName))
-                            selected = null
-                        }) {
-                            val suffix = buildString {
-                                if (isCurrent) append("（当前）")
-                                if (voice.voiceName in state.conflictVoices) append(" · 撞音")
-                            }
-                            Text(voice.displayName + suffix)
+                Column {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf(
+                            VoiceSwitchCandidates.Mode.RECOMMEND to "推荐",
+                            VoiceSwitchCandidates.Mode.ALL to "全部音色"
+                        ).forEach { (value, label) ->
+                            FilterChip(
+                                selected = mode == value,
+                                onClick = { mode = value },
+                                label = { Text(label) }
+                            )
                         }
                     }
-                    if (state.voices.isEmpty()) {
-                        Text("还没有可用音色：先到「音色」页导入或自录", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = when {
+                            candidates.isEmpty() -> "还没有可用音色：先到「音色」页导入或自录"
+                            mode == VoiceSwitchCandidates.Mode.RECOMMEND && hiddenCount > 0 ->
+                                "已按性别过滤 $hiddenCount 个异性音色；要看全部请切到「全部音色」"
+                            else -> "点一行即可换上；右侧 ▶ 可先试听"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+                    )
+                    LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                        items(candidates, key = { it.voiceName }) { candidate ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                TextButton(onClick = {
+                                    onAction(PageAction.AssignVoice(target.characterId, candidate.voiceName))
+                                    selected = null
+                                }) {
+                                    Text(candidate.displayName)
+                                }
+                                if (candidate.current) StatusPill("当前", StatusTone.NEUTRAL)
+                                if (candidate.occupiedElsewhere) StatusPill("已占用", StatusTone.WARNING)
+                                Spacer(Modifier.weight(1f))
+                                IconButton(
+                                    onClick = { onAction(PageAction.PreviewVoice(candidate.voiceName)) }
+                                ) {
+                                    Icon(Icons.Filled.PlayArrow, contentDescription = "试听")
+                                }
+                            }
+                            Text(
+                                text = BuiltinTtsUiSupport.voiceMetaText(candidate.voice) +
+                                    if (candidate.profile.inferred) " · 画像为推测" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 12.dp, bottom = 6.dp)
+                            )
+                        }
                     }
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val pick = VoiceSwitchCandidates.randomPick(candidates)
+                        if (pick != null) {
+                            onAction(PageAction.AssignVoice(target.characterId, pick.voiceName))
+                            selected = null
+                        }
+                    },
+                    enabled = candidates.isNotEmpty()
+                ) { Text("随机换一个") }
+            },
             dismissButton = { TextButton(onClick = { selected = null }) { Text("取消") } }
         )
     }

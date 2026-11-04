@@ -74,6 +74,13 @@ object CastSceneState {
     fun badgeOf(index: Int): String = ('A' + index.coerceIn(0, 25)).toString()
 
     /**
+     * 一键编排（4.7）触发条件：多角色卡且角色还没识别/配声。
+     * 抽成纯函数是为了让主按钮文案与点击分支**同源**，避免再出现"文案说识别、点击却直接起播"。
+     */
+    fun needsOneTapPrepare(cardId: String, characterCount: Int, assignedCount: Int): Boolean =
+        cardId == CARD_MULTI && (characterCount <= 0 || assignedCount <= 0)
+
+    /**
      * 三步引导（spec R2「可跳过、不阻塞」）：
      * 只表达「现在到哪一步」，不把资产配置变成听书前置门槛 —— 系统语音始终可听。
      */
@@ -173,7 +180,7 @@ object CastSceneState {
         val primaryLabel = when {
             !hasBook -> "请先打开一本书"
             !engineReady -> "开始听书（系统语音）"
-            selected == CARD_MULTI && (characterCount <= 0 || assignedCount <= 0) -> "识别角色并开始"
+            needsOneTapPrepare(selected, characterCount, assignedCount) -> "识别角色并开始"
             else -> "开始听书"
         }
         return SceneSnapshot(

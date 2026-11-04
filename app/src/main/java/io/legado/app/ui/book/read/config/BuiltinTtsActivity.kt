@@ -299,7 +299,14 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     }
 
     override fun onDestroy() {
-        runCatching { recordController.cancel(); previewTts?.stop(); previewTts?.shutdown(); BuiltinSegmentPreview.shutdown() }
+        runCatching {
+            recordController.cancel()
+            previewTts?.stop()
+            previewTts?.shutdown()
+            // 单音色试听走 BuiltinVoiceCompare（全局单例），页面销毁必须收回，避免长驻引擎
+            BuiltinVoiceCompare.shutdown()
+            BuiltinSegmentPreview.shutdown()
+        }
         previewTts = null
         super.onDestroy()
     }
@@ -689,26 +696,15 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         pageState.value = pageState.value.copy(message = "连续试听 ${batch.size} 个音色")
     }
 
+    /** 单音色试听：复用 [BuiltinVoiceCompare]（与音色页对比试听共用同一套「先切音色再播」逻辑，5.3） */
     private fun previewVoice(voiceName: String) {
         val target = BuiltinTtsRuntime.voices().firstOrNull { it.voiceName == voiceName || it.id == voiceName }
         if (target == null) {
             pageState.value = pageState.value.copy(message = "音色不存在")
             return
         }
-        if (previewTts == null) {
-            previewTts = TextToSpeech(this, { status ->
-                if (status == TextToSpeech.SUCCESS) speakPreview(target)
-            }, packageName)
-        } else {
-            speakPreview(target)
-        }
-    }
-
-    private fun speakPreview(target: BuiltinVoice) {
-        val tts = previewTts ?: return
-        runCatching {
-            tts.voices?.firstOrNull { it.name == target.voiceName }?.let { tts.setVoice(it) }
-            tts.speak("这是${target.displayName}的声音。", TextToSpeech.QUEUE_FLUSH, null, "builtin_preview")
+        if (!BuiltinVoiceCompare.preview(this, target)) {
+            pageState.value = pageState.value.copy(message = "该音色没有可用的绑定键，无法试听")
         }
     }
 
