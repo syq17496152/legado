@@ -142,6 +142,9 @@ androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayo
 
 core-core = { module = "androidx.core:core", version.ref = "core" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
+# 2.1：llama.cpp 官方 Android 模块（子模块内 build.gradle.kts）按 `libs.androidx.core.ktx` / `libs.androidx.datastore.preferences` 取依赖
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.1.1" }
 
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version = "3.6.1" }
 

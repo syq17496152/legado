@@ -51,3 +51,8 @@ include ':app'
 include ':modules:book'
 include ':modules:rhino'
 include ':modules:quickjs-sandbox'
+
+// 2.1 端侧 LLM：复用 llama.cpp 官方 Android 模块（MIT，third_party 子模块，固定 tag b9999）
+// 子模块内 `examples/llama.android/lib` 通过根版本目录（gradle/libs.versions.toml）解析 plugins/deps。
+include ':llm-android'
+project(':llm-android').projectDir = new File(rootDir, 'third_party/llama.cpp/examples/llama.android/lib')

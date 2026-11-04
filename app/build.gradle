@@ -335,6 +335,8 @@ if (mdTiny) {
 // }
 
 dependencies {
+    // 2.1 端侧 LLM 运行时：llama.cpp 官方 Android 模块（third_party 子模块，MIT，tag b9999）
+    implementation project(':llm-android')
     // 内置离线 TTS 引擎（builtin-offline-tts / AD-01）：sherpa-onnx AAR（本地文件，不入库；见 scripts/fetch_sherpa_aar.py）
     implementation(files("libs/sherpa-onnx.aar"))
     // 端侧 NER（AD-16）：LAC-ONNX 中文分词/词性/人名实体推理（模型不进包，走导入/下载）
