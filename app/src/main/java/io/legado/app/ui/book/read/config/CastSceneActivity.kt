@@ -566,48 +566,37 @@ private fun CastSceneScreen(
                     Switch(checked = bgmEnabled, onCheckedChange = onToggleBgm)
                 }
             }
-            // 高级区（4.4/4.5）：原先并列在阅读菜单的三项能力收在这里，
-            // 保证「入口收敛」不丢能力 —— 预合成 / 引擎管理 / 自定义模板 / 配乐 全部可达。
-            AppCard {
-                SectionTitle("高级")
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AssistChip(onClick = onOpenVoices, label = { Text("引擎与音色") })
-                    AssistChip(onClick = onOpenTemplates, label = { Text("选角模板") })
-                    AssistChip(onClick = onOpenPrebuild, label = { Text("批量预合成") })
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AssistChip(onClick = onOpenBgm, label = { Text("配乐库") })
-                    // 4.5：分镜/语速音调/诊断 三个剩余高级入口（各落到真实页面，不新增第二套实现）
-                    AssistChip(onClick = onOpenStoryboard, label = { Text("分镜编辑") })
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AssistChip(onClick = onOpenTuning, label = { Text("语速音调") })
-                    AssistChip(onClick = onOpenDiagnostics, label = { Text("诊断") })
-                }
-                // 4.6：角色配音 / 开书向导从二级页收敛到此处（key 与 PageTab 单源）
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CastSceneState.advancedPageEntries.forEach { (tabKey, label) ->
-                        AssistChip(onClick = { onOpenPage(tabKey) }, label = { Text(label) })
+            // 高级区（4.1/4.4/4.5/4.6）：入口由状态机按「有无书 / 引擎是否就绪」收敛，
+            // 保证「入口收敛」不丢能力的同时，也不给用户看点进去做不了事的死入口。
+            if (snapshot.advancedEntries.isNotEmpty()) {
+                AppCard {
+                    SectionTitle("高级")
+                    snapshot.advancedEntries.chunked(3).forEach { rowEntries ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowEntries.forEach { entry ->
+                                AssistChip(
+                                    onClick = {
+                                        when (entry.id) {
+                                            "voices" -> onOpenVoices()
+                                            "templates" -> onOpenTemplates()
+                                            "prebuild" -> onOpenPrebuild()
+                                            "bgm" -> onOpenBgm()
+                                            "storyboard" -> onOpenStoryboard()
+                                            "tuning" -> onOpenTuning()
+                                            "diagnostics" -> onOpenDiagnostics()
+                                            // roles / wizard：key 与 PageTab.key 单源，深链二级页
+                                            else -> onOpenPage(entry.id)
+                                        }
+                                    },
+                                    label = { Text(entry.label) }
+                                )
+                            }
+                        }
                     }
                 }
             }

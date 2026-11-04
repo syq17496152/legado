@@ -64,7 +64,11 @@ data class AssetFacts(
     val aiModelBytes: Long = 0L,
     /** 音色画像覆盖率（5.1）：性别/年龄有标注的比例，决定配声"性别硬约束"能起多大作用 */
     val voiceGenderPercent: Int = 0,
-    val voiceAgePercent: Int = 0
+    val voiceAgePercent: Int = 0,
+    /** 低端机（RAM < 8GB）：AI 入口不出现（不是灰色） */
+    val lowEndDevice: Boolean = false,
+    /** 用户是否开启本地 AI；关闭时同样不显示 AI 入口（已有 AI 数据例外，保证可清理） */
+    val localAiEnabled: Boolean = true
 ) {
     val totalBytes: Long get() = modelBytes + voiceBytes + cacheBytes
 }
@@ -79,6 +83,12 @@ data class VoiceAssetCenterUi(
 object VoiceAssetCenterState {
 
     fun build(facts: AssetFacts): VoiceAssetCenterUi {
+        // 4.1/7.7：AI 分组可见性 —— 低端机 / 未开启本地 AI 时不显示入口；已有 AI 数据例外（可清理）
+        val aiVisible = CastSceneState.aiEntryVisible(
+            lowEndDevice = facts.lowEndDevice,
+            localAiEnabled = facts.localAiEnabled,
+            hasAiData = facts.scriptBytes + facts.aiModelBytes > 0
+        )
         val groups = listOf(
             AssetGroup(
                 id = "engine",
@@ -186,13 +196,14 @@ object VoiceAssetCenterState {
                 action = AssetAction.CLEAR_AI_DATA,
                 actionLabel = if (facts.scriptBytes + facts.aiModelBytes > 0) "清除" else "已干净"
             )
-        )
+        ).filter { group -> group.id != "ai" || aiVisible }
         return VoiceAssetCenterUi(
             headerLine = "离线资产共 ${mb(facts.totalBytes)}MB（模型 ${mb(facts.modelBytes)}MB / " +
                     "音色 ${mb(facts.voiceBytes)}MB / 缓存 ${mb(facts.cacheBytes)}MB）",
             groups = groups,
             canClearCache = facts.cacheBytes > 0,
-            canClearAiData = facts.scriptBytes + facts.aiModelBytes > 0
+            // 入口不可见时不给"清除 AI 数据"动作，避免隐藏分组被其它入口误触发
+            canClearAiData = aiVisible && facts.scriptBytes + facts.aiModelBytes > 0
         )
     }
 

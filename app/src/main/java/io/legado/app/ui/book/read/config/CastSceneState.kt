@@ -25,6 +25,12 @@ data class GuideStep(
     val done: Boolean
 )
 
+/** 高级区一个入口（4.1 高级项可见性）：id 决定点击去向，由状态机按可用条件收敛 */
+data class SceneAdvancedEntry(
+    val id: String,
+    val label: String
+)
+
 data class SceneSnapshot(
     val cards: List<SceneCardRow>,
     val statusLine: String,
@@ -41,7 +47,9 @@ data class SceneSnapshot(
     /** 资源概览一行（音色 · 模板 · 配乐 · 占用），空串则不显示 */
     val resourceLine: String = "",
     /** 本章剧本状态行（3.7：未生成/生成中/已生成/降级），空串则不显示 */
-    val scriptLine: String = ""
+    val scriptLine: String = "",
+    /** 高级区可见入口（4.1）：按有无书/引擎是否就绪收敛，避免"点进去也做不了事" */
+    val advancedEntries: List<SceneAdvancedEntry> = emptyList()
 )
 
 object CastSceneState {
@@ -111,6 +119,37 @@ object CastSceneState {
         "roles" to "角色配音",
         "wizard" to "开书向导"
     )
+
+    /** 低端机门槛（README：「低端 4GB 三卡可用，本地 AI 入口不出现」）：RAM < 8GB 不开放端侧大模型 */
+    const val LOW_END_RAM_MB = 8000L
+
+    fun isLowEndDevice(totalRamMb: Long): Boolean = totalRamMb < LOW_END_RAM_MB
+
+    /**
+     * AI 入口可见性（4.1 高级项可见性 / 7.7 特性关闭交付）：
+     * 低端机或用户没开本地 AI ⇒ **不显示**入口（不是灰色）；
+     * 但已有 AI 数据（剧本草案/模型）必须仍可见 —— 否则用户无法清理遗留数据。
+     */
+    fun aiEntryVisible(lowEndDevice: Boolean, localAiEnabled: Boolean, hasAiData: Boolean): Boolean =
+        hasAiData || (!lowEndDevice && localAiEnabled)
+
+    /**
+     * 高级区入口表（4.1）：只放"现在真能用"的项。
+     * - 批量预合成需要离线引擎（系统语音无法预合成）且必须有书；
+     * - 分镜编辑/角色配音/开书向导必须有书（无书时点进去只能看到空态）。
+     */
+    fun advancedEntriesOf(hasBook: Boolean, engineReady: Boolean): List<SceneAdvancedEntry> = buildList {
+        add(SceneAdvancedEntry("voices", "引擎与音色"))
+        add(SceneAdvancedEntry("templates", "选角模板"))
+        if (hasBook && engineReady) add(SceneAdvancedEntry("prebuild", "批量预合成"))
+        add(SceneAdvancedEntry("bgm", "配乐库"))
+        if (hasBook) add(SceneAdvancedEntry("storyboard", "分镜编辑"))
+        add(SceneAdvancedEntry("tuning", "语速音调"))
+        add(SceneAdvancedEntry("diagnostics", "诊断"))
+        if (hasBook) {
+            advancedPageEntries.forEach { (tabKey, label) -> add(SceneAdvancedEntry(tabKey, label)) }
+        }
+    }
 
     /**
      * 使用提示（纯函数可单测）：首次进本页的人不用去翻文档，
@@ -217,7 +256,8 @@ object CastSceneState {
                 "本章剧本：$scriptStatusLabel"
             } else {
                 ""
-            }
+            },
+            advancedEntries = advancedEntriesOf(hasBook, engineReady)
         )
     }
 

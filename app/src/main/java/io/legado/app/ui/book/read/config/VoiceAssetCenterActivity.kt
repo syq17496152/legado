@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import android.app.ActivityManager
 import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,8 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadAloudBgmTrack
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.LocalLlmPrefs
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.role.ChapterScriptStore
@@ -103,6 +106,16 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
         // 5.1 覆盖率：性别/年龄有标注的比例（决定性别硬约束的实际效果，用户需要知道）
         val coverage = runCatching { CharacterVoiceAssignService.coverage(voices) }
             .getOrDefault(CharacterVoiceAssignService.VoiceCoverage(0, 0, 0))
+        // 4.1/7.7：低端机（RAM < 8GB）不显示 AI 入口；读取失败按"非低端"处理，避免误伤中高端机
+        val totalRamMb = runCatching {
+            val info = ActivityManager.MemoryInfo()
+            getSystemService(ActivityManager::class.java).getMemoryInfo(info)
+            info.totalMem / (1024L * 1024L)
+        }.getOrDefault(CastSceneState.LOW_END_RAM_MB)
+        val lowEndDevice = CastSceneState.isLowEndDevice(totalRamMb)
+        // 本地 AI 入口还需要用户真的开了本地档且选过模型，否则就是点了没反应的死入口
+        val localAiEnabled = LocalLlmPrefs.policyOf(AppConfig.aiTaskPolicy) == LocalLlmPrefs.POLICY_LOCAL &&
+            LocalLlmPrefs.enabledOrDefault(AppConfig.localLlmEnabled, AppConfig.localLlmProfileId)
         return AssetFacts(
             engineReady = profile != null && runCatching { BuiltinTtsRuntime.isReady() }.getOrDefault(false),
             profileTitle = profile?.title.orEmpty(),
@@ -123,7 +136,9 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
             scriptBytes = scriptBytes,
             aiModelBytes = aiModelBytes,
             voiceGenderPercent = coverage.genderPercent,
-            voiceAgePercent = coverage.agePercent
+            voiceAgePercent = coverage.agePercent,
+            lowEndDevice = lowEndDevice,
+            localAiEnabled = localAiEnabled
         )
     }
 

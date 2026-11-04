@@ -325,6 +325,70 @@ class CastSceneStateTest {
     }
 
     /**
+     * 4.1 高级项可见性：入口只放"现在真能用"的项 —— 无书时不显示分镜/角色/向导，
+     * 无离线引擎时不显示批量预合成（系统语音无法预合成）。
+     */
+    @Test
+    fun `高级区入口按有无书与引擎状态收敛`() {
+        val noBook = CastSceneState.advancedEntriesOf(hasBook = false, engineReady = false)
+        assertEquals(
+            listOf("voices", "templates", "bgm", "tuning", "diagnostics"),
+            noBook.map { it.id }
+        )
+        // 有书但引擎未就绪：分镜/角色/向导可用（规则链路不依赖离线引擎），预合成仍不可用
+        val bookNoEngine = CastSceneState.advancedEntriesOf(hasBook = true, engineReady = false)
+        assertEquals(
+            listOf("voices", "templates", "bgm", "storyboard", "tuning", "diagnostics", "roles", "wizard"),
+            bookNoEngine.map { it.id }
+        )
+        // 有书且引擎就绪：全部 9 项可达，且文案都不为空（避免出现空白 chip）
+        val all = CastSceneState.advancedEntriesOf(hasBook = true, engineReady = true)
+        assertEquals(
+            listOf(
+                "voices", "templates", "prebuild", "bgm", "storyboard",
+                "tuning", "diagnostics", "roles", "wizard"
+            ),
+            all.map { it.id }
+        )
+        assertTrue(all.all { it.label.isNotBlank() })
+        // 深链 key 仍与二级页页签单源
+        assertEquals(PageTab.ROLES, PageTab.ofKey(all.first { it.id == "roles" }.id))
+        assertEquals(PageTab.WIZARD, PageTab.ofKey(all.first { it.id == "wizard" }.id))
+    }
+
+    /**
+     * 4.1/7.7 低端机与本地 AI 关闭：AI 入口「不出现」而不是灰色；已有 AI 数据例外，
+     * 否则清完模型手机上也看不到清理入口，遗留数据永远占空间。
+     */
+    @Test
+    fun `低端机与本地AI关闭不显示AI入口`() {
+        assertTrue(CastSceneState.isLowEndDevice(4000))
+        assertFalse(CastSceneState.isLowEndDevice(8000))
+        assertFalse(CastSceneState.isLowEndDevice(12000))
+
+        assertTrue(CastSceneState.aiEntryVisible(lowEndDevice = false, localAiEnabled = true, hasAiData = false))
+        assertFalse(CastSceneState.aiEntryVisible(lowEndDevice = true, localAiEnabled = true, hasAiData = false))
+        assertFalse(CastSceneState.aiEntryVisible(lowEndDevice = false, localAiEnabled = false, hasAiData = false))
+        // 已有数据：即使低端机/未开启也显示，保证用户能清理
+        assertTrue(CastSceneState.aiEntryVisible(lowEndDevice = true, localAiEnabled = false, hasAiData = true))
+
+        val lowEnd = VoiceAssetCenterState.build(AssetFacts(lowEndDevice = true))
+        assertTrue("低端机不显示 AI 分组", lowEnd.groups.none { it.id == "ai" })
+        assertFalse(lowEnd.canClearAiData)
+
+        val aiOff = VoiceAssetCenterState.build(AssetFacts(localAiEnabled = false))
+        assertTrue("未开启本地 AI 不显示 AI 分组", aiOff.groups.none { it.id == "ai" })
+        assertFalse(aiOff.canClearAiData)
+
+        // 已有剧本草案：低端机也显示分组并可清除（否则遗留数据无法清理）
+        val legacy = VoiceAssetCenterState.build(
+            AssetFacts(lowEndDevice = true, scriptBytes = 2L * 1024 * 1024)
+        )
+        assertTrue(legacy.groups.any { it.id == "ai" })
+        assertTrue(legacy.canClearAiData)
+    }
+
+    /**
      * 4.9：音色分组带「连播试听」次要动作；新增「AI 剧本与本地模型」分组并可清除；
      * 两条删除路径都必须先给出「删什么/不影响什么」的影响提示。
      */
