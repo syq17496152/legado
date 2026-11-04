@@ -88,7 +88,9 @@ data class BuiltinTtsPageState(
     /** 缓存水位（T3.4）：用量 / 上限 / 百分比 */
     val cacheWatermark: String = "",
     /** 端侧 NER 模型（AD-16）是否已就绪 */
-    val nerModelReady: Boolean = false
+    val nerModelReady: Boolean = false,
+    /** 深链页签（4.5）：空=默认引擎页；见 [PageTab.key] */
+    val initialTabKey: String = ""
 )
 
 /** 分镜一行：段落片段 + 当前角色判定（未识别不静默归旁白） */
@@ -157,12 +159,17 @@ sealed interface PageAction {
     ) : PageAction
 }
 
-private enum class PageTab(val labelRes: Int) {
-    ENGINE(R.string.builtin_tts_tab_engine),
-    VOICES(R.string.builtin_tts_tab_voices),
-    ROLES(R.string.builtin_tts_tab_roles),
-    WIZARD(R.string.builtin_tts_tab_wizard),
-    STORYBOARD(R.string.builtin_tts_tab_storyboard)
+internal enum class PageTab(val key: String, val labelRes: Int) {
+    ENGINE("engine", R.string.builtin_tts_tab_engine),
+    VOICES("voices", R.string.builtin_tts_tab_voices),
+    ROLES("roles", R.string.builtin_tts_tab_roles),
+    WIZARD("wizard", R.string.builtin_tts_tab_wizard),
+    STORYBOARD("storyboard", R.string.builtin_tts_tab_storyboard);
+
+    companion object {
+        /** 深链：听书中心「高级」区分镜/诊断 chip 直接落到对应页签（4.5） */
+        fun ofKey(key: String?): PageTab? = entries.firstOrNull { it.key == key }
+    }
 }
 
 @Composable
@@ -172,7 +179,7 @@ internal fun BuiltinTtsScreen(
     onPickVoiceZip: () -> Unit,
     onAction: (PageAction) -> Unit
 ) {
-    var tab by remember { mutableStateOf(PageTab.ENGINE) }
+    var tab by remember { mutableStateOf(PageTab.ofKey(state.initialTabKey) ?: PageTab.ENGINE) }
     LaunchedEffect(state.message) { /* 触发重组展示提示 */ }
     val context = LocalContext.current
     val engineReady = state.profiles.any { it.state == BuiltinEngineState.READY }

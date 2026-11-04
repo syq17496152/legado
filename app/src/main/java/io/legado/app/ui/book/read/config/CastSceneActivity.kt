@@ -103,6 +103,17 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                         onOpenTemplates = { showDialogFragment(TtsCastingManageFragment.newInstance()) },
                         onOpenPrebuild = { showDialogFragment(TtsPrebuildDialog.newInstance()) },
                         onOpenAssets = { startActivity<VoiceAssetCenterActivity>() },
+                        onOpenStoryboard = {
+                            startActivity<BuiltinTtsActivity> {
+                                putExtra(BuiltinTtsActivity.EXTRA_TAB, BuiltinTtsActivity.TAB_STORYBOARD)
+                            }
+                        },
+                        onOpenTuning = { showDialogFragment(ReadAloudConfigDialog()) },
+                        onOpenDiagnostics = {
+                            startActivity<BuiltinTtsActivity> {
+                                putExtra(BuiltinTtsActivity.EXTRA_TAB, BuiltinTtsActivity.TAB_ENGINE)
+                            }
+                        },
                         onPrimary = ::primaryAction
                     )
                 }
@@ -382,6 +393,9 @@ private fun CastSceneScreen(
     onOpenTemplates: () -> Unit,
     onOpenPrebuild: () -> Unit,
     onOpenAssets: () -> Unit,
+    onOpenStoryboard: () -> Unit,
+    onOpenTuning: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     onPrimary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -543,6 +557,17 @@ private fun CastSceneScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     AssistChip(onClick = onOpenBgm, label = { Text("配乐库") })
+                    // 4.5：分镜/语速音调/诊断 三个剩余高级入口（各落到真实页面，不新增第二套实现）
+                    AssistChip(onClick = onOpenStoryboard, label = { Text("分镜编辑") })
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AssistChip(onClick = onOpenTuning, label = { Text("语速音调") })
+                    AssistChip(onClick = onOpenDiagnostics, label = { Text("诊断") })
                 }
             }
             if (busy) {

@@ -44,4 +44,36 @@ class OfflineRoleCacheStoreTest {
         )
         assertEquals(segments, OfflineRoleCacheStore.parse(OfflineRoleCacheStore.serialize(segments)))
     }
+
+    /** 3.1/3.2：剧本层把归因结果收敛成段级剧本，来源可诊断、拒不改写高置信规则 */
+    @Test
+    fun `剧本草稿保留来源并把轮转段标记为需仲裁`() {
+        val draft = ChapterScriptBuilder.build(
+            bookKey = "b", chapterIndex = 1, paragraphs = listOf("甲说：走吧。"),
+            segments = listOf(
+                OfflineRoleSegment(
+                    paragraphIndex = 0, start = 0, end = 1, roleType = "character",
+                    characterName = "张三", characterId = 7L, confidence = 0.95, reason = "alias"
+                ),
+                OfflineRoleSegment(
+                    paragraphIndex = 0, start = 2, end = 5, roleType = "other",
+                    characterName = "", characterId = 0L, confidence = 0.60, reason = "turn-taking"
+                )
+            ),
+            ruleVersion = "r1"
+        )
+        assertEquals(2, draft.segments.size)
+        assertEquals("alias", draft.segments[0].source)
+        assertEquals("dialogue", draft.segments[0].roleType)
+        assertFalse(draft.segments[0].needsArbitration)
+        // other → dialogue，turn 段必须送仲裁（即使置信 0.60 已过最低门槛）
+        assertEquals("turn", draft.segments[1].source)
+        assertEquals("dialogue", draft.segments[1].roleType)
+        assertTrue(draft.segments[1].needsArbitration)
+        // 章节指纹可复算且与段指纹同源
+        assertEquals(
+            ChapterScriptBuilder.hashOf(listOf("甲说：走吧。")),
+            draft.contentHash
+        )
+    }
 }

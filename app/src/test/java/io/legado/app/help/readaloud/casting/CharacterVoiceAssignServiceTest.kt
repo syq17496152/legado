@@ -532,6 +532,24 @@ class CharacterVoiceAssignServiceTest {
         assertEquals(current, CharacterVoiceAssignService.withManualRoleVoice(current, "陆沉", " "))
     }
 
+    /** 4.8 四层继承：解析器回传来源层（模板摘要据此显示"本书/全局/内置默认"） */
+    @Test
+    fun `四层继承解析器区分书级与全局来源`() {
+        val bookLayer = EffectiveReadAloudConfig.resolve(
+            bookTemplateId = "user_template_a",
+            globalTemplateId = "builtin_mono"
+        )
+        assertEquals(EffectiveReadAloudConfig.Layer.BOOK, bookLayer.templateId.layer)
+        assertEquals("user_template_a", bookLayer.templateId.value)
+
+        val globalLayer = EffectiveReadAloudConfig.resolve(globalTemplateId = "builtin_mono")
+        assertEquals(EffectiveReadAloudConfig.Layer.GLOBAL, globalLayer.templateId.layer)
+
+        val builtinLayer = EffectiveReadAloudConfig.resolve()
+        assertEquals(EffectiveReadAloudConfig.Layer.BUILTIN, builtinLayer.templateId.layer)
+        assertEquals(EffectiveReadAloudConfig.DEFAULT_SPEECH_RATE, builtinLayer.speechRate.value)
+    }
+
     // ---- 4.7 智能多角色一键编排 ----
 
     private fun facts(

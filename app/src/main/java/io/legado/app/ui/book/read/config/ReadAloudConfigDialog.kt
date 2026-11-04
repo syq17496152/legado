@@ -49,6 +49,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.ReadAloudSpeakerLoudnessManager
 import io.legado.app.help.readaloud.casting.CastingRuleSet
+import io.legado.app.help.readaloud.casting.EffectiveReadAloudConfig
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.role.ReadAloudPreprocessRuleConfig
 import io.legado.app.help.readaloud.role.ReadAloudQuotePair
@@ -443,7 +444,7 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             slider(
                 key = PreferKey.ttsSpeechRate,
                 title = getString(R.string.read_aloud_speed),
-                summary = formatSpeechRate(AppConfig.ttsSpeechRate),
+                summary = speechRateSummary(),
                 value = AppConfig.ttsSpeechRate.coerceIn(0, 45),
                 range = 0..45,
                 enabled = !AppConfig.ttsFlowSys
@@ -453,18 +454,35 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
 
     /** 多人听书模板摘要（AD-09 期1 入口）：
      *  P1-24 修复：读 observeAll 快照（castingTemplates），不再 runBlocking 同步等 DB；
-     *  首帧未加载完成前不显示"共 0 个"误导文案 */
+     *  首帧未加载完成前不显示"共 0 个"误导文案。
+     *  4.8：摘要前缀显示**生效来源层**（本书覆盖 / 全局 / 内置默认），用户能看到书级覆盖压住了全局 */
     private fun ttsCastingSummary(): String {
-        val activeId = TtsCastingStore.activeTemplateId()
+        val resolved = EffectiveReadAloudConfig.resolveForBook(io.legado.app.model.ReadBook.book?.bookUrl)
+        val activeId = resolved.templateId.value
         val templates = castingTemplates
         val active = templates.firstOrNull { it.id == activeId }
+        val layerPrefix = "${resolved.templateId.layer.title} · "
         if (!castingTemplatesLoaded) {
-            return if (activeId != null) "当前模板已激活" else "未启用（单声）"
+            return if (activeId != null) "${layerPrefix}当前模板已激活" else "${layerPrefix}未启用（单声）"
         }
         return if (active != null) {
-            "当前：${active.name}（共 ${templates.size} 个模板）"
+            "${layerPrefix}当前：${active.name}（共 ${templates.size} 个模板）"
         } else {
-            "未启用（单声）· 共 ${templates.size} 个模板"
+            "${layerPrefix}未启用（单声）· 共 ${templates.size} 个模板"
+        }
+    }
+
+    /** 4.8：语速摘要显示「全局值 + 来源层」；本书/本章另有覆盖时显式提示滑条只改全局 */
+    private fun speechRateSummary(): String {
+        val resolved = EffectiveReadAloudConfig.resolveForBook(io.legado.app.model.ReadBook.book?.bookUrl)
+        val global = formatSpeechRate(AppConfig.ttsSpeechRate)
+        val layer = resolved.speechRate.layer
+        return when (layer) {
+            EffectiveReadAloudConfig.Layer.BOOK ->
+                "$global（全局；本书已单独设为 ${formatSpeechRate(resolved.speechRate.value)}）"
+            EffectiveReadAloudConfig.Layer.SEGMENT ->
+                "$global（全局；本章另有覆盖 ${formatSpeechRate(resolved.speechRate.value)}）"
+            else -> "$global（${layer.title}）"
         }
     }
 

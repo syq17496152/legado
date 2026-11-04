@@ -86,6 +86,18 @@ class BuiltinTtsActivityTest {
         )
     }
 
+    /** 4.5 深链页签：听书中心「高级」区分镜/诊断 chip 靠 key 直达对应页 */
+    @Test
+    fun `深链页签按 key 映射且未知 key 回落默认`() {
+        assertEquals(PageTab.STORYBOARD, PageTab.ofKey("storyboard"))
+        assertEquals(PageTab.ENGINE, PageTab.ofKey("engine"))
+        assertEquals(PageTab.ROLES, PageTab.ofKey("roles"))
+        assertEquals(null, PageTab.ofKey("unknown"))
+        assertEquals(null, PageTab.ofKey(null))
+        // 未知/空 key 由页面回落默认引擎页（不做崩溃路径）
+        assertEquals(PageTab.ENGINE, PageTab.ofKey("") ?: PageTab.ENGINE)
+    }
+
     /** 5.3 换音色试听：单段示范句取「·」之后的短名并截断 6 字，且不出现"选哪个"的问句 */
     @Test
     fun `换音色试听示范句按显示名截断且不成问句`() {

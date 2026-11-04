@@ -230,6 +230,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         BuiltinTtsRuntime.init(this)
+        // 4.5 深链：听书中心「高级」区分镜/诊断 chip 直接落到对应页签
+        pageState.value = pageState.value.copy(
+            initialTabKey = intent?.getStringExtra(EXTRA_TAB).orEmpty()
+        )
         reload()
         lifecycleScope.launch {
             runCatching { BuiltinTtsRuntime.ensureSeeded() }
@@ -736,6 +740,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         const val EXTRA_AUTO_SETUP = "auto_setup"
         /** 联调：从外置导入目录自动导入指定音色包（文件名），供 653 规模 L2 验证 */
         const val EXTRA_IMPORT_VOICES = "import_voices"
+        /** 4.5 深链页签：值取 `PageTab.key`（engine/voices/roles/wizard/storyboard） */
+        const val EXTRA_TAB = "page_tab"
+        const val TAB_ENGINE = "engine"
+        const val TAB_STORYBOARD = "storyboard"
         /** 联调：从外置导入目录自动导入 LAC NER 模型（文件名） */
         const val EXTRA_IMPORT_NER = "import_ner"
         /** 改绑学习时截取的 cue 窗口（引号两侧各 24 字，与离线归因的近场口径一致） */
