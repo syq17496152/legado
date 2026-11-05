@@ -68,7 +68,8 @@ class ScriptArbiterRunnerTest {
     @Test
     fun `合法 JSON 采用模型候选并保留高置信段`() = runBlocking {
         val runtime = readyRuntime("{\"a\":[{\"i\":0,\"n\":0,\"c\":0.92}]}")
-        val outcome = ScriptArbiterRunner(runtime).run(script, ::textOf, listOf("小明", "小红"))
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(script, ::textOf, listOf("小明", "小红"))
         assertEquals(1, outcome.merge.aiApplied)
         assertEquals("小明", outcome.merge.segments[0].characterName)
         assertEquals("local-ai", outcome.merge.segments[0].source)
@@ -81,7 +82,7 @@ class ScriptArbiterRunnerTest {
     @Test
     fun `坏 JSON 不污染剧本并标降级`() = runBlocking {
         val runtime = readyRuntime("我不会输出 JSON")
-        val outcome = ScriptArbiterRunner(runtime).run(script, ::textOf, listOf("小明"))
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime)).run(script, ::textOf, listOf("小明"))
         assertTrue(outcome.merge.degraded)
         assertEquals(0, outcome.merge.aiApplied)
         assertEquals("待定", outcome.merge.segments[0].characterName)
@@ -97,7 +98,8 @@ class ScriptArbiterRunnerTest {
             )
         )
         val runtime = readyRuntime("{\"a\":[]}")
-        val outcome = ScriptArbiterRunner(runtime).run(highOnly, ::textOf, listOf("小明"))
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(highOnly, ::textOf, listOf("小明"))
         assertEquals(0, outcome.batches)
         assertFalse(outcome.modelCalled)
         assertFalse(outcome.merge.degraded)

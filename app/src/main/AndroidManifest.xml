@@ -775,6 +775,12 @@
             android:name=".service.TtsPrebuildService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+        <!-- 3.5 剧本生成执行器（design AD-26 前台服务分支）：
+             只做编排与通知，推理走 :llm 进程；队列空即自停，不常驻 -->
+        <service
+            android:name=".service.ScriptGenerationService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <!-- 端侧 LLM 推理宿主（design AD-11）：独立 `:llm` 进程，
              native OOM/crash 不传染主进程的朗读链路；只允许应用内绑定，绝不导出 -->

@@ -46,6 +46,7 @@ import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.bgm.ReadAloudBgmPlayer
 import io.legado.app.help.readaloud.casting.BuiltinCastingSetup
+import io.legado.app.help.readaloud.casting.AiTaskRouter
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.readaloud.casting.ReadAloudOneTapFlow
 import io.legado.app.help.readaloud.casting.TtsCastingStore
@@ -59,6 +60,8 @@ import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
+import io.legado.app.service.ScriptGenerationPlan
+import io.legado.app.service.ScriptGenerationService
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.showDialogFragment
@@ -86,6 +89,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
     /** T8.4 配乐开关：真实状态来自用户偏好（与朗读服务读同一处） */
     private var bgmEnabled by mutableStateOf(AppConfig.aiReadAloudBgmEnabled)
     private var bgmTrackCount by mutableStateOf(0)
+    /** 3.5：开页自动生成剧本只排一次（用户重复进出页面不再重复烧电） */
+    private var autoScriptPending = true
 
     override val binding: ViewBinding by lazy {
         val view = ComposeView(this).apply {
@@ -122,6 +127,7 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                                 putExtra(BuiltinTtsActivity.EXTRA_TAB, tabKey)
                             }
                         },
+                        onGenerateScript = { requestScript(force = true) },
                         onPrimary = ::primaryAction
                     )
                 }
@@ -134,7 +140,30 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
 
     override fun onActivityCreated(savedInstanceState: android.os.Bundle?) {
         BuiltinTtsRuntime.init(this)
+        // 3.7/3.5：剧本状态由生产者推送（生成中/已生成/降级），页面订阅后自动刷新，不做轮询
+        statusObserver = ScriptStatusBus.observe {
+            runCatching { reload() }
+        }
         reload()
+    }
+
+    private var statusObserver: (() -> Unit)? = null
+
+    override fun onDestroy() {
+        runCatching { statusObserver?.invoke() }
+        statusObserver = null
+        super.onDestroy()
+    }
+
+    /** 3.5 生成本章剧本：手动触发只做当前章（force 重算）；自动触发连同下一章预取 */
+    private fun requestScript(force: Boolean) {
+        val book = ReadBook.book ?: return
+        val chapter = ReadBook.curTextChapter ?: return
+        val index = chapter.chapter.index
+        val chapters = ScriptGenerationPlan.chaptersFor(index, force)
+        if (chapters.isEmpty()) return
+        ScriptGenerationService.request(this, book.bookUrl, chapters, force)
+        message = if (force) "已开始重新生成第 $index 章剧本" else "已开始生成第 $index 章剧本"
     }
 
     private fun reload() {
@@ -158,7 +187,11 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         /** 1.7 顶部胶囊：档位名 + 剧本两态 */
         val engineTitle: String = "",
         val scriptReady: Boolean = false,
-        val scriptDegraded: Boolean = false
+        val scriptDegraded: Boolean = false,
+        /** 3.5 剧本状态机原值（自动触发只用 NONE 判定，避免 BUILDING 时重复排队） */
+        val scriptPhase: ScriptPhase = ScriptPhase.NONE,
+        /** 3.5 本地 AI 路由可用 ⇒ 本章准备卡出现「生成剧本」按钮 */
+        val canGenerateScript: Boolean = false
     )
 
     private suspend fun reloadState() {
@@ -179,8 +212,14 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             scriptStatusLabel = facts.scriptStatusLabel,
             engineTitle = facts.engineTitle,
             scriptReady = facts.scriptReady,
-            scriptDegraded = facts.scriptDegraded
+            scriptDegraded = facts.scriptDegraded,
+            canGenerateScript = facts.canGenerateScript
         )
+        // 3.5 自动生成：开页时当前章还没剧本且本地 AI 可用 ⇒ 排一次 P0（只排一次，不反复触发）
+        if (autoScriptPending && facts.canGenerateScript && facts.scriptPhase == ScriptPhase.NONE) {
+            autoScriptPending = false
+            requestScript(force = false)
+        }
         bgmEnabled = AppConfig.aiReadAloudBgmEnabled
         bgmTrackCount = facts.bgmTrackCount
     }
@@ -256,7 +295,10 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             engineTitle = activeProfile?.title.orEmpty(),
             scriptReady = scriptStatus?.phase == ScriptPhase.READY ||
                     scriptStatus?.phase == ScriptPhase.DEGRADED,
-            scriptDegraded = scriptStatus?.phase == ScriptPhase.DEGRADED
+            scriptDegraded = scriptStatus?.phase == ScriptPhase.DEGRADED,
+            scriptPhase = scriptStatus?.phase ?: ScriptPhase.NONE,
+            canGenerateScript = book != null && chapter != null &&
+                    AiTaskRouter.routeFor(onlineConfigured = false).executor == AiTaskRouter.Executor.LOCAL
         )
     }
 
@@ -436,6 +478,8 @@ private fun CastSceneScreen(
     onOpenDiagnostics: () -> Unit,
     /** 4.6：按 `PageTab.key` 深链到二级页（角色配音 / 开书向导） */
     onOpenPage: (String) -> Unit,
+    /** 3.5：本地 AI 可用时的「生成本章剧本」（手动重算） */
+    onGenerateScript: () -> Unit,
     onPrimary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -521,6 +565,14 @@ private fun CastSceneScreen(
                         text = snapshot.scriptLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                // 3.5 剧本生成入口：本地 AI 可用才显示（不可用时不是灰按钮，而是整块不出现）
+                if (snapshot.canGenerateScript) {
+                    AssistChip(
+                        onClick = onGenerateScript,
+                        label = { Text("生成本章剧本") },
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
@@ -666,93 +718,5 @@ private fun CastSceneScreen(
                 Text(snapshot.primaryLabel, style = MaterialTheme.typography.titleSmall)
             }
         }
-    }
-}
-
-/** 统计小格：数字 + 标签（本章准备度用，纯展示不承载逻辑） */
-@Composable
-private fun SceneStat(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-    }
-}
-
-/** 单张场景卡：A/B/C/D 圆标 + 标题 + 两行副文案；选中显示对勾，推荐显示胶囊 */
-@Composable
-private fun SceneCard(
-    card: SceneCardRow,
-    badge: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    AppCard(modifier = modifier, selected = card.selected, onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (card.selected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (card.selected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    }
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            when {
-                card.selected -> Icon(
-                    Icons.Filled.Check,
-                    contentDescription = "已选",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                card.recommended -> StatusPill("推荐", StatusTone.POSITIVE)
-            }
-        }
-        Text(
-            text = card.title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 10.dp)
-        )
-        Text(
-            text = card.subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            minLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
-        )
     }
 }

@@ -48,6 +48,8 @@ data class SceneSnapshot(
     val resourceLine: String = "",
     /** 本章剧本状态行（3.7：未生成/生成中/已生成/降级），空串则不显示 */
     val scriptLine: String = "",
+    /** 3.5：本地 AI 可用 ⇒ 显示「生成剧本」按钮（缺省 false，既有调用方不受影响） */
+    val canGenerateScript: Boolean = false,
     /** 高级区可见入口（4.1）：按有无书/引擎是否就绪收敛，避免"点进去也做不了事" */
     val advancedEntries: List<SceneAdvancedEntry> = emptyList(),
     /** 1.7 顶部胶囊：引擎档位 + 剧本来源（空串 = 不展示） */
@@ -231,7 +233,9 @@ object CastSceneState {
         scriptStatusLabel: String = "",
         engineTitle: String = "",
         scriptReady: Boolean = false,
-        scriptDegraded: Boolean = false
+        scriptDegraded: Boolean = false,
+        /** 3.5：本地 AI 可用（决定「生成剧本」按钮是否出现，不改变起播能力） */
+        canGenerateScript: Boolean = false
     ): SceneSnapshot {
         val selected = cardOf(activeTemplateId)
         val multiSubtitle = if (characterCount <= 0) {
@@ -288,6 +292,7 @@ object CastSceneState {
             } else {
                 ""
             },
+            canGenerateScript = canGenerateScript,
             advancedEntries = advancedEntriesOf(hasBook, engineReady),
             // 1.7：胶囊只在有书时才有意义（未开书时剧本状态无从谈起）
             capsule = if (hasBook) {

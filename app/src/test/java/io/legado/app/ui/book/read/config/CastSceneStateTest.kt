@@ -10,6 +10,32 @@ import org.junit.Test
  */
 class CastSceneStateTest {
 
+    /**
+     * 3.5 剧本生成入口：`canGenerateScript` 必须原样透传（缺省 false）。
+     * 语义是「本地 AI 可用才出现按钮」——不能出现"按钮在但点了没反应"或"可用却找不到入口"。
+     */
+    @Test
+    fun `剧本生成入口按可用性透传且默认关闭`() {
+        val base = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 1,
+            assignedCount = 1,
+            storyboardSegments = 2,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI
+        )
+        assertFalse(base.canGenerateScript)
+
+        val enabled = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 1,
+            assignedCount = 1,
+            storyboardSegments = 2,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            canGenerateScript = true
+        )
+        assertTrue(enabled.canGenerateScript)
+    }
+
     @Test
     fun `卡与内置模板一一映射`() {
         assertEquals(CastSceneState.TEMPLATE_MONO, CastSceneState.templateOf(CastSceneState.CARD_MONO))
