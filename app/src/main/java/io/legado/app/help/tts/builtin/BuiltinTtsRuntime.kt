@@ -170,7 +170,9 @@ object BuiltinTtsRuntime {
                             profileId = profile.id,
                             engine = profile.engine,
                             count = profile.speakerCount,
-                            namePrefix = profile.speakerNamePrefix.ifBlank { profile.title }
+                            namePrefix = profile.speakerNamePrefix.ifBlank { profile.title },
+                            sidStart = profile.speakerSidStart,
+                            genderOf = profile::genderOfSid
                         )
                     }
             }.onFailure { LogUtils.e(TAG, "内置多音色播种失败：${it.message}") }
@@ -198,7 +200,8 @@ object BuiltinTtsRuntime {
         stored.takeIf { it.isNotBlank() }?.let { id -> ready(id)?.let { return it } }
         // 默认优先级（offline-tts-llm-productization 1.2）：multi（174 音色、30MB）> fast > clone
         // clone 是「按需定制」档，不再抢占默认位（旧实现 clone 在前，导致默认落到 RTF 5.54 的慢档）
-        listOf("multi", "fast", "clone").forEach { id -> ready(id)?.let { return it } }
+        // hq（Kokoro 24kHz）排在 fast 之后：用户主动下过大包，说明愿意用它，但不抢默认低配位
+        listOf("multi", "fast", "hq", "clone").forEach { id -> ready(id)?.let { return it } }
         return profiles.firstOrNull { modelManager.state(it) == BuiltinEngineState.READY }
     }
 
@@ -241,7 +244,9 @@ object BuiltinTtsRuntime {
                         profileId = profile.id,
                         engine = profile.engine,
                         count = profile.speakerCount,
-                        namePrefix = profile.speakerNamePrefix.ifBlank { profile.title }
+                        namePrefix = profile.speakerNamePrefix.ifBlank { profile.title },
+                        sidStart = profile.speakerSidStart,
+                        genderOf = profile::genderOfSid
                     )
                 }
         }.onFailure { LogUtils.e(TAG, "切换档位时播种多音色失败：${it.message}") }

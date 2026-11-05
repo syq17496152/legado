@@ -27,7 +27,14 @@ data class BuiltinModelProfile(
     /** 多说话人档的内置音色数（aishell3=174 / Kokoro 中文=100；0 或 1 表示单声档） */
     val speakerCount: Int = 0,
     /** 播种内置音色时的名称前缀（如「艾舍尔」；空则用 title） */
-    val speakerNamePrefix: String = ""
+    val speakerNamePrefix: String = "",
+    /**
+     * 内置音色的 sid 起点（默认 1）。
+     * Kokoro 中文音色的有效 sid 是 3..102（前两位为其它语种），从 0 或 1 播种会取到无关音色。
+     */
+    val speakerSidStart: Int = 1,
+    /** 性别映射区间（供配声「男女硬约束」使用；未登记区间一律留空，不猜） */
+    val speakerGenderRanges: List<SpeakerGenderRange> = emptyList()
 ) {
     val valid: Boolean
         get() = id.isNotBlank() && title.isNotBlank() &&
@@ -41,13 +48,31 @@ data class BuiltinModelProfile(
     val multiSpeaker: Boolean
         get() = !requiresReference && speakerCount > 1
 
+    /** sid 的性别标注（只有登记过区间才返回；空串表示未标注，交给配声按音色挑） */
+    fun genderOfSid(sid: Int): String =
+        speakerGenderRanges.firstOrNull { sid in it.fromSid..it.toSid }?.gender.orEmpty()
+
     companion object {
         const val ENGINE_VITS = "vits"
         const val ENGINE_ZIPVOICE = "zipvoice"
         const val ENGINE_MATCHA = "matcha"
-        val SUPPORTED_ENGINES = setOf(ENGINE_VITS, ENGINE_ZIPVOICE, ENGINE_MATCHA)
+
+        /** Kokoro（24kHz 多语种多音色；中文音色 sid 3..102，POC 实测 RTF 0.45@4线程） */
+        const val ENGINE_KOKORO = "kokoro"
+        val SUPPORTED_ENGINES = setOf(ENGINE_VITS, ENGINE_ZIPVOICE, ENGINE_MATCHA, ENGINE_KOKORO)
     }
 }
+
+/**
+ * 内置音色的性别区间（闭区间 sid）。
+ * R8 × Gson 泛型签名：profile 含 `List<SpeakerGenderRange>` ⇒ 本体必须 @Keep，否则元素类型回落 Object。
+ */
+@Keep
+data class SpeakerGenderRange(
+    val gender: String = "",
+    val fromSid: Int = 0,
+    val toSid: Int = 0
+)
 
 @Keep
 private data class BuiltinModelCatalogJson(
@@ -75,6 +100,12 @@ object BuiltinModelCatalog {
             }
             require(profile.sampleRate > 0) { "模型档案 ${profile.id} 缺少 sampleRate" }
             require(profile.files.isNotEmpty()) { "模型档案 ${profile.id} 缺少 files" }
+            require(profile.speakerSidStart >= 0) { "模型档案 ${profile.id} 的 speakerSidStart 不能为负" }
+            profile.speakerGenderRanges.forEach { range ->
+                require(range.fromSid in 0..range.toSid) {
+                    "模型档案 ${profile.id} 的性别区间非法：${range.fromSid}..${range.toSid}"
+                }
+            }
         }
         require(profiles.map { it.id }.distinct().size == profiles.size) { "模型档案存在重复 id" }
         return profiles

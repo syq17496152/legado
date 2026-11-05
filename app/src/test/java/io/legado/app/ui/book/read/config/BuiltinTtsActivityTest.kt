@@ -18,6 +18,21 @@ class BuiltinTtsActivityTest {
         assertEquals("clone", BuiltinTtsUiSupport.guessProfile("vocos_24khz.onnx"))
     }
 
+    /**
+     * 2026-11-05 2.6 旁路导入：官方包名必须以**包内实际内容**为准，
+     * `vits-icefall-zh-aishell3` 名字里带 vits，但它是 multi 多音色档，不能被导成 fast。
+     */
+    @Test
+    fun `多音色官方包名推断到 multi 与 hq`() {
+        assertEquals("hq", BuiltinTtsUiSupport.guessProfile("kokoro-multi-lang-v1_1.tar.bz2"))
+        assertEquals("multi", BuiltinTtsUiSupport.guessProfile("vits-icefall-zh-aishell3.tar.bz2"))
+        assertEquals("multi", BuiltinTtsUiSupport.guessProfile("MULTI"))
+        assertEquals("hq", BuiltinTtsUiSupport.guessProfile("HQ"))
+        // 回归：原有 fast/clone 推断不得被新规则抢走
+        assertEquals("fast", BuiltinTtsUiSupport.guessProfile("vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2"))
+        assertEquals("clone", BuiltinTtsUiSupport.guessProfile("sherpa-onnx-zipvoice-distill-int8-zh-en-emilia"))
+    }
+
     @Test
     fun `体积格式化`() {
         assertEquals("512 B", BuiltinTtsUiSupport.formatBytes(512))

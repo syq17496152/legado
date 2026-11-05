@@ -9,7 +9,14 @@ import java.util.Locale
 /** 管理页纯逻辑（可单测）：导入档案推断 + 体积格式化 + 页签数量 */
 internal object BuiltinTtsUiSupport {
 
+    /**
+     * 从导入文件名/目录名推断目标档案（旁路发现路径用）。
+     * 顺序敏感：`aishell3` 包名里也含 `vits`（icefall VITS），必须先判 aishell3，否则会被导成 fast。
+     */
     fun guessProfile(name: String): String = when {
+        name.contains("kokoro", true) -> "hq"
+        name.contains("aishell3", true) -> "multi"
+        name.equals("hq", true) || name.equals("multi", true) -> name.lowercase(Locale.US)
         name.equals("fast", true) || name.contains("piper", true) || name.contains("vits", true) -> "fast"
         else -> "clone"
     }

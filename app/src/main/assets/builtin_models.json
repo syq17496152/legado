@@ -52,6 +52,60 @@
       ],
       "license": "模型页注明（个人自用）",
       "fallbackVoiceName": ""
+    },
+    {
+      "id": "multi",
+      "title": "多音色快速档",
+      "engine": "vits",
+      "sizeBytes": 31565312,
+      "sampleRate": 8000,
+      "numThreads": 4,
+      "numSteps": 4,
+      "files": ["model.onnx", "tokens.txt", "lexicon.txt", "rule.far"],
+      "sha256": {
+        "model.onnx": "5511d651b7840c0a93a6bbfd4afd070a2c7f39ca1ec3ff2ecd73191519bbb852",
+        "tokens.txt": "50b45a7b7de1752fd3c7b4755661c285f1547f59186eca2281089a81307ad953",
+        "lexicon.txt": "ab2e61d357551e7b24ddd965d924aca784c20165ff58c150794e539c6b5e9e35",
+        "rule.far": "b090ed05e333fe125b62d8b1de5f1a1d4579fb237c606e7ac0b84707c863a01f"
+      },
+      "sources": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-icefall-zh-aishell3.tar.bz2",
+        "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-icefall-zh-aishell3.tar.bz2"
+      ],
+      "license": "模型 Apache-2.0（aishell3 数据集 Apache-2.0）",
+      "fallbackVoiceName": "",
+      "speakerCount": 174,
+      "speakerNamePrefix": "艾舍尔",
+      "speakerSidStart": 1
+    },
+    {
+      "id": "hq",
+      "title": "多音色高质量档",
+      "engine": "kokoro",
+      "sizeBytes": 348080584,
+      "sampleRate": 24000,
+      "numThreads": 4,
+      "numSteps": 4,
+      "files": ["model.onnx", "voices.bin", "tokens.txt", "lexicon-zh.txt"],
+      "sha256": {
+        "model.onnx": "99db0bc8fd0c5033d249fe922db16768b71b4a6b26cfd93d206fbf66c76efb5f",
+        "voices.bin": "e64a5a581d8c2a350d848f51c3121657cd83aa07ed6109172177345874a7244c",
+        "tokens.txt": "931ab2df2400cd65d580a22402024c2347ced8ae9ea300e545144b1aacc48e14",
+        "lexicon-zh.txt": "fea060803db3e59193987f1a3436f56917bda09f3b3595b6588e46ae60cebf93"
+      },
+      "sources": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_1.tar.bz2",
+        "https://gh-proxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_1.tar.bz2"
+      ],
+      "license": "Apache-2.0（Kokoro-82M-v1.1-zh）",
+      "fallbackVoiceName": "",
+      "speakerCount": 100,
+      "speakerNamePrefix": "珂珂",
+      "speakerSidStart": 3,
+      "speakerGenderRanges": [
+        { "gender": "女", "fromSid": 3, "toSid": 57 },
+        { "gender": "男", "fromSid": 58, "toSid": 102 }
+      ]
     }
   ]
 }

@@ -67,4 +67,31 @@ class BuiltinModelStateTest {
         File(sub, "tokens.txt").writeText("a")
         assertEquals(BuiltinEngineState.READY, BuiltinModelState.evaluate(dir, profile))
     }
+
+    /**
+     * 2026-11-05 模拟器铁证：导入被中断，Kokoro model.onnx 只有 5.5MB 残片，
+     * 但文件"存在且非空" ⇒ 旧口径判 READY ⇒ native 加载半截模型直接 SIGSEGV。
+     * 导入必须打标记，标记存在时无论文件多齐都只能是 NONE。
+     */
+    @Test
+    fun `导入中标记存在时绝不为READY`() {
+        val dir = temp.newFolder("importing")
+        File(dir, "model.onnx").writeBytes(ByteArray(64) { 4 })
+        File(dir, "tokens.txt").writeText("a")
+        assertEquals(BuiltinEngineState.READY, BuiltinModelState.evaluate(dir, profile))
+
+        File(dir, BuiltinModelState.IMPORT_MARKER).writeText("")
+        assertEquals(BuiltinEngineState.NONE, BuiltinModelState.evaluate(dir, profile))
+
+        File(dir, BuiltinModelState.IMPORT_MARKER).delete()
+        assertEquals(BuiltinEngineState.READY, BuiltinModelState.evaluate(dir, profile))
+    }
+
+    /** 目录里只有标记文件 ⇒ 视为空目录（NONE），不能当 CORRUPT 去提示"重新导入" */
+    @Test
+    fun `只有导入标记的目录为NONE`() {
+        val dir = temp.newFolder("marker-only")
+        File(dir, BuiltinModelState.IMPORT_MARKER).writeText("")
+        assertEquals(BuiltinEngineState.NONE, BuiltinModelState.evaluate(dir, profile))
+    }
 }

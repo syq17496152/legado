@@ -37,6 +37,34 @@ class BuiltinVoiceStoreTest {
         assertTrue(store.exists(loaded))
     }
 
+    /**
+     * 2026-11-05 2.6：多说话人档按 sid 播种内置音色。
+     * Kokoro 中文音色从 sid=3 起（0/1/2 是其它语种）⇒ sidStart 必须生效，且性别取自档案区间。
+     */
+    @Test
+    fun `多音色播种从指定 sid 起并按区间标性别`() {
+        val store = BuiltinVoiceStore(temp.newFolder("speakers"))
+        val added = store.ensureSpeakers(
+            profileId = "hq",
+            engine = BuiltinModelProfile.ENGINE_KOKORO,
+            count = 100,
+            namePrefix = "珂珂",
+            sidStart = 3,
+            genderOf = { sid -> if (sid in 3..57) "女" else if (sid in 58..102) "男" else "" }
+        )
+        assertEquals(100, added)
+        val voices = store.list().filter { it.profileId == "hq" }
+        assertEquals(100, voices.size)
+        assertEquals((3..102).toList(), voices.map { it.sid }.sorted())
+        assertEquals("女", voices.first { it.sid == 3 }.gender)
+        assertEquals("男", voices.first { it.sid == 102 }.gender)
+        assertEquals(BuiltinModelProfile.ENGINE_KOKORO, voices.first().engineOrDefault())
+        // 幂等：再播一次不新增
+        assertEquals(0, store.ensureSpeakers(
+            profileId = "hq", engine = BuiltinModelProfile.ENGINE_KOKORO,
+            count = 100, namePrefix = "珂珂", sidStart = 3))
+    }
+
     @Test
     fun `重名自动消歧`() {
         val store = BuiltinVoiceStore(temp.newFolder("dup"))

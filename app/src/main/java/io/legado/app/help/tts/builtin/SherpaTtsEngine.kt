@@ -5,6 +5,7 @@ import androidx.annotation.Keep
 import com.k2fsa.sherpa.onnx.GenerationConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsMatchaModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
@@ -72,6 +73,7 @@ class SherpaTtsEngine {
                 BuiltinModelProfile.ENGINE_VITS -> buildVitsConfig(files, threads)
                 BuiltinModelProfile.ENGINE_ZIPVOICE -> buildZipVoiceConfig(files, threads, target.numSteps)
                 BuiltinModelProfile.ENGINE_MATCHA -> buildMatchaConfig(files, threads)
+                BuiltinModelProfile.ENGINE_KOKORO -> buildKokoroConfig(files, threads)
                 else -> null
             }
         }.onFailure { LogUtils.e(TAG, "装配 OfflineTtsConfig 失败：${it.message}") }.getOrNull() ?: return false
@@ -144,6 +146,8 @@ class SherpaTtsEngine {
 
     private class ResolvedFiles(
         val model: File? = null,
+        /** Kokoro 的音色向量包 voices.bin */
+        val voices: File? = null,
         val acousticModel: File? = null,
         val vocoder: File? = null,
         val encoder: File? = null,
@@ -196,6 +200,19 @@ class SherpaTtsEngine {
                 ResolvedFiles(encoder = encoder, decoder = decoder, vocoder = vocoder,
                     tokens = tokens, lexicon = lexicon, dataDir = espeak, ruleFsts = ruleFsts)
             }
+            BuiltinModelProfile.ENGINE_KOKORO -> {
+                val model = pick("model.onnx") ?: return null
+                // Kokoro 必须有 voices.bin（音色向量）；缺了会加载失败，显式拒绝而不是静默回退单声
+                val voices = pick("voices.bin") ?: run {
+                    LogUtils.e(TAG, "kokoro 档缺少 voices.bin，拒绝加载")
+                    return null
+                }
+                ResolvedFiles(model = model, voices = voices, tokens = tokens,
+                    lexicon = pick("lexicon-zh.txt", "lexicon.txt"),
+                    // 实测（2026-11-05 模拟器）：native 校验 `data_dir/phontab`，
+                    // 必须直接传 espeak-ng-data 目录本身（传它的父目录会报 does not exist 并 SIGSEGV）
+                    dataDir = espeak, dictDir = dict, ruleFsts = ruleFsts)
+            }
             BuiltinModelProfile.ENGINE_MATCHA -> {
                 val acoustic = pick("model-steps-3.onnx", "model.onnx", "acoustic.onnx") ?: return null
                 // PoC K3：matcha 必须有独立 vocoder，指向自身会 SIGSEGV ⇒ 显式失败
@@ -246,6 +263,28 @@ class SherpaTtsEngine {
         )
         return OfflineTtsConfig(
             model = OfflineTtsModelConfig(zipvoice = zip, numThreads = threads, debug = false, provider = "cpu"),
+            ruleFsts = files.ruleFsts,
+            maxNumSentences = 1,
+            silenceScale = 0.2f
+        )
+    }
+
+    /**
+     * Kokoro（POC 2026-11-05 实测 24kHz / 103 音色 / RTF 0.446@4线程）：
+     * data_dir 必须指「包含 espeak-ng-data 的目录」；lexicon 用中文词表；dict_dir 可选（jieba 分词）。
+     */
+    private fun buildKokoroConfig(files: ResolvedFiles, threads: Int): OfflineTtsConfig {
+        val kokoro = OfflineTtsKokoroModelConfig(
+            model = files.model?.absolutePath.orEmpty(),
+            voices = files.voices?.absolutePath.orEmpty(),
+            tokens = files.tokens?.absolutePath.orEmpty(),
+            dataDir = files.dataDir?.absolutePath.orEmpty(),
+            lexicon = files.lexicon?.absolutePath.orEmpty(),
+            dictDir = files.dictDir?.absolutePath.orEmpty(),
+            lengthScale = 1.0f
+        )
+        return OfflineTtsConfig(
+            model = OfflineTtsModelConfig(kokoro = kokoro, numThreads = threads, debug = false, provider = "cpu"),
             ruleFsts = files.ruleFsts,
             maxNumSentences = 1,
             silenceScale = 0.2f

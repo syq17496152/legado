@@ -131,12 +131,20 @@ class BuiltinVoiceStore(private val root: File) {
      * 这些条目没有参考音频（`refAudio` 空），只有 `sid`；合成时走引擎的 speaker id 分支。
      */
     @Synchronized
-    fun ensureSpeakers(profileId: String, engine: String, count: Int, namePrefix: String): Int {
+    fun ensureSpeakers(
+        profileId: String,
+        engine: String,
+        count: Int,
+        namePrefix: String,
+        sidStart: Int = 1,
+        genderOf: (Int) -> String = { "" }
+    ): Int {
         if (profileId.isBlank() || engine.isBlank() || count <= 0) return 0
         val current = list()
+        val sids = (sidStart until sidStart + count).toList()
         val existingSids = current.filter { it.profileId == profileId && it.sid > 0 }
             .map { it.sid }.toSet()
-        val missing = (1..count).filter { it !in existingSids }
+        val missing = sids.filter { it !in existingSids }
         if (missing.isEmpty()) return 0
         val additions = missing.map { sid ->
             BuiltinVoice(
@@ -146,6 +154,8 @@ class BuiltinVoiceStore(private val root: File) {
                 readOnly = true,
                 profileId = profileId,
                 engine = engine,
+                // 性别只取档案登记的区间（Kokoro 女 3..57 / 男 58..102）；未登记留空，配声不猜
+                gender = genderOf(sid),
                 sid = sid
             )
         }

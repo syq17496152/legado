@@ -66,14 +66,29 @@ class BuiltinModelManager(
             val profile = profile(profileId) ?: return@withContext false
             if (!sourceDir.isDirectory) return@withContext false
             val target = paths.modelDir(profileId)
+            // 先清旧目录再拷：混入旧文件会让"缺文件"判定失真；拷贝期间打 .importing 标记，
+            // 让 state() 绝不把半成品判 READY（2026-11-05 残片 onnx 直接让 native SIGSEGV）
+            target.deleteRecursively()
             target.mkdirs()
-            sourceDir.walkTopDown().filter { it.isFile }.forEach { file ->
-                val relative = file.relativeTo(sourceDir).path
-                val dest = File(target, relative)
-                dest.parentFile?.mkdirs()
-                file.copyTo(dest, overwrite = true)
+            val marker = File(target, BuiltinModelState.IMPORT_MARKER)
+            runCatching { marker.createNewFile() }
+            return@withContext try {
+                sourceDir.walkTopDown().filter { it.isFile }.forEach { file ->
+                    val relative = file.relativeTo(sourceDir).path
+                    val dest = File(target, relative)
+                    dest.parentFile?.mkdirs()
+                    file.copyTo(dest, overwrite = true)
+                }
+                marker.delete()
+                val ready = state(profile) == BuiltinEngineState.READY
+                // 文件不齐 ⇒ 挂回标记，让半成品永远不被判 READY（必须重导）
+                if (!ready) runCatching { marker.createNewFile() }
+                ready
+            } catch (e: Exception) {
+                LogUtils.e(TAG, "目录导入中断，目标目录保持不可用：${e.message}")
+                runCatching { marker.createNewFile() }
+                false
             }
-            state(profile) == BuiltinEngineState.READY
         }
 
     /** 从归档导入（支持 .zip / .tar.bz2 / .tar.gz），自动剥离顶层目录 */
@@ -81,7 +96,11 @@ class BuiltinModelManager(
         withContext(Dispatchers.IO) {
             val profile = profile(profileId) ?: return@withContext false
             val target = paths.modelDir(profileId)
+            // 归档可能是多源叠加（ZipVoice 本体 + 独立声码器）：**不能**整体清空，
+            // 但必须打 .importing 标记覆盖解压窗口，避免把半截文件当就绪模型交给 native
             target.mkdirs()
+            val marker = File(target, BuiltinModelState.IMPORT_MARKER)
+            runCatching { marker.createNewFile() }
             val ok = runCatching {
                 when {
                     fileName.endsWith(".zip", true) -> extractZip(input, target)
@@ -98,8 +117,16 @@ class BuiltinModelManager(
                     else -> false
                 }
             }.onFailure { LogUtils.e(TAG, "归档导入失败：${it.message}") }.getOrDefault(false)
-            if (!ok) return@withContext false
-            state(profile) == BuiltinEngineState.READY && verifySha(profile)
+            if (!ok) {
+                // 解压失败：保留标记 ⇒ 该目录永远是 NONE，必须重导；不会被误加载
+                LogUtils.e(TAG, "归档导入中断，目标目录保持不可用状态：${target.absolutePath}")
+                return@withContext false
+            }
+            // 校验前先摘标记（state 见到标记恒为 NONE），不通过再挂回去 ⇒ 目录必须重导才能用
+            marker.delete()
+            val ready = state(profile) == BuiltinEngineState.READY && verifySha(profile)
+            if (!ready) runCatching { marker.createNewFile() }
+            ready
         }
 
     /** 旁路发现：扫描导入目录下的归档与目录 */
