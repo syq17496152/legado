@@ -23,9 +23,14 @@ object EyeModelStore {
 
     const val ASSET_PATH = "eye_page/face_landmarker.task"
 
-    /** Google 官方 float16 v1（见 assets/eye_page/README.md），与随包文件 sha256 一致 */
-    const val DOWNLOAD_URL =
+    /**
+     * 下载源（顺序 = 优先级）。官方 storage.googleapis.com 在国内**实测不可达**（设备 curl 60s 超时），
+     * 故首选 ModelScope 镜像（实测 200 / 3758596B / sha256 与官方一致），官方作为海外回退。
+     */
+    val SOURCES: List<String> = listOf(
+        "https://www.modelscope.cn/models/seetapsych/seetapsych-models/resolve/master/mediapipe/face_landmarker/face_landmarker.task",
         "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+    )
 
     /** 随包/官方同一文件的 sha256（下载后强校验，防镜像返回 HTML/半包） */
     const val SHA256 = "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"
@@ -78,55 +83,56 @@ object EyeModelStore {
         file.isFile && file.length() > 0 && sha256(file) == SHA256
     }.getOrDefault(false)
 
-    /** 下载并安装；返回 true 表示私有目录已有通过校验的模型 */
+    /** 下载并安装（多源依次回退）；返回 true 表示私有目录已有通过校验的模型 */
     suspend fun download(context: Context, onProgress: (Int) -> Unit = {}): Boolean =
         withContext(Dispatchers.IO) {
             val target = file(context)
             target.parentFile?.mkdirs()
-            val part = File(target.parentFile, "$FILE_NAME.part")
-            val ok = runCatching {
-                part.delete()
-                OkHttpClient().newCall(Request.Builder().url(DOWNLOAD_URL).build()).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        AppLog.put("眼动模型下载失败：HTTP ${resp.code}")
-                        return@use false
+            SOURCES.forEach { url ->
+                val part = File(target.parentFile, "$FILE_NAME.part")
+                val ok = runCatching { fetch(url, part, onProgress) }.getOrDefault(false)
+                if (ok && verify(part)) {
+                    if (target.exists()) target.delete()
+                    val renamed = part.renameTo(target)
+                    if (renamed && verify(target)) {
+                        AppLog.put("眼动模型就绪：${target.length()}B（源=${url.substringBefore('/').take(48)}）")
+                        return@withContext true
                     }
-                    val total = resp.body.contentLength()
-                    var written = 0L
-                    resp.body.byteStream().use { input ->
-                        part.outputStream().use { out ->
-                            val buffer = ByteArray(64 * 1024)
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read <= 0) break
-                                out.write(buffer, 0, read)
-                                written += read
-                                if (total > 0) onProgress((written * 100 / total).toInt().coerceIn(0, 100))
-                            }
-                        }
-                    }
-                    true
+                    AppLog.put("眼动模型落盘失败（rename=$renamed），尝试下一个源")
+                } else if (ok) {
+                    // 半包/镜像返回 HTML：宁可换源重下也不把坏文件交给 native
+                    AppLog.put("眼动模型校验失败（大小=${part.length()}），已丢弃")
                 }
-            }.getOrDefault(false)
-            if (!ok) {
                 part.delete()
-                return@withContext false
             }
-            if (!verify(part)) {
-                // 半包/被劫持返回 HTML：宁可重下也不把坏文件交给 native
-                AppLog.put("眼动模型校验失败（大小=${part.length()}），已丢弃")
-                part.delete()
-                return@withContext false
-            }
-            if (target.exists()) target.delete()
-            val renamed = part.renameTo(target)
-            if (!renamed || !verify(target)) {
-                AppLog.put("眼动模型落盘失败（rename=$renamed）")
-                return@withContext false
-            }
-            AppLog.put("眼动模型就绪：${target.length()}B")
-            true
+            false
         }
+
+    /** 单源下载到 [part]（不做校验，由调用方统一验 sha） */
+    private fun fetch(url: String, part: File, onProgress: (Int) -> Unit): Boolean {
+        part.delete()
+        OkHttpClient().newCall(Request.Builder().url(url).build()).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                AppLog.put("眼动模型下载失败：HTTP ${resp.code}（${url.take(48)}）")
+                return false
+            }
+            val total = resp.body.contentLength()
+            var written = 0L
+            resp.body.byteStream().use { input ->
+                part.outputStream().use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        out.write(buffer, 0, read)
+                        written += read
+                        if (total > 0) onProgress((written * 100 / total).toInt().coerceIn(0, 100))
+                    }
+                }
+            }
+            return true
+        }
+    }
 
     fun delete(context: Context): Boolean = runCatching { file(context).delete() }.getOrDefault(false)
 

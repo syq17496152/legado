@@ -34,10 +34,16 @@ class EyeModelStoreTest {
         assertFalse(EyeModelStore.verify(bad))
     }
 
+    /** 首源必须是国内可达镜像：官方 storage.googleapis.com 实测设备端 60s 超时（2026-11-05） */
     @Test
-    fun `来源常量自洽`() {
-        assertTrue(EyeModelStore.DOWNLOAD_URL.startsWith("https://"))
-        assertTrue(EyeModelStore.DOWNLOAD_URL.endsWith("face_landmarker.task"))
+    fun `下载源自洽且首选国内镜像`() {
+        assertTrue("下载源不能为空", EyeModelStore.SOURCES.isNotEmpty())
+        assertEquals(2, EyeModelStore.SOURCES.size)
+        assertTrue(EyeModelStore.SOURCES[0].startsWith("https://"))
+        assertTrue("首源应为 ModelScope 镜像", EyeModelStore.SOURCES[0].contains("modelscope.cn"))
+        EyeModelStore.SOURCES.forEach {
+            assertTrue("源必须指向 task 文件：$it", it.endsWith("face_landmarker.task"))
+        }
         assertEquals(64, EyeModelStore.SHA256.length)
         assertTrue(EyeModelStore.SHA256.all { it in "0123456789abcdef" })
     }

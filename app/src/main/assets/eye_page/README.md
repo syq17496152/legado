@@ -5,7 +5,8 @@
 `filesDir/eye/`（`.part` + sha256 + 原子改名），推理仍完全在设备本地执行，摄像头帧不保存、不上传。
 解析顺序：私有目录 > 随包 assets（老版本升级兼容）。
 
-- 模型地址：https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+- 首选镜像（国内可达，实测 sha256 与官方一致）：https://www.modelscope.cn/models/seetapsych/seetapsych-models/resolve/master/mediapipe/face_landmarker/face_landmarker.task
+- 官方地址（国内实测超时，作海外回退）：https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 - 官方说明：https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker
 - SHA-256：`64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`
 - Android 依赖：`com.google.mediapipe:tasks-vision:0.10.32`
