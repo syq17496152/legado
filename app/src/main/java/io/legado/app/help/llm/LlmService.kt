@@ -36,7 +36,12 @@ import kotlinx.coroutines.cancel
 class LlmService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private lateinit var runtime: LlmRuntime
+    /**
+     * 延迟创建运行时：`AiChat.getInferenceEngine` 会加载 native 库（模拟器实测 20s+）。
+     * 若在 `onCreate` 里同步创建，`onServiceConnected` 要等 onCreate 结束 ⇒ 主进程 bind 超时，
+     * AMS 还会报「Timeout executing service」。放到首次 load 请求里（后台线程）即可。
+     */
+    private val runtime: LlmRuntime by lazy { LlmRuntime.forContext(this) }
     private val jobsDir by lazy { LlmJobs.jobsDir(this) }
     private val outDir by lazy { LlmJobs.outDir(this) }
 
@@ -52,7 +57,6 @@ class LlmService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        runtime = LlmRuntime.forContext(this)
         // 上一轮遗留的 job 文件先清一遍（10 分钟窗口，AD-25）
         LlmJobs.prune(jobsDir, outDir)
         val thread = HandlerThread("llm-ipc").also { it.start() }

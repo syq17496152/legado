@@ -213,7 +213,11 @@ class LlmClient private constructor(private val context: Context) {
 
     companion object {
 
-        const val CONNECT_TIMEOUT_MS = 1_500L
+        /**
+         * 首次连接要等 `:llm` 进程冷启（native 库加载实测 20s+），1.5s 必然失败。
+         * 这里放到 30s：慢但一次成功，比"快速失败 + 烧光重试额度"更符合端侧实际。
+         */
+        const val CONNECT_TIMEOUT_MS = 30_000L
         const val STATUS_TIMEOUT_MS = 2_000L
         const val LOAD_TIMEOUT_MS = LlmRuntime.LOAD_TIMEOUT_MS + 5_000L
         const val GENERATE_TIMEOUT_MS = LlmRuntime.GENERATE_TIMEOUT_MS + 5_000L
