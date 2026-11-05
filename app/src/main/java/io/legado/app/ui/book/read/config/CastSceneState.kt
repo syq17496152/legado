@@ -53,7 +53,9 @@ data class SceneSnapshot(
     /** 高级区可见入口（4.1）：按有无书/引擎是否就绪收敛，避免"点进去也做不了事" */
     val advancedEntries: List<SceneAdvancedEntry> = emptyList(),
     /** 1.7 顶部胶囊：引擎档位 + 剧本来源（空串 = 不展示） */
-    val capsule: String = ""
+    val capsule: String = "",
+    /** 1.7 书级覆盖徽标（null = 不展示；与胶囊同区，提示"本书改过配置"） */
+    val bookOverrideBadge: String? = null
 )
 
 object CastSceneState {
@@ -235,7 +237,9 @@ object CastSceneState {
         scriptReady: Boolean = false,
         scriptDegraded: Boolean = false,
         /** 3.5：本地 AI 可用（决定「生成剧本」按钮是否出现，不改变起播能力） */
-        canGenerateScript: Boolean = false
+        canGenerateScript: Boolean = false,
+        /** 1.7：本书存在书级覆盖（模板/语速），决定是否显示「本书已覆盖」徽标 */
+        bookOverride: Boolean = false
     ): SceneSnapshot {
         val selected = cardOf(activeTemplateId)
         val multiSubtitle = if (characterCount <= 0) {
@@ -299,9 +303,14 @@ object CastSceneState {
                 capsuleText(engineTitle, engineReady, scriptReady, scriptDegraded)
             } else {
                 ""
-            }
+            },
+            bookOverrideBadge = bookOverrideBadge(hasBook && bookOverride)
         )
     }
+
+    /** 1.7 书级覆盖徽标文案（纯函数可单测）：只在"有书且确实有 L2 覆盖"时出现 */
+    fun bookOverrideBadge(hasBookOverride: Boolean): String? =
+        if (hasBookOverride) "本书已覆盖" else null
 
     /** 状态行里的剧本提示（3.7）：只在多角色卡展示，避免单声/双声用户被无关状态干扰 */
     private fun scriptStatusHint(label: String): String =

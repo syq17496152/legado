@@ -94,6 +94,19 @@ object EffectiveReadAloudConfig {
         globalFollowSystem = AppConfig.ttsFlowSys
     )
 
+    /**
+     * 1.7 书级覆盖徽标判据：本书任意一项命中 L2 层即视为"本书已覆盖"。
+     * 只看来源层，不看值 —— 否则"本书语速恰好等于全局"会被误判成未覆盖。
+     */
+    fun hasBookOverride(bookKey: String?): Boolean {
+        if (bookKey.isNullOrBlank()) return false
+        return hasBookOverride(resolveForBook(bookKey))
+    }
+
+    /** 纯函数重载（JVM 可测）：只看来源层，不看最终值是否与全局相同 */
+    fun hasBookOverride(resolved: Resolved): Boolean =
+        resolved.templateId.layer == Layer.BOOK || resolved.speechRate.layer == Layer.BOOK
+
     /** 书级语速覆盖；未设置返回 null（= 跟随全局）。0 是合法档位，故用 -1 作哨兵 */
     fun bookSpeechRateOf(bookKey: String): Int? =
         appCtx.getPrefInt(BOOK_SPEECH_RATE_PREFIX + bookKey, -1).takeIf { it >= 0 }

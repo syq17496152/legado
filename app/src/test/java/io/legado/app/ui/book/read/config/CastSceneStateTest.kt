@@ -36,6 +36,46 @@ class CastSceneStateTest {
         assertTrue(enabled.canGenerateScript)
     }
 
+    /**
+     * 1.7 书级覆盖徽标：只表达"本书改过配置"，未开书或没有覆盖时不能出现
+     * （否则用户会以为每本书都被单独改过，去全局设置里找不到来源）。
+     */
+    @Test
+    fun `书级覆盖徽标只在有书且有覆盖时出现`() {
+        assertEquals(null, CastSceneState.bookOverrideBadge(false))
+        assertEquals("本书已覆盖", CastSceneState.bookOverrideBadge(true))
+
+        val noBook = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 1,
+            assignedCount = 1,
+            storyboardSegments = 2,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            hasBook = false,
+            bookOverride = true
+        )
+        assertEquals(null, noBook.bookOverrideBadge)
+
+        val overridden = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 1,
+            assignedCount = 1,
+            storyboardSegments = 2,
+            activeTemplateId = CastSceneState.TEMPLATE_MULTI,
+            bookOverride = true
+        )
+        assertEquals("本书已覆盖", overridden.bookOverrideBadge)
+
+        val plain = CastSceneState.evaluate(
+            engineReady = true,
+            characterCount = 0,
+            assignedCount = 0,
+            storyboardSegments = 0,
+            activeTemplateId = null
+        )
+        assertEquals(null, plain.bookOverrideBadge)
+    }
+
     @Test
     fun `卡与内置模板一一映射`() {
         assertEquals(CastSceneState.TEMPLATE_MONO, CastSceneState.templateOf(CastSceneState.CARD_MONO))

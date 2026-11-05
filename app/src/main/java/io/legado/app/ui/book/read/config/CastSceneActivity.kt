@@ -48,6 +48,7 @@ import io.legado.app.help.readaloud.bgm.ReadAloudBgmPlayer
 import io.legado.app.help.readaloud.casting.BuiltinCastingSetup
 import io.legado.app.help.readaloud.casting.AiTaskRouter
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
+import io.legado.app.help.readaloud.casting.EffectiveReadAloudConfig
 import io.legado.app.help.readaloud.casting.ReadAloudOneTapFlow
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.ui.book.read.config.casting.TtsCastingManageFragment
@@ -191,7 +192,9 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         /** 3.5 剧本状态机原值（自动触发只用 NONE 判定，避免 BUILDING 时重复排队） */
         val scriptPhase: ScriptPhase = ScriptPhase.NONE,
         /** 3.5 本地 AI 路由可用 ⇒ 本章准备卡出现「生成剧本」按钮 */
-        val canGenerateScript: Boolean = false
+        val canGenerateScript: Boolean = false,
+        /** 1.7 本书是否有书级覆盖（模板/语速）⇒ 顶部「本书已覆盖」徽标 */
+        val bookOverride: Boolean = false
     )
 
     private suspend fun reloadState() {
@@ -213,7 +216,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             engineTitle = facts.engineTitle,
             scriptReady = facts.scriptReady,
             scriptDegraded = facts.scriptDegraded,
-            canGenerateScript = facts.canGenerateScript
+            canGenerateScript = facts.canGenerateScript,
+            bookOverride = facts.bookOverride
         )
         // 3.5 自动生成：开页时当前章还没剧本且本地 AI 可用 ⇒ 排一次 P0（只排一次，不反复触发）
         if (autoScriptPending && facts.canGenerateScript && facts.scriptPhase == ScriptPhase.NONE) {
@@ -298,7 +302,9 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             scriptDegraded = scriptStatus?.phase == ScriptPhase.DEGRADED,
             scriptPhase = scriptStatus?.phase ?: ScriptPhase.NONE,
             canGenerateScript = book != null && chapter != null &&
-                    AiTaskRouter.routeFor(onlineConfigured = false).executor == AiTaskRouter.Executor.LOCAL
+                    AiTaskRouter.routeFor(onlineConfigured = false).executor == AiTaskRouter.Executor.LOCAL,
+            // 1.7：书级覆盖徽标（只读 prefs，无挂起点）
+            bookOverride = EffectiveReadAloudConfig.hasBookOverride(bookKey)
         )
     }
 
@@ -494,13 +500,19 @@ private fun CastSceneScreen(
                 title = "听书中心",
                 subtitle = "选一种演播方式，一次点开就能听；更多设置收在下面「高级」",
                 trailing = {
-                    // 1.7 胶囊：引擎档位 + 剧本来源（未开书/无剧本时给引擎结论，不留空胶囊）
-                    StatusPill(
-                        text = snapshot.capsule.ifBlank {
-                            if (snapshot.engineReady) "离线就绪" else "未就绪"
-                        },
-                        tone = if (snapshot.engineReady) StatusTone.POSITIVE else StatusTone.WARNING
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // 1.7 胶囊：引擎档位 + 剧本来源（未开书/无剧本时给引擎结论，不留空胶囊）
+                        StatusPill(
+                            text = snapshot.capsule.ifBlank {
+                                if (snapshot.engineReady) "离线就绪" else "未就绪"
+                            },
+                            tone = if (snapshot.engineReady) StatusTone.POSITIVE else StatusTone.WARNING
+                        )
+                        // 1.7 书级覆盖徽标：只在本书确实改过模板/语速时出现
+                        snapshot.bookOverrideBadge?.let {
+                            StatusPill(text = it, tone = StatusTone.NEUTRAL)
+                        }
+                    }
                 }
             )
             // 三步引导（spec R2）：只表达"现在在哪一步"，不把资产当听书门槛（系统语音始终可听）
