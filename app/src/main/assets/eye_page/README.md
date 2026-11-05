@@ -1,7 +1,9 @@
 # 眼动翻页模型
 
-`face_landmarker.task` 是 Google MediaPipe Face Landmarker 官方 float16 v1 模型，
-随 APK 打包，推理完全在设备本地执行。摄像头帧不保存、不上传。
+`face_landmarker.task` 是 Google MediaPipe Face Landmarker 官方 float16 v1 模型。
+**2026-11-05 起改为按需下载（不再随 APK 打包，省 3.58MB）**：首次开启「眼动翻页」时下载到
+`filesDir/eye/`（`.part` + sha256 + 原子改名），推理仍完全在设备本地执行，摄像头帧不保存、不上传。
+解析顺序：私有目录 > 随包 assets（老版本升级兼容）。
 
 - 模型地址：https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 - 官方说明：https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker

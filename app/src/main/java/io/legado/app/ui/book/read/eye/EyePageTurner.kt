@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.help.config.ReadBookConfig
@@ -26,6 +27,10 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.setTextIfNotEqual
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import java.util.Locale
 
@@ -41,6 +46,9 @@ class EyePageTurner(
     private val onCancel: () -> Unit
 ) {
     private val handler = Handler(Looper.getMainLooper())
+    /** 眼动模型按需下载（1.5 S3）：IO 线程下载，完成后回主线程继续启动 */
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var downloading = false
     private val detector = GazeGestureDetector()
     private val calibration = GazeCalibration()
     private var camera: EyeCameraTracker? = null
@@ -107,7 +115,37 @@ class EyePageTurner(
 
     @Suppress("DEPRECATION")
     fun start() {
-        if (camera != null) return
+        if (camera != null || downloading) return
+        // 1.5 S3：模型不进 APK（公共资源），首次开启时按需下载；失败给明确原因而不是"摄像头打不开"
+        if (EyeModelStore.state(activity) == EyeModelStore.State.MISSING) {
+            beginModelDownload()
+            return
+        }
+        startTracker()
+    }
+
+    /** 下载眼动模型（约 3.6MB），完成后自动继续启动跟踪 */
+    private fun beginModelDownload() {
+        downloading = true
+        AppLog.put("眼动模型未内置，开始按需下载")
+        Toast.makeText(activity, "正在下载眼动模型（约 3.6MB）…", Toast.LENGTH_SHORT).show()
+        val token = generation
+        downloadScope.launch {
+            val ok = runCatching { EyeModelStore.download(activity) }.getOrDefault(false)
+            handler.post {
+                downloading = false
+                if (token != generation) return@post
+                if (ok) {
+                    Toast.makeText(activity, "眼动模型下载完成", Toast.LENGTH_SHORT).show()
+                    startTracker()
+                } else {
+                    onError(IllegalStateException("眼动模型下载失败，请检查网络后重开眼动翻页"))
+                }
+            }
+        }
+    }
+
+    private fun startTracker() {
         val current = ++generation
         val degrees = when (activity.windowManager.defaultDisplay.rotation) {
             Surface.ROTATION_90 -> 90

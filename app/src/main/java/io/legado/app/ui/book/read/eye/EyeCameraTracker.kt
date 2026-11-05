@@ -77,10 +77,13 @@ internal class EyeCameraTracker(
             ?: sizes.minByOrNull { it.width * it.height }
             ?: error("前置摄像头不支持图像采集")
         AppLog.put("眼动摄像头准备：camera=$id size=${size.width}x${size.height} rotation=$rotation display=$displayDegrees")
+        // 1.5 S3：模型已移出 APK（公共资源按需下载）；优先私有目录，兼容随包 assets
+        val modelBuffer = EyeModelStore.readBuffer(context)
+            ?: error("眼动模型未下载（可关闭眼动翻页后重试下载）")
         landmarker = FaceLandmarker.createFromOptions(context,
             FaceLandmarker.FaceLandmarkerOptions.builder()
                 .setBaseOptions(BaseOptions.builder()
-                    .setModelAssetPath("eye_page/face_landmarker.task").build())
+                    .setModelAssetBuffer(modelBuffer).build())
                 .setRunningMode(RunningMode.VIDEO)
                 .setNumFaces(2)
                 .setMinFaceDetectionConfidence(0.6f)

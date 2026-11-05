@@ -65,6 +65,7 @@ object AssetCatalog {
         Entry("tts-fast", "极速单声语音包", AssetManifest.KIND_MODEL, AssetManifest.DIST_DOWNLOAD, "官方语音包，删了可再下"),
         Entry("tts-clone", "高质量克隆语音包", AssetManifest.KIND_MODEL, AssetManifest.DIST_DOWNLOAD, "官方语音包，删了可再下"),
         Entry("tts-multi", "多音色语音包", AssetManifest.KIND_MODEL, AssetManifest.DIST_DOWNLOAD, "官方语音包，删了可再下"),
+        Entry("tts-hq", "多音色高质量语音包", AssetManifest.KIND_MODEL, AssetManifest.DIST_DOWNLOAD, "官方语音包，删了可再下"),
         Entry("llm", "本地 AI 模型", AssetManifest.KIND_MODEL, AssetManifest.DIST_DOWNLOAD, "GGUF 可重新下载或重新导入"),
         Entry("ner", "离线人名模型", AssetManifest.KIND_NER, AssetManifest.DIST_DOWNLOAD, "模型包可重新下载"),
         Entry("eye", "眼动追踪模型", AssetManifest.KIND_EYE, AssetManifest.DIST_DOWNLOAD, "开启眼动时按需下载"),
