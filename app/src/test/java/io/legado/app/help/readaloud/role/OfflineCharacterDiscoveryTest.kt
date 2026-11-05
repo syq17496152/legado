@@ -174,4 +174,31 @@ class OfflineCharacterDiscoveryTest {
         // 两个来源都必须纳入自动清理口径（否则旧碎片清不掉 / 新旧混用）
         assertTrue(OfflineCharacterDiscovery.SOURCE_OFFLINE != OfflineCharacterDiscovery.SOURCE_OFFLINE_NER)
     }
+
+    /**
+     * 2026-11-05 模拟器 E2E：昵称式角色名（阿明/小美/老张）不在姓氏表里，无 NER 模型时
+     * 曾整章判"未识别角色" ⇒ 剧本生成被静默跳过。cue 正则必须补上这条路径。
+     */
+    @Test
+    fun `无模型时昵称式角色名可被发现`() {
+        val paragraphs = listOf(
+            "阿明推开门，屋里没有开灯。他说：“你回来了？”",
+            "小美靠在窗边，低声说：“别开灯，外面有人。”",
+            "阿明皱起眉头：“什么人？”",
+            "小美摇了摇头：“别问了，先坐下。”",
+            "邻居老张敲门进来，笑呵呵地说：“这么早就起来了？”",
+            "老张压低声音：“昨晚我听见你屋里有两个人说话。”"
+        )
+        val names = OfflineCharacterDiscovery.candidates(paragraphs).map { it.name }
+        assertTrue("应发现阿明，实际：$names", "阿明" in names)
+        assertTrue("应发现小美，实际：$names", "小美" in names)
+        assertTrue("应发现老张，实际：$names", "老张" in names)
+    }
+
+    /** 只出现一次的昵称证据不足（可能是"小了/老说"这类片段），不得落候选 */
+    @Test
+    fun `一次性昵称不落候选`() {
+        val paragraphs = listOf("小美笑了笑：“今天天气不错。”")
+        assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
+    }
 }

@@ -91,6 +91,11 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
   正式包（`io.legado.miss.app.release`）不再作为此类验证的指定包。
 - ❌ 同一模拟器实例同时操作多个包（Activity 抢占，铁证 2026-07-25）
 - ❌ 用落后版本的正式包做质检/巡检类验证（结论不权威）
+- 🔴 **2026-11-05 用户铁律：安装一律「覆盖安装（`adb install -r`）」，禁止 uninstall**。
+  默认卸载会把用户已配置的**书源 / 书架书籍 / 订阅源 / 剧本**整体清空（本轮已真实发生，用户因此拒绝提供主力机）。
+  干净环境冒烟必须显式 `build_and_smoke.py --fresh`；其余一切自动化（含子代理脚本）一律覆盖安装。
+  门禁已内建：`build_and_smoke.py` 安装前记录 `firstInstallTime`（+ debug 包可读时的数据目录指纹），
+  安装后比对——**firstInstallTime 变化即判定「卸载+重装」并 FAIL**，数据清空无法再静默通过。
 
 > 完整规范：`docs/project-rules/package-naming.md`
 

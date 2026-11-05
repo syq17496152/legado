@@ -180,7 +180,9 @@ class ScriptGenerationService : Service() {
             characters = CharacterVoiceAssignService.roleCharacters(bookKey)
         }
         if (characters.isEmpty()) {
-            return TaskResult("本章未识别出角色，跳过剧本生成")
+            // 不再静默跳过：以前只写通知文案，日志全无，排查时看不出"为什么没有剧本"
+            AppLog.put("剧本生成跳过 ch=$chapterIndex：未识别出角色（可先在听书中心执行「识别角色」）")
+            return TaskResult(emptyCharactersHint(chapterIndex))
         }
         val segments = OfflineRoleResolver.ensure(
             bookKey = bookKey,
@@ -366,6 +368,13 @@ class ScriptGenerationService : Service() {
 
         /** 候选角色上限（与 `ScriptPromptTemplates` 的 ≤40 约束一致） */
         private const val MAX_CANDIDATES = 40
+
+        /**
+         * 角色为空时的跳过文案（可单测的纯函数）。
+         * 以前这里是静默 return，用户只看到"没有剧本"却查不到原因；文案必须带章号与下一步指引。
+         */
+        internal fun emptyCharactersHint(chapterIndex: Int): String =
+            "第 $chapterIndex 章未识别出角色，跳过剧本生成（可先识别角色）"
 
         fun request(context: Context, bookUrl: String, chapters: List<Int>, force: Boolean = false) {
             if (bookUrl.isBlank() || chapters.isEmpty()) return

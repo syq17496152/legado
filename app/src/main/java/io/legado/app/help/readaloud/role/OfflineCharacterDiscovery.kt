@@ -59,6 +59,52 @@ object OfflineCharacterDiscovery {
     /** 模型路径：非姓氏起头的实体至少出现 2 次才收录（拦截"法西斯"这类一次性误报） */
     private const val MIN_MODEL_UNSURNAMED_CUES = 2
 
+    /**
+     * 规则路径：非姓氏起头的昵称（阿明/小美/老张）证据更弱，同样要求 ≥2 次 cue，
+     * 避免把"小了/老说"这类片段词收成角色（2026-11-05 E2E 修复配套）。
+     */
+    private const val MIN_RULE_UNSURNAMED_CUES = 2
+
+    /** 昵称式人名（前缀 1 字 + 1 字）：小美 / 老张 / 阿明。只在"无 NER 模型"的规则路径补扫 */
+    private val NICKNAME_TOKEN = Regex("(?:小|老|阿)[\\u4e00-\\u9fa5]")
+
+    /** 昵称右侧 12 字内出现对话冒号/说话动词 ⇒ 视为有对话证据（昵称名常以"X：xxx"出现，无动词） */
+    private fun hasDialogueCueNear(paragraph: String, start: Int, end: Int): Boolean {
+        val window = paragraph.substring(
+            end,
+            (end + NICKNAME_CUE_WINDOW).coerceAtMost(paragraph.length)
+        )
+        return window.contains('：') || window.contains(':') || window.contains('“') ||
+            window.contains('"') || SPEECH_VERBS.any { window.contains(it) }
+    }
+
+    private const val NICKNAME_CUE_WINDOW = 12
+
+    private val SPEECH_VERBS = listOf(
+        "说道", "问道", "答道", "笑道", "低声", "沉声", "轻声", "大声", "开口", "喃喃",
+        "说", "道", "问", "答", "喊", "叫", "叹"
+    )
+
+    /**
+     * 无 NER 模型时的昵称候选：**全章出现 ≥2 次且至少一次有对话证据**才收。
+     * 单次出现的"小美"可能只是词片段；两次以上并伴随对话，大概率是角色。
+     */
+    internal fun nicknameCandidates(paragraphs: List<String>): Map<String, Int> {
+        val counts = LinkedHashMap<String, Int>()
+        val cueSeen = HashSet<String>()
+        paragraphs.forEach { paragraph ->
+            NICKNAME_TOKEN.findAll(paragraph).forEach { match ->
+                val name = match.value
+                if (NerTextEngine.isImplausibleName(name)) return@forEach
+                counts[name] = (counts[name] ?: 0) + 1
+                if (name !in cueSeen && hasDialogueCueNear(paragraph, match.range.first, match.range.last + 1)) {
+                    cueSeen.add(name)
+                }
+            }
+        }
+        return counts.filter { (name, count) -> count >= MIN_RULE_UNSURNAMED_CUES && name in cueSeen }
+    }
+
     data class Candidate(
         val name: String,
         val gender: String,
@@ -125,6 +171,14 @@ object OfflineCharacterDiscovery {
                 }
             }
         }
+        // 无 NER 模型时姓氏启发式覆盖不到「阿明/小美/老张」这类昵称式名字
+        // （2026-11-05 模拟器 E2E 实证：整章被判"未识别角色"⇒ 剧本生成被静默跳过）
+        if (!trustModel) {
+            nicknameCandidates(paragraphs).forEach { (name, count) ->
+                cueCounts[name] = (cueCounts[name] ?: 0) + count
+                firstContext.putIfAbsent(name, paragraphs.firstOrNull { it.contains(name) }.orEmpty())
+            }
+        }
         return CueScan(cueCounts, firstContext)
     }
 
@@ -162,6 +216,13 @@ object OfflineCharacterDiscovery {
             if (name.length >= 3 &&
                 !NerTextEngine.startsWithCompoundSurname(name) &&
                 (candidates[name] ?: 0) < MIN_LONG_NAME_CUES
+            ) {
+                candidates.remove(name)
+                return@forEach
+            }
+            // 昵称式名字（阿明/小美/老张）不在姓氏表里，必须有 ≥2 次 cue 才算稳定角色
+            if (!NerTextEngine.startsWithKnownSurname(name) &&
+                (candidates[name] ?: 0) < MIN_RULE_UNSURNAMED_CUES
             ) {
                 candidates.remove(name)
             }
