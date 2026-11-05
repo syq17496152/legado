@@ -144,6 +144,13 @@ core-core = { module = "androidx.core:core", version.ref = "core" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
 # 2.1：llama.cpp 官方 Android 模块（子模块内 build.gradle.kts）按 `libs.androidx.core.ktx` / `libs.androidx.datastore.preferences` 取依赖
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
+# 第三方来源与许可登记（offline-tts-llm-productization 1.4）：
+# - llama.cpp（third_party/llama.cpp，pin tag b9999 / commit 47c7869）：MIT，随仓子模块，仅复用其 Android 模块
+# - sherpa-onnx AAR（app/libs/sherpa-onnx.aar，1.13.1，不入库，scripts/fetch_sherpa_aar.py 下载 + sha256 校验）：Apache-2.0
+# - 内置 TTS 模型（files/tts/models/*，按需下载，不入库）：aishell3 与 Kokoro v1.1-zh 均 Apache-2.0；
+#   piper/zipvoice 模型页标注「个人自用」，故不作为默认档
+# - 下载实现：**不引入 Fetch**（Apache-2.0，仅 JitPack 分发、且 review 已标注新 Android 兼容性不确定），
+#   改用既有 OkHttp 实现断点续传（Range + 同源校验），能力等价且无新增依赖风险
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.1.1" }
 
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version = "3.6.1" }

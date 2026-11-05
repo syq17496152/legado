@@ -149,22 +149,40 @@ class BuiltinModelManager(
             val workDir = File(paths.cacheDir, "download").apply { mkdirs() }
             var lastError: String? = null
             profile.sources.forEach { url ->
+                val part = File(workDir, "${profile.id}.part")
+                val partUrl = File(workDir, "${profile.id}.part.url")
+                // 断点续传：只有**同一个源**的残片才可续（换源内容不同，续上必坏）
+                val offset = resumeOffset(
+                    partLength = if (part.isFile) part.length() else 0L,
+                    savedUrl = partUrl.takeIf { it.isFile }?.readText(),
+                    url = url
+                )
+                if (offset == 0L) part.delete()
                 val result = runCatching {
-                    val client = OkHttpClient()
-                    val request = Request.Builder().url(url).build()
-                    client.newCall(request).execute().use { response ->
+                    val builder = Request.Builder().url(url)
+                    if (offset > 0) builder.header("Range", "bytes=$offset-")
+                    OkHttpClient().newCall(builder.build()).execute().use { response ->
+                        // 416 = 残片已超出服务端长度（多半源变短）⇒ 残片作废，整档重来
+                        if (response.code == 416) {
+                            part.delete()
+                            lastError = "HTTP 416"
+                            return@use false
+                        }
                         if (!response.isSuccessful) {
                             lastError = "HTTP ${response.code}"
                             return@use false
                         }
+                        // 服务端忽略 Range 返回 200 ⇒ 必须从头写，否则残片被"追加"成坏文件
+                        val appending = offset > 0 && response.code == 206
                         val body = response.body
-                        val total = body.contentLength()
-                        onProgress(Progress(0, total))
-                        val temp = File(workDir, "${profile.id}.download")
+                        val remaining = body.contentLength()
+                        val total = if (appending) offset + remaining else remaining
+                        partUrl.writeText(url)
+                        var written = if (appending) offset else 0L
+                        onProgress(Progress(written, total))
                         body.byteStream().use { stream ->
-                            temp.outputStream().use { out ->
+                            java.io.FileOutputStream(part, appending).use { out ->
                                 val buffer = ByteArray(8 * 1024)
-                                var written = 0L
                                 while (true) {
                                     val read = stream.read(buffer)
                                     if (read <= 0) break
@@ -174,12 +192,14 @@ class BuiltinModelManager(
                                 }
                             }
                         }
-                        temp.inputStream().use { stream ->
+                        part.inputStream().use { stream ->
                             importArchive(profile.id, stream, url)
                         }
                     }
                 }.onFailure { lastError = it.message }.getOrDefault(false)
                 if (result) {
+                    part.delete()
+                    partUrl.delete()
                     // 多源档案（如 ZipVoice 本体 + 独立声码器）：逐个源叠加，直到文件齐全且校验通过
                     if (state(profile) == BuiltinEngineState.READY && verifySha(profile)) return@withContext true
                 }
@@ -256,7 +276,15 @@ class BuiltinModelManager(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private companion object {
+    internal companion object {
         const val TAG = "BuiltinModelManager"
+
+        /**
+         * 断点续传偏移量（纯函数，可单测）：
+         * 只有「残片存在 + 记录过的源 URL 与本次完全相同」才续传；换源/无记录一律 0（从头下）。
+         * 来源不同的包内容不同，续传会拼出损坏归档 —— 宁可多下一次，不可装坏一次。
+         */
+        fun resumeOffset(partLength: Long, savedUrl: String?, url: String): Long =
+            if (partLength > 0 && savedUrl?.trim() == url.trim()) partLength else 0L
     }
 }
