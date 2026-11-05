@@ -91,4 +91,19 @@ object LlmSettingsState {
 
     fun speedText(tokPerSec: Float): String =
         if (tokPerSec <= 0f) "未自检" else String.format("%.1f tok/s", tokPerSec)
+
+    /**
+     * 「下载推荐档」入口的显示标题（空串 = 不显示）。
+     *
+     * 已装同 id 时不能重复引导下载：用户会以为"下载失败还得再下一次"，
+     * 实际只是把同一个文件重复拉一遍（396MB）。
+     */
+    fun downloadEntryTitle(
+        profileId: String?,
+        profileTitle: String?,
+        installedIds: List<String>
+    ): String {
+        if (profileId.isNullOrBlank() || profileTitle.isNullOrBlank()) return ""
+        return if (profileId in installedIds) "" else profileTitle
+    }
 }

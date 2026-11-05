@@ -103,4 +103,39 @@ class LlmSettingsStateTest {
         assertEquals(LocalLlmFeature.Reason.READY, ready.reason)
         assertEquals("11.7GB", LocalLlmFeature.ramText(12000))
     }
+
+    /**
+     * 「下载推荐档」入口：已装同 id 必须隐藏（否则会把 396MB 重复下载一遍），
+     * 未装才显示，目录缺档/坏数据一律不显示。
+     */
+    @Test
+    fun `下载入口只在未安装推荐档时出现`() {
+        assertEquals(
+            "Qwen3 0.6B（推荐）",
+            LlmSettingsState.downloadEntryTitle(
+                "qwen3-0.6b-q4", "Qwen3 0.6B（推荐）", emptyList()
+            )
+        )
+        assertEquals(
+            "",
+            LlmSettingsState.downloadEntryTitle(
+                "qwen3-0.6b-q4", "Qwen3 0.6B（推荐）", listOf("qwen3-0.6b-q4")
+            )
+        )
+        // 装的是"别的档位"时仍应显示：用户没装推荐档，就该能看到下载入口
+        assertEquals(
+            "Qwen3 0.6B（推荐）",
+            LlmSettingsState.downloadEntryTitle(
+                "qwen3-0.6b-q4", "Qwen3 0.6B（推荐）", listOf("qwen")
+            )
+        )
+        assertEquals(
+            "",
+            LlmSettingsState.downloadEntryTitle(null, null, emptyList())
+        )
+        assertEquals(
+            "",
+            LlmSettingsState.downloadEntryTitle("id", " ", emptyList())
+        )
+    }
 }

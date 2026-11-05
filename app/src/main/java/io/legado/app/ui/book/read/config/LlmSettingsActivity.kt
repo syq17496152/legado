@@ -32,6 +32,8 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalLlmPrefs
+import io.legado.app.help.llm.LlmModelCatalog
+import io.legado.app.help.llm.LlmModelDownloader
 import io.legado.app.help.llm.LlmModelManager
 import io.legado.app.help.llm.LlmRuntime
 import io.legado.app.ui.theme.LegadoTheme
@@ -48,9 +50,10 @@ import java.io.File
  * 入口：朗读设置 → 引擎组「本地 AI」。
  * 页面回答四个问题：能不能用（三层判定 + 原因）、有哪些模型、自检多快、AI 任务走哪条通道。
  *
- * 简化说明：下载接入 Fetch（4.10）尚未完成 ⇒ 本页先支持「导入 .gguf」；
- * 已知上限：下载按钮缺失期间，POC/内测走本地导入；
- * 升级路径：4.10 Fetch 落地后把 `importHint` 旁的按钮扩成「导入 / 下载」双入口。
+ * 资产来源分两类（对用户问题的直接回答）：
+ * - **公共资源可二次下载**：随包目录里 `distribution=download` 且带 sha256 的档位
+ *   （当前 = 推荐档 Qwen3-0.6B Q4_K_M，ModelScope 镜像实测 206 可续传）；
+ * - **需自备导入**：其余候选（无公开源或未锁定发行文件）⇒ 只能「导入 .gguf」。
  */
 class LlmSettingsActivity : BaseActivity<ViewBinding>() {
 
@@ -69,6 +72,9 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
     )
     private var busy by mutableStateOf(false)
     private var message by mutableStateOf("")
+    /** 可二次下载的推荐档（目录里 downloadable 的那一个；无则为 null ⇒ 只显示导入） */
+    private var downloadProfile by mutableStateOf<LlmModelCatalog.Profile?>(null)
+    private var downloadProgress by mutableStateOf("")
 
     private val manager by lazy { LlmModelManager.forApp(this) }
     private val runtime by lazy { LlmRuntime.forContext(this) }
@@ -88,6 +94,13 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
                         message = message,
                         onToggle = ::toggleEnabled,
                         onImport = { pickModel.launch(arrayOf("*/*")) },
+                        onDownload = ::downloadRecommended,
+                        downloadTitle = LlmSettingsState.downloadEntryTitle(
+                            profileId = downloadProfile?.id,
+                            profileTitle = downloadProfile?.title,
+                            installedIds = ui.models.map { it.id }
+                        ),
+                        downloadProgress = downloadProgress,
                         onBench = ::runBenchmark,
                         onPickModel = ::activateModel,
                         onDelete = ::deleteModel,
@@ -104,6 +117,10 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
 
     override fun onActivityCreated(savedInstanceState: android.os.Bundle?) {
         reload()
+        lifecycleScope.launch {
+            val profiles = withContext(Dispatchers.IO) { LlmModelCatalog.load(this@LlmSettingsActivity) }
+            downloadProfile = LlmModelCatalog.recommendedDownloadable(profiles)
+        }
     }
 
     private fun reload() {
@@ -198,6 +215,39 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
         }
     }
 
+    /**
+     * 下载推荐档（公共资源二次下载）：断点续传 + sha256 校验 + 原子落盘，
+     * 成功后直接把该档设为激活模型（用户点一次就能用）。
+     */
+    private fun downloadRecommended() {
+        val profile = downloadProfile ?: return
+        lifecycleScope.launch {
+            busy = true
+            downloadProgress = "准备下载…"
+            message = "正在下载：${profile.title}"
+            val result = withContext(Dispatchers.IO) {
+                LlmModelDownloader.download(this@LlmSettingsActivity, profile) { progress ->
+                    downloadProgress = if (progress.total > 0) {
+                        "已下载 ${LlmSettingsState.sizeText(progress.bytes)} / " +
+                                "${LlmSettingsState.sizeText(progress.total)}（${progress.percent}%）"
+                    } else {
+                        "已下载 ${LlmSettingsState.sizeText(progress.bytes)}"
+                    }
+                }
+            }
+            busy = false
+            downloadProgress = ""
+            when (result) {
+                is LlmModelDownloader.Result.Success -> {
+                    AppConfig.localLlmProfileId = profile.id
+                    message = "下载完成：${profile.title}（${LlmSettingsState.sizeText(result.bytes)}）"
+                }
+                is LlmModelDownloader.Result.Failure -> message = result.message
+            }
+            reload()
+        }
+    }
+
     private fun queryDisplayName(uri: Uri): String? = runCatching {
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -240,6 +290,9 @@ private fun LlmSettingsScreen(
     message: String,
     onToggle: (Boolean) -> Unit,
     onImport: () -> Unit,
+    onDownload: () -> Unit,
+    downloadTitle: String,
+    downloadProgress: String,
     onBench: () -> Unit,
     onPickModel: (String) -> Unit,
     onDelete: (String) -> Unit,
@@ -332,10 +385,24 @@ private fun LlmSettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(onClick = onImport, enabled = !busy) { Text("导入 .gguf") }
+                if (downloadTitle.isNotBlank()) {
+                    // 公共资源二次下载：只有目录里「有公开源 + 有 sha256」的档位才会出现
+                    OutlinedButton(onClick = onDownload, enabled = !busy) {
+                        Text("下载 $downloadTitle")
+                    }
+                }
                 OutlinedButton(onClick = onBench, enabled = !busy && ui.models.isNotEmpty()) {
                     Text("自检")
                 }
                 AssistChip(onClick = onOpenAssets, label = { Text("声音资源") })
+            }
+            if (downloadProgress.isNotBlank()) {
+                Text(
+                    text = downloadProgress,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             }
             Text(
                 text = "自检：${ui.speedText}",
