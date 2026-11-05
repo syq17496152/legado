@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
@@ -52,6 +53,7 @@ fun HighlightRuleScreen(
     onAdd: () -> Unit,
     onGroupManage: () -> Unit,
     onPreset: () -> Unit,
+    onAiSuggest: () -> Unit,
     onRestoreDefault: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
@@ -81,6 +83,11 @@ fun HighlightRuleScreen(
             icon = Icons.Default.Star,
             title = stringResource(R.string.highlight_rule_preset),
             onClick = onPreset
+        ),
+        MenuAction(
+            icon = Icons.Default.Info,
+            title = "AI 建议（草稿）",
+            onClick = onAiSuggest
         ),
         MenuAction(
             icon = Icons.Default.Refresh,

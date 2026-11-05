@@ -15,7 +15,9 @@ import io.legado.app.base.VMBaseActivity
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
+import io.legado.app.help.ai.AiRuleAssistant.Kind
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.replace.AiRuleAssistantDialog
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
 import io.legado.app.ui.book.read.config.RestoreMode
@@ -64,6 +66,14 @@ class HighlightRuleActivity :
                     onAdd = { showDialogFragment(HighlightRuleEditDialog.create(pattern = "")) },
                     onGroupManage = { showGroupManageDialog() },
                     onPreset = { showPresetRuleDialog() },
+                    onAiSuggest = {
+                        showDialogFragment(
+                            AiRuleAssistantDialog(
+                                kind = Kind.HIGHLIGHT,
+                                onApplied = { viewModel.loadRules() }
+                            )
+                        )
+                    },
                     onRestoreDefault = { showRestoreDefaultDialog() },
                     onImport = { importRules() },
                     onExport = { exportRules() },
