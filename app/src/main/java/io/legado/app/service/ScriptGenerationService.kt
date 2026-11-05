@@ -196,7 +196,9 @@ class ScriptGenerationService : Service() {
 
         val route = AiTaskRouter.routeFor(onlineConfigured = false)
         if (route.executor != AiTaskRouter.Executor.LOCAL) {
-            return TaskResult("本地 AI 未启用：${route.reason}")
+            // 与 E7 同理：这条也曾经"只改通知文案、日志全无"，真机上完全看不出为什么没有剧本
+            AppLog.put("剧本生成跳过 ch=$chapterIndex：本地 AI 不可用（${route.reason}）")
+            return TaskResult(localAiDisabledHint(route.reason))
         }
         // 先把激活模型装进 `:llm` 进程（幂等）；装不上不阻断，引擎会产出规则剧本并标降级
         ensureModelLoaded()
@@ -375,6 +377,10 @@ class ScriptGenerationService : Service() {
          */
         internal fun emptyCharactersHint(chapterIndex: Int): String =
             "第 $chapterIndex 章未识别出角色，跳过剧本生成（可先识别角色）"
+
+        /** 本地 AI 不可用时的跳过文案（可单测）：必须带上路由给出的具体原因，便于用户自查 */
+        internal fun localAiDisabledHint(reason: String): String =
+            "本地 AI 未启用，跳过剧本生成（${reason.ifBlank { "原因未知" }}）"
 
         fun request(context: Context, bookUrl: String, chapters: List<Int>, force: Boolean = false) {
             if (bookUrl.isBlank() || chapters.isEmpty()) return

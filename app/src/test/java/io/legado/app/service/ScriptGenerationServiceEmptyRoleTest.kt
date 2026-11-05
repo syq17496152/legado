@@ -20,6 +20,22 @@ class ScriptGenerationServiceEmptyRoleTest {
         )
     }
 
+    /**
+     * 2026-11-05 模拟器排查实证：听书中心点「生成剧本」后没有任何剧本，日志也查不到原因，
+     * 根因是这条分支只改了通知文案、没写 AppLog。文案必须带路由原因，日志由调用方写。
+     */
+    @Test
+    fun `本地AI不可用文案带具体原因`() {
+        assertEquals(
+            "本地 AI 未启用，跳过剧本生成（设备可用内存不足 8GB）",
+            ScriptGenerationService.localAiDisabledHint("设备可用内存不足 8GB")
+        )
+        assertEquals(
+            "本地 AI 未启用，跳过剧本生成（原因未知）",
+            ScriptGenerationService.localAiDisabledHint("")
+        )
+    }
+
     /** 不同章号的文案必须可区分，否则用户无法定位是哪一章卡住 */
     @Test
     fun `不同章号的跳过文案互不混淆`() {
