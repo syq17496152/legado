@@ -137,6 +137,39 @@ internal fun resolvePlaybackPosition(
 }
 
 /**
+ * 位置指示段类型（纯数据，单测锁定）。
+ *
+ * 语义：篇是公共信息，**永不**触发选集；集是选集入口（tasks §7.3）。
+ */
+internal enum class PositionSegmentKind { ARTICLE, EPISODE }
+
+/**
+ * 位置指示段：`index` 为 0-based 下标，`total` 为总数。
+ */
+internal data class PositionSegment(
+    val kind: PositionSegmentKind,
+    val index: Int,
+    val total: Int,
+) {
+    /** 只有集段可点（打开选集面板） */
+    val clickable: Boolean get() = kind == PositionSegmentKind.EPISODE
+}
+
+/**
+ * 纯函数：把 [PlaybackPosition] 拆成展示段，顺序固定「篇在前、集在后」。
+ *
+ * 抽出的目的：把「显示哪些段 / 哪段可点」变成可 JVM 单测的决策，避免只有渲染代码可验证。
+ */
+internal fun positionSegments(position: PlaybackPosition): List<PositionSegment> = buildList {
+    position.listIndex?.let {
+        add(PositionSegment(PositionSegmentKind.ARTICLE, it, position.listTotal))
+    }
+    position.episodeIndex?.let {
+        add(PositionSegment(PositionSegmentKind.EPISODE, it, position.episodeTotal))
+    }
+}
+
+/**
  * 次要入口（倍速/收藏/下载）可见性（纯策略，单测锁定）。
  *
  * 右侧按钮增至 7 个后，横屏全屏可视高度（约 360dp）不足以完整容纳，
@@ -720,22 +753,8 @@ class VideoFragment : Fragment() {
             rssEpisodeIndex = VideoPlay.rssEpisodeIndex,
             rssEpisodeCount = VideoPlay.rssEpisodes?.size ?: 0,
         )
-        // 段 = (文案, 是否可点选集)；篇永远不可点，集才打开分组选集
-        val segments = mutableListOf<Pair<String, Boolean>>()
-        position.listIndex?.let {
-            segments += (getString(
-                R.string.video_playlist_position_article,
-                it + 1,
-                position.listTotal,
-            ) to false)
-        }
-        position.episodeIndex?.let {
-            segments += ((getString(
-                R.string.video_playlist_position_episode,
-                it + 1,
-                position.episodeTotal,
-            ) + EPISODE_PICKER_ARROW_SUFFIX) to true)
-        }
+        // 段由纯函数决定「显示哪些 / 哪段可点」；篇永远不可点，集才打开分组选集
+        val segments = positionSegments(position)
         if (segments.isEmpty()) {
             tv.text = ""
             tv.movementMethod = null
@@ -744,11 +763,26 @@ class VideoFragment : Fragment() {
             tv.gone()
             return
         }
-        val text = segments.joinToString("  ") { it.first }
+        val labels = segments.map { seg ->
+            when (seg.kind) {
+                PositionSegmentKind.ARTICLE -> getString(
+                    R.string.video_playlist_position_article,
+                    seg.index + 1,
+                    seg.total,
+                )
+                PositionSegmentKind.EPISODE ->
+                    getString(
+                        R.string.video_playlist_position_episode,
+                        seg.index + 1,
+                        seg.total,
+                    ) + EPISODE_PICKER_ARROW_SUFFIX
+            }
+        }
+        val text = labels.joinToString("  ")
         val spannable = SpannableString(text)
         var start = 0
-        segments.forEach { (segment, clickable) ->
-            if (clickable) {
+        labels.forEachIndexed { i, segment ->
+            if (segments[i].clickable) {
                 spannable.setSpan(
                     object : ClickableSpan() {
                         override fun onClick(widget: View) {
@@ -771,8 +805,11 @@ class VideoFragment : Fragment() {
         }
         tv.text = spannable
         tv.movementMethod = LinkMovementMethod.getInstance()
-        // 点击由 ClickableSpan 承担；TextView 自身不设 clickable，避免「点篇也弹选集」
-        tv.isClickable = false
+        // 真机修复（2026-11-07，tasks §7.3）：movementMethod 只有触达 TextView 才能分发 ClickableSpan。
+        // 原实现 isClickable=false 时触摸穿透到视频手势层 ⇒ 点「第X集 · 全Y集」只切换控件、打不开选集。
+        // 现改为 clickable=true + linksClickable=true：整段文本接收触摸，非链接区（篇）点击不弹选集。
+        tv.linksClickable = true
+        tv.isClickable = true
         tv.setOnClickListener(null)
         tv.visible()
     }
