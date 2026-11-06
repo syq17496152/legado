@@ -154,6 +154,14 @@ def main():
     owner = dev.sh("stat -c %%u:%%g /data/data/%s/shared_prefs/%s" % (PACKAGE, PREFS_NAME), root=True)
     evidence["prefs_owner"] = owner
 
+    # 先清掉上一轮遗留的 `:llm`：它不随主进程停止而结束，残留的生成任务会让本轮自检直接吃
+    # 「推理队列忙」（2026-11-06 实测），把一次正常验证误判成失败。
+    stale_llm = pid_of(dev, "%s:llm" % PACKAGE)
+    if stale_llm:
+        dev.sh("kill -9 %d" % stale_llm, root=True)
+        time.sleep(2)
+    step("清理遗留推理进程", True, "killed=%s" % stale_llm)
+
     # 走**应用自己的写入口**（仅 DEBUG 生效的 Intent 注入）：外部改 XML 会被平台回写（E15），
     # 而这里由 AppConfig 在进程内写入，值一定落盘。见 DebugLlmOverride。
     # 一并请求自检（`:llm` 内加载模型 + 生成 64 token）：这是 7.2「导入→自检→生成」链路

@@ -186,4 +186,26 @@ class ScriptArbiterRunnerTest {
         assertEquals(1, outcome.merge.aiApplied)
         assertEquals("小明", outcome.merge.segments[0].characterName)
     }
+
+    /**
+     * 真机实测：模型自报 `c` 会落在 0~0.8 的中间区间（POC 结论是 c 不可采信，只认候选序号 n）。
+     * 旧实现原样透传 ⇒ 低于仲裁阈值 0.80 一律被拒 ⇒ 表现为 `items=1 mapped=1` 却 `ai=0`。
+     * 锁定：低于阈值的自报置信度归一为固定可信值后必须被采纳。
+     */
+    @Test
+    fun `模型置信度低于阈值时仍能被仲裁采纳`() = runBlocking {
+        assertEquals(
+            "低于阈值的 c 不采信，归一到固定可信值",
+            ScriptLlmCodec.MODEL_CONFIDENCE_FALLBACK,
+            ScriptLlmCodec.effectiveConfidence(0.5),
+            0.0001
+        )
+        val runtime = readyRuntime("{\"a\":[{\"i\":0,\"n\":0,\"c\":0.5}]}")
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(script, ::textOf, listOf("小明", "小红"))
+        assertEquals(1, outcome.merge.aiApplied)
+        assertEquals(0, outcome.merge.rejectedAi)
+        assertEquals("小明", outcome.merge.segments[0].characterName)
+        assertEquals("local-ai", outcome.merge.segments[0].source)
+    }
 }
