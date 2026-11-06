@@ -95,6 +95,15 @@ class LlmRuntime(
             if (_snapshot.value.phase == Phase.READY && _snapshot.value.modelPath == modelPath) {
                 return@withLock Result(elapsedMs = 0)
             }
+            // 引擎是**进程级单例**（`AiChat.getInferenceEngine`），而本类是 Service 级：
+            // Service 重建后新实例的 phase 是 UNINITIALIZED，但底层引擎仍在 ModelReady ⇒
+            // 直接再 load 会被官方实现 `check(state is Initialized)` 拒绝
+            // （2026-11-06 实测报错：`Cannot load model in ModelReady!`）。
+            // 这里按「引擎已加载」对齐状态，避免用户看到莫名其妙的自检失败。
+            if (binding.currentState.isModelLoaded) {
+                _snapshot.value = Snapshot(Phase.READY, modelPath)
+                return@withLock Result(elapsedMs = 0)
+            }
             _snapshot.value = Snapshot(Phase.LOADING, modelPath)
             val started = clock()
             try {
@@ -216,6 +225,11 @@ class LlmRuntime(
             return Bench(loadMs = load.elapsedMs, generateMs = 0, tokenCount = 0, tokPerSec = 0f,
                 errorCode = load.errorCode, message = load.message)
         }
+        // 必须在 generate 前设置 system prompt：官方引擎用 chat 模板拼回合，
+        // 不设 system 时 assistant 回合没被正确打开，实测 Qwen3 首个 token 即命中停止位 ⇒ 一直 0 token
+        // （2026-11-06 模拟器铁证：`generateNextToken: STOP: hitting stop position: 94` 后立刻 complete）。
+        // 失败不阻断自检：引擎若已错过设置窗口（`_readyForSystemPrompt=false`），仍按原样生成。
+        runCatching { setSystemPrompt(BENCH_SYSTEM_PROMPT) }
         val gen = generate(prompt, predictLength)
         val tokPerSec = if (gen.elapsedMs > 0) {
             gen.tokenCount * 1000f / gen.elapsedMs
@@ -254,6 +268,9 @@ class LlmRuntime(
         const val GENERATE_TIMEOUT_MS = 90_000L
         private const val BENCH_TOKENS = 64
         private const val BENCH_PROMPT = "请用一句话说明你在做什么。"
+        /** 自检用的最小 system prompt：官方引擎要求 setSystemPrompt 在 load 之后立刻调用，
+         *  否则 chat 模板的 assistant 回合不会被正确打开（实测 Qwen3 首 token 即 EOS） */
+        private const val BENCH_SYSTEM_PROMPT = "你是一个简洁的助手，回答尽量短。"
 
         /** 生产绑定：官方 llama.cpp Android 模块（`com.arm.aichat`，MIT） */
         fun forContext(context: Context): LlmRuntime =

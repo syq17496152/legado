@@ -14,6 +14,8 @@ object LlmIpc {
     const val MSG_GENERATE = 3
     const val MSG_CANCEL = 4
     const val MSG_RELEASE = 5
+    /** 自检（加载 + 固定长度生成）：**必须在推理进程内跑**，主进程不得加载 native（AD-11） */
+    const val MSG_BENCH = 6
 
     /** 回复里 `arg1` 的取值 */
     const val REPLY_OK = 0
@@ -31,6 +33,10 @@ object LlmIpc {
     const val KEY_TOKEN_COUNT = "tokenCount"
     const val KEY_ELAPSED_MS = "elapsedMs"
     const val KEY_PHASE = "phase"
+    /** 自检回执额外字段（`MSG_BENCH` 专用） */
+    const val KEY_TOK_PER_SEC = "tokPerSec"
+    const val KEY_LOAD_MS = "loadMs"
+    const val KEY_GENERATE_MS = "generateMs"
 
     /** 客户端侧错误码（运行时错误码之外的两类） */
     const val ERROR_CANCELLED = "CANCELLED"
@@ -68,6 +74,63 @@ data class LlmJobResult(
 
         fun failure(code: String, message: String = ""): LlmJobResult =
             LlmJobResult(ok = false, errorCode = code, message = message)
+    }
+}
+
+/**
+ * 自检结果（`MSG_BENCH` 回执）。
+ *
+ * 为什么要在推理进程里跑自检：`LlmRuntime` 一构造就会加载 llama.cpp native 与整个 GGUF
+ * （推荐档 396MB）。主进程若直接跑自检，等于把「native 重内存」搬进正在朗读/阅读的进程，
+ * 违背 AD-11（隔离的意义就是 native OOM/crash 不传染主进程）。
+ *
+ * 纯数据 + 基本类型工厂，便于 JVM 单测锁定 `ok` 判据（避免"0 tok/s 却报成功"）。
+ */
+@Keep
+data class LlmBenchResult(
+    val ok: Boolean = false,
+    val loadMs: Long = 0,
+    val generateMs: Long = 0,
+    val tokenCount: Int = 0,
+    val tokPerSec: Float = 0f,
+    val errorCode: String = "",
+    val message: String = ""
+) {
+
+    companion object {
+
+        /**
+         * `ok` 判据：无错误码 **且** 真的测出了速度。
+         * 只有错误码为空还不够——加载失败也可能漏填错误码，0 tok/s 一律视为没跑通。
+         */
+        fun of(
+            loadMs: Long,
+            generateMs: Long,
+            tokenCount: Int,
+            tokPerSec: Float,
+            errorCode: String,
+            message: String
+        ): LlmBenchResult = LlmBenchResult(
+            ok = errorCode.isBlank() && tokPerSec > 0f,
+            loadMs = loadMs,
+            generateMs = generateMs,
+            tokenCount = tokenCount,
+            tokPerSec = tokPerSec,
+            errorCode = errorCode,
+            message = message
+        )
+
+        fun of(bench: LlmRuntime.Bench): LlmBenchResult = of(
+            loadMs = bench.loadMs,
+            generateMs = bench.generateMs,
+            tokenCount = bench.tokenCount,
+            tokPerSec = bench.tokPerSec,
+            errorCode = bench.errorCode?.name.orEmpty(),
+            message = bench.message
+        )
+
+        fun failure(code: String, message: String = ""): LlmBenchResult =
+            LlmBenchResult(ok = false, errorCode = code, message = message)
     }
 }
 

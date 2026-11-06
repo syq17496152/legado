@@ -54,6 +54,7 @@ CAST_ACTIVITY = "io.legado.app.ui.book.read.config.CastSceneActivity"
 # 与 `help/llm/DebugLlmOverride.kt` 的常量保持一致（仅 debug 包生效）
 EXTRA_ENABLE = "debugEnableLocalAi"
 EXTRA_MODEL_ID = "debugModelId"
+EXTRA_BENCH = "debugLlmBench"
 SCRIPTS_GLOB = "/data/data/%s/files/scripts/*/*.json" % PACKAGE
 
 
@@ -155,10 +156,18 @@ def main():
 
     # 走**应用自己的写入口**（仅 DEBUG 生效的 Intent 注入）：外部改 XML 会被平台回写（E15），
     # 而这里由 AppConfig 在进程内写入，值一定落盘。见 DebugLlmOverride。
+    # 一并请求自检（`:llm` 内加载模型 + 生成 64 token）：这是 7.2「导入→自检→生成」链路
+    # 里唯一不依赖"书上有没有正文"的一环。
     dev.sh("logcat -c")
-    dev.sh("am start -n %s/%s --ez %s true --es %s %s"
-           % (PACKAGE, SETTINGS_ACTIVITY, EXTRA_ENABLE, EXTRA_MODEL_ID, model_id), root=True)
-    time.sleep(6)
+    dev.sh("am start -n %s/%s --ez %s true --es %s %s --ez %s true"
+           % (PACKAGE, SETTINGS_ACTIVITY, EXTRA_ENABLE, EXTRA_MODEL_ID, model_id, EXTRA_BENCH), root=True)
+    # 冷加载 + 生成 64 token 实测 40s 级，给足 120s
+    bench_log = ""
+    for _ in range(24):
+        time.sleep(5)
+        bench_log = dev.sh("logcat -d | grep 'DebugLlmOverride: 自检' || true").strip()
+        if bench_log:
+            break
     if not step("本地 AI 已开启（调试注入）", _has_profile(read_prefs(dev), model_id),
                 "model=%s" % model_id):
         evidence["conclusion"] = "调试注入未生效（确认装的是 debug 包）"
@@ -168,6 +177,10 @@ def main():
     ipc_log = dev.sh("logcat -d | grep 'DebugLlmOverride: 连接推理进程' || true").strip()
     evidence["ipc_log"] = ipc_log[:200]
     step("主进程 ↔ :llm 连通", "成功" in ipc_log, ipc_log or "无自检日志")
+
+    evidence["bench_log"] = bench_log[-300:]
+    step("推理进程内自检跑通（加载+生成）", "自检完成" in bench_log,
+         bench_log[-160:] if bench_log else "超时未出自检结果")
 
     # 必须重启应用：听书中心只在**创建**时自动排队生成；若它已在栈里，`am start` 只是把它拉到前台，
     # 不会触发新一轮生成（2026-11-06 实测：连跑第二次直接"什么都没发生"）。
@@ -242,11 +255,21 @@ def main():
         step("恢复原偏好", same, "已还原 %d 字节" % len(original_prefs))
 
     passed = bool(script_path) and (facts.get("source") == "local-ai") and evidence["fatal_count"] == 0
-    evidence["result"] = "PASS" if passed else "FAIL"
-    evidence["conclusion"] = (
-        "端侧模型链路成立：本地 AI 生成剧本并落盘，来源 local-ai，无 FATAL" if passed
-        else "未达标：见 steps（缺 ≥8GB 门槛/模型/书或推理超时）"
-    )
+    # 分阶段结论：自检环（加载→生成→回执）成立但整章剧本没产出时，只能算 PARTIAL
+    # （整章那条依赖"书上真的能取到当前章正文"，不能拿自检成功冒充 7.2 达标）
+    bench_ok = "自检完成" in bench_log
+    if passed:
+        evidence["result"] = "PASS"
+        evidence["conclusion"] = "端侧模型链路成立：本地 AI 生成剧本并落盘，来源 local-ai，无 FATAL"
+    elif bench_ok and evidence["fatal_count"] == 0:
+        evidence["result"] = "PARTIAL"
+        evidence["conclusion"] = (
+            "推理进程内「加载 + 生成 64 token + 回执」已跑通（自检环成立），"
+            "但整章剧本未产出：多为该书目录/正文未就绪（拿不到当前章），非推理链缺陷"
+        )
+    else:
+        evidence["result"] = "FAIL"
+        evidence["conclusion"] = "未达标：见 steps（缺 ≥8GB 门槛/模型/书或推理超时）"
     return dump(0 if passed else 1)
 
 

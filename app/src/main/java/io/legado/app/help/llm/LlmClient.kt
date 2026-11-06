@@ -43,6 +43,12 @@ class LlmClient private constructor(private val context: Context) {
     /** 回执入口：所有请求都经 `gate` 串行，单槽位够用 */
     private val replyMessenger by lazy {
         Messenger(Handler(Looper.getMainLooper()) { msg ->
+            // 诊断日志（保留）：回执是否真的到达主进程（与推理侧的"已发出"配对取证）
+            AppLog.putDebugWithTag(
+                AppLog.TAG_LLM_TRACE,
+                "收到回执 what=${msg.what} hasData=${msg.data != null} slot=${replyDeferred != null}",
+                level = AppLog.Level.INFO
+            )
             replyDeferred?.complete(msg.data ?: Bundle())
             true
         })
@@ -142,6 +148,32 @@ class LlmClient private constructor(private val context: Context) {
         return result
     }
 
+    /**
+     * 自检（加载 + 固定长度生成）。
+     *
+     * **必须走推理进程**：主进程若直接构造 `LlmRuntime`，native 会加载整个 GGUF（推荐档 396MB），
+     * 等于把 native 重内存搬进正在朗读/阅读的进程（违背 AD-11）。
+     */
+    suspend fun bench(modelPath: String, timeoutMs: Long = BENCH_TIMEOUT_MS): LlmBenchResult {
+        if (modelPath.isBlank()) {
+            return LlmBenchResult.failure(LlmIpc.ERROR_BAD_JOB, "缺少模型路径")
+        }
+        val bundle = request(
+            LlmIpc.MSG_BENCH,
+            Bundle().apply { putString(LlmIpc.KEY_MODEL_PATH, modelPath) },
+            timeoutMs
+        ) ?: return LlmBenchResult.failure(LlmRuntime.LlmErrorCode.TIMEOUT.name, "连接推理进程超时")
+        return LlmBenchResult(
+            ok = bundle.getBoolean(LlmIpc.KEY_OK, false),
+            loadMs = bundle.getLong(LlmIpc.KEY_LOAD_MS, 0L),
+            generateMs = bundle.getLong(LlmIpc.KEY_GENERATE_MS, 0L),
+            tokenCount = bundle.getInt(LlmIpc.KEY_TOKEN_COUNT, 0),
+            tokPerSec = bundle.getFloat(LlmIpc.KEY_TOK_PER_SEC, 0f),
+            errorCode = bundle.getString(LlmIpc.KEY_ERROR_CODE).orEmpty(),
+            message = bundle.getString(LlmIpc.KEY_MESSAGE).orEmpty()
+        )
+    }
+
     /** 取消一个 job（单向消息：不等回执，避免取消本身被队列挡住） */
     fun cancel(jobId: String) {
         val to = messenger ?: return
@@ -226,6 +258,8 @@ class LlmClient private constructor(private val context: Context) {
         const val STATUS_TIMEOUT_MS = 2_000L
         const val LOAD_TIMEOUT_MS = LlmRuntime.LOAD_TIMEOUT_MS + 5_000L
         const val GENERATE_TIMEOUT_MS = LlmRuntime.GENERATE_TIMEOUT_MS + 5_000L
+        /** 自检 = 加载 + 生成，两段的超时都要给足（冷加载实测 33s，取 60s + 90s + 余量） */
+        const val BENCH_TIMEOUT_MS = LlmRuntime.LOAD_TIMEOUT_MS + LlmRuntime.GENERATE_TIMEOUT_MS + 10_000L
 
         fun forContext(context: Context): LlmClient = LlmClient(context.applicationContext)
     }

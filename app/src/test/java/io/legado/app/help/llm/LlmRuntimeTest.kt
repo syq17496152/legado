@@ -79,6 +79,26 @@ class LlmRuntimeTest {
         assertEquals("qwen.gguf", binding.loadedPath.substringAfterLast('/'))
     }
 
+    /**
+     * 引擎是**进程级单例**，`LlmRuntime` 是 Service 级：Service 重建后新实例 phase=UNINITIALIZED，
+     * 但底层引擎仍是 ModelReady。此时再调官方 `loadModel` 会被 `check(state is Initialized)` 拒绝
+     * （实测报错 `Cannot load model in ModelReady!`），用户看到自检莫名其妙失败。
+     * 必须在 `load()` 里按「引擎已加载」对齐状态。
+     */
+    @Test
+    fun `引擎已由上个实例加载时 新实例 load 直接对齐 READY 且不重复加载`() = runBlocking {
+        val binding = FakeBinding()
+        LlmRuntime(binding, tickingClock()).load("/models/qwen.gguf")
+        assertEquals(InferenceEngine.State.ModelReady, binding.currentState)
+
+        // 模拟 Service 重建：同一个 binding（引擎单例），全新的 runtime
+        val rebuilt = LlmRuntime(binding, tickingClock())
+        assertEquals(LlmRuntime.Phase.UNINITIALIZED, rebuilt.snapshot.value.phase)
+        val result = rebuilt.load("/models/qwen.gguf")
+        assertTrue("引擎已加载时必须返回成功，不能再抛 Cannot load model in ModelReady", result.ok)
+        assertEquals(LlmRuntime.Phase.READY, rebuilt.snapshot.value.phase)
+    }
+
     @Test
     fun `架构不支持映射为 UNSUPPORTED_ARCH`() = runBlocking {
         val runtime = LlmRuntime(FakeBinding(loadError = UnsupportedArchitectureException()), tickingClock())

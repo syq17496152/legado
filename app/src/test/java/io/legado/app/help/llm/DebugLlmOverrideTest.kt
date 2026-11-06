@@ -1,7 +1,9 @@
 package io.legado.app.help.llm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -44,5 +46,29 @@ class DebugLlmOverrideTest {
             DebugLlmOverride.request(debugBuild = true, wantEnable = true, rawModelId = "   ")
         )
         assertNull(DebugLlmOverride.request(debugBuild = true, wantEnable = true, rawModelId = null))
+    }
+
+    /**
+     * 自检开关：只有显式请求才带 bench，且 release 包同样恒 null
+     * （否则等于给了线上一条"在推理进程里跑重任务"的后门）。
+     */
+    @Test
+    fun benchIsOptInAndDebugOnly() {
+        assertFalse(
+            "未请求自检时不得偷偷跑（会白占 native 内存与几十秒）",
+            DebugLlmOverride.request(
+                debugBuild = true, wantEnable = true, rawModelId = "qwen"
+            )!!.bench
+        )
+        assertTrue(
+            DebugLlmOverride.request(
+                debugBuild = true, wantEnable = true, rawModelId = "qwen", wantBench = true
+            )!!.bench
+        )
+        assertNull(
+            DebugLlmOverride.request(
+                debugBuild = false, wantEnable = true, rawModelId = "qwen", wantBench = true
+            )
+        )
     }
 }

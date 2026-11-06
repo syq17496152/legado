@@ -39,7 +39,6 @@ import io.legado.app.help.llm.LlmClient
 import io.legado.app.help.llm.LlmModelCatalog
 import io.legado.app.help.llm.LlmModelDownloader
 import io.legado.app.help.llm.LlmModelManager
-import io.legado.app.help.llm.LlmRuntime
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -81,7 +80,19 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
     private var downloadProgress by mutableStateOf("")
 
     private val manager by lazy { LlmModelManager.forApp(this) }
-    private val runtime by lazy { LlmRuntime.forContext(this) }
+
+    /**
+     * IPC 客户端（自检走 `:llm` 进程）。
+     *
+     * 注意：这里**不再**持有 `LlmRuntime`。原实现主进程直接 `LlmRuntime.forContext(this)`，
+     * 点一次自检就会把 llama.cpp native 和整个 GGUF（推荐档 396MB）加载进主进程 ——
+     * 与 AD-11 的隔离初衷相反（native OOM 会直接带走正在朗读的 App）。
+     *
+     * 用显式 `Lazy` 而非 `by lazy`：`onDestroy` 里要判断"是否真的建立过连接"再解绑，
+     * 否则退出页面时反而会去新建一个 ServiceConnection。
+     */
+    private val llmClientDelegate = lazy { LlmClient.forContext(this) }
+    private val llmClient by llmClientDelegate
 
     private val pickModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(::importModel)
@@ -119,23 +130,51 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
         }
     }
 
+    override fun onDestroy() {
+        // 解绑推理服务：不解绑会一直持有 ServiceConnection，把 `:llm` 进程（含 native 常驻内存）
+        // 无必要地养活着。只在真正建立过连接时才解绑。
+        if (llmClientDelegate.isInitialized()) {
+            runCatching { llmClient.close() }
+        }
+        super.onDestroy()
+    }
+
     override fun onActivityCreated(savedInstanceState: android.os.Bundle?) {
         // 仅 DEBUG：允许通过 Intent extra 注入本地 AI 开关。低内存设备被 RAM 门限拦在 UI 外，
         // 而端侧链路验证（tasks 7.2/7.6）必须能打开它；改 prefs 文件会被平台回写（E15）。
         DebugLlmOverride.request(
             debugBuild = BuildConfig.BUILD_DEBUG,
             wantEnable = intent?.getBooleanExtra(DebugLlmOverride.EXTRA_ENABLE, false) == true,
-            rawModelId = intent?.getStringExtra(DebugLlmOverride.EXTRA_MODEL_ID)
+            rawModelId = intent?.getStringExtra(DebugLlmOverride.EXTRA_MODEL_ID),
+            wantBench = intent?.getBooleanExtra(DebugLlmOverride.EXTRA_BENCH, false) == true
         )?.let { request ->
             AppConfig.localLlmProfileId = request.modelId
             AppConfig.localLlmEnabled = true
             // 顺带做一次 IPC 连通性自检：把「主进程 ↔ :llm」是否真的建立写进日志，
             // 这样 7.2/7.6 的 L3 脚本不必依赖"某本书有正文"就能判定推理链路是否可用
             lifecycleScope.launch {
-                val client = LlmClient.forContext(this@LlmSettingsActivity)
+                val client = llmClient
                 val connected = client.ensureConnected()
                 val phase = if (connected) client.status().phase else ""
                 AppLog.put(LlmSettingsState.ipcSelfCheckMessage(connected, phase))
+                if (connected && request.bench) {
+                    // 调试链路验证：真正在 `:llm` 里加载模型并生成 64 token（7.2 自检环）
+                    val model = runCatching { manager.find(request.modelId) }.getOrNull()
+                    if (model == null) {
+                        AppLog.put("DebugLlmOverride: 自检失败：找不到模型 ${request.modelId}")
+                    } else {
+                        val bench = client.bench(model.modelFile.absolutePath)
+                        AppLog.put(
+                            "DebugLlmOverride: " + LlmSettingsState.benchMessage(
+                                ok = bench.ok,
+                                loadMs = bench.loadMs,
+                                tokenCount = bench.tokenCount,
+                                tokPerSec = bench.tokPerSec,
+                                failureMessage = bench.message
+                            )
+                        )
+                    }
+                }
                 client.close()
                 finish()
             }
@@ -292,17 +331,18 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
         }
         lifecycleScope.launch {
             busy = true
-            message = "正在自检（加载 + 生成 64 token）…"
-            val bench = withContext(Dispatchers.IO) { runtime.benchmark(model.modelFile.absolutePath) }
+            message = "正在自检（加载 + 生成 64 token，在推理进程内执行）…"
+            val bench = withContext(Dispatchers.IO) { llmClient.bench(model.modelFile.absolutePath) }
             AppConfig.localLlmSpeedTokPerSec = bench.tokPerSec
             AppConfig.localLlmUnsupportedReason = if (bench.ok) "" else bench.message
             busy = false
-            message = if (bench.ok) {
-                "自检完成：加载 ${bench.loadMs}ms，生成 ${bench.tokenCount} token，" +
-                        "${String.format("%.1f", bench.tokPerSec)} tok/s"
-            } else {
-                "自检失败：${bench.message.ifBlank { "未知原因" }}"
-            }
+            message = LlmSettingsState.benchMessage(
+                ok = bench.ok,
+                loadMs = bench.loadMs,
+                tokenCount = bench.tokenCount,
+                tokPerSec = bench.tokPerSec,
+                failureMessage = bench.message
+            )
             reload()
         }
     }

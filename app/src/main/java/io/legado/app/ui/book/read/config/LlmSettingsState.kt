@@ -119,4 +119,23 @@ object LlmSettingsState {
         } else {
             "DebugLlmOverride: 连接推理进程 失败"
         }
+
+    /**
+     * 自检结果文案（设置页 `runBenchmark` 用）。
+     *
+     * 失败原因必须**带出来**：端侧最常见的失败是「模型未就绪/内存不足/超时」，
+     * 只说"自检失败"会让用户完全无从下手（与 E7「静默跳过」同类）。
+     */
+    fun benchMessage(
+        ok: Boolean,
+        loadMs: Long,
+        tokenCount: Int,
+        tokPerSec: Float,
+        failureMessage: String
+    ): String = if (ok) {
+        "自检完成：加载 ${loadMs}ms，生成 $tokenCount token，" +
+                String.format(java.util.Locale.US, "%.1f", tokPerSec) + " tok/s"
+    } else {
+        "自检失败：${failureMessage.ifBlank { "未知原因" }}"
+    }
 }

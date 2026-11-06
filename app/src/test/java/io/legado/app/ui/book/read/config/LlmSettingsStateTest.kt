@@ -140,6 +140,32 @@ class LlmSettingsStateTest {
     }
 
     /**
+     * 自检文案：成功要给出加载耗时/ tok/s（用户判断"这台机跑不跑得动"的唯一依据），
+     * 失败必须带原因（不能只说"自检失败"）。
+     */
+    @Test
+    fun `自检文案成功与失败两种形态`() {
+        val ok = LlmSettingsState.benchMessage(
+            ok = true, loadMs = 32_870L, tokenCount = 64, tokPerSec = 9.48f, failureMessage = ""
+        )
+        assertTrue(ok.contains("自检完成"))
+        assertTrue(ok.contains("32870ms"))
+        assertTrue(ok.contains("64 token"))
+        assertTrue(ok.contains("9.5 tok/s"))
+
+        val failed = LlmSettingsState.benchMessage(
+            ok = false, loadMs = 0L, tokenCount = 0, tokPerSec = 0f, failureMessage = "加载超时"
+        )
+        assertTrue(failed.contains("自检失败"))
+        assertTrue("失败原因必须带出", failed.contains("加载超时"))
+
+        val noReason = LlmSettingsState.benchMessage(
+            ok = false, loadMs = 0L, tokenCount = 0, tokPerSec = 0f, failureMessage = "  "
+        )
+        assertTrue("原因为空要有兜底文案", noReason.contains("未知原因"))
+    }
+
+    /**
      * 调试注入的 IPC 自检文案：L3 脚本按「连接推理进程 成功」判断链路是否成立，
      * 文案即契约 —— 这里锁死，防止后续改字把 7.2 的判据悄悄改坏。
      */

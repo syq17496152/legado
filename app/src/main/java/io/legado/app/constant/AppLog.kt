@@ -57,6 +57,8 @@ object AppLog {
     const val TAG_SOURCE_GUARD = "SourceGuard"          // P0-S4 类导入策略观察/实拦记录
     // TTS 朗读引擎全链埋点（optimize-tts-engine-phase2 真机联调）：路由切换/init/多角色分段/选角 resolve/预合成/缓存键
     const val TAG_TTS_TRACE = "TtsTrace"
+    // 端侧 LLM 推理全链埋点（offline-tts-llm-productization 7.2）：IPC 收发/加载/生成/自检回执
+    const val TAG_LLM_TRACE = "LlmTrace"
     // log-compliance-cleanup（2026-09-11）：裸 Log/字面量 tag 收编新增，用途见 logging_rules.md 模块 Tag 规范
     const val TAG_IMG_DECRYPT = "ImgDecrypt"        // 图片加载/解密链路（Glide OkHttpStreamFetcher，沿用既有采集值）
     const val TAG_HLS_REMUX = "HlsRemux"            // HLS 视频转封装诊断（HlsDownloader，正式诊断链）

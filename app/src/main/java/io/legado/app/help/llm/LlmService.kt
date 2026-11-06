@@ -9,11 +9,13 @@ import android.os.IBinder
 import android.os.Message
 import android.os.Messenger
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.AppLog.TAG_LLM_TRACE
 import io.legado.app.help.coroutine.Coroutine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 2.5 端侧推理进程宿主（design AD-11 / AD-25）。
@@ -35,6 +37,9 @@ import kotlinx.coroutines.cancel
  */
 class LlmService : Service() {
 
+    /** 自检服务端兜底时限：客户端超时是 160s，这里必须更早，才能给出「超时」而不是「连接超时」 */
+    private val BENCH_DEADLINE_MS = 150_000L
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /**
      * 延迟创建运行时：`AiChat.getInferenceEngine` 会加载 native 库（模拟器实测 20s+）。
@@ -51,7 +56,12 @@ class LlmService : Service() {
     /** 当前正在跑的生成任务（用于取消与结果落位防串号） */
     private var pending: Pending? = null
     private var running: Coroutine<LlmRuntime.Result>? = null
-    private var loading: Coroutine<LlmRuntime.Result>? = null
+    /**
+     * 「非生成类长任务」单槽：加载与自检共用。
+     * 两者都只动模型加载态、且都不该互相叠加（同时跑会把 native 内存翻倍），
+     * 故用通配类型共用一个槽位；生成任务仍走 [running]（互不干扰）。
+     */
+    private var loading: Coroutine<*>? = null
 
     private data class Pending(val jobId: String, val replyTo: Messenger?)
 
@@ -88,6 +98,7 @@ class LlmService : Service() {
             LlmIpc.MSG_STATUS -> replyStatus(msg.replyTo)
             LlmIpc.MSG_LOAD -> startLoad(msg)
             LlmIpc.MSG_GENERATE -> startGenerate(msg)
+            LlmIpc.MSG_BENCH -> startBench(msg)
             LlmIpc.MSG_CANCEL -> cancelJob(msg)
             LlmIpc.MSG_RELEASE -> runtime.unload()
             else -> return false
@@ -95,10 +106,99 @@ class LlmService : Service() {
         return true
     }
 
+    /**
+     * 自检（加载 + 固定长度生成）。
+     *
+     * 放在推理进程执行是 AD-11 的硬要求：`runtime` 一构造就加载 native 与整个 GGUF，
+     * 若在主进程跑，native OOM 会直接带走正在朗读的 App。生成任务在跑时直接回 BUSY
+     * （与 [MSG_GENERATE] 同一单队列语义，避免自检把用户正在等的剧本挤掉）。
+     */
+    private fun startBench(msg: Message) {
+        val modelPath = msg.data?.getString(LlmIpc.KEY_MODEL_PATH).orEmpty()
+        // **必须在这里就把 replyTo 取出来**：Message 是池化复用的，onMessage 返回 true 后它会被回收、
+        // replyTo 被清空；若在协程回调里再读 `msg.replyTo` 会拿到 null，回执直接丢失
+        // （2026-11-06 实测：日志 `bench 回执 ... target=false`，客户端只能干等 160s 超时）。
+        val replyTo = msg.replyTo
+        // 诊断日志（保留）：请求是否带着模型路径到达（区分"客户端没发对"与"服务端没回"）
+        AppLog.putDebugWithTag(
+            TAG_LLM_TRACE,
+            "收到 MSG_BENCH pathLen=${modelPath.length} replyTo=${replyTo != null}",
+            level = AppLog.Level.INFO
+        )
+        if (modelPath.isBlank()) {
+            replyBench(replyTo, LlmBenchResult.failure(LlmIpc.ERROR_BAD_JOB, "缺少模型路径"))
+            return
+        }
+        if (pending != null) {
+            replyBench(replyTo, LlmBenchResult.failure(LlmIpc.ERROR_BAD_JOB, "推理队列忙"))
+            return
+        }
+        loading?.cancel()
+        // 服务端必须**总是**回执：native 侧 `generateNextToken`/`loadModel` 是阻塞 JNI，
+        // 协程取消打不断它（实测 load 完成后 generate 立刻命中 stop 位、或 native 长时间不返回）。
+        // 没有这道兜底时，客户端只能干等到自己的 160s 超时，日志还会误导成「连接超时」。
+        val replied = AtomicBoolean(false)
+        val guard = Runnable {
+            if (replied.compareAndSet(false, true)) {
+                replyBench(
+                    replyTo,
+                    LlmBenchResult.failure(LlmRuntime.LlmErrorCode.TIMEOUT.name, "自检超时（推理进程无响应）")
+                )
+                loading = null
+            }
+        }
+        ipcThread?.let { Handler(it.looper).postDelayed(guard, BENCH_DEADLINE_MS) }
+        loading = Coroutine.async(
+            scope = serviceScope,
+            context = Dispatchers.Default,
+            executeContext = Dispatchers.Default
+        ) {
+            runtime.benchmark(modelPath)
+        }.onSuccess { bench ->
+            if (replied.compareAndSet(false, true)) replyBench(replyTo, LlmBenchResult.of(bench))
+            loading = null
+        }.onError { error ->
+            if (replied.compareAndSet(false, true)) {
+                replyBench(
+                    replyTo,
+                    LlmBenchResult.failure(
+                        LlmRuntime.LlmErrorCode.UNKNOWN.name,
+                        error.localizedMessage ?: error.javaClass.simpleName
+                    )
+                )
+            }
+            loading = null
+        }
+    }
+
+    private fun replyBench(target: Messenger?, result: LlmBenchResult) {
+        val bundle = Bundle().apply {
+            putBoolean(LlmIpc.KEY_OK, result.ok)
+            putString(LlmIpc.KEY_ERROR_CODE, result.errorCode)
+            putString(LlmIpc.KEY_MESSAGE, result.message)
+            putInt(LlmIpc.KEY_TOKEN_COUNT, result.tokenCount)
+            putLong(LlmIpc.KEY_LOAD_MS, result.loadMs)
+            putLong(LlmIpc.KEY_GENERATE_MS, result.generateMs)
+            putFloat(LlmIpc.KEY_TOK_PER_SEC, result.tokPerSec)
+        }
+        // 诊断日志（保留）：自检回执是否真的发出，是「客户端超时 vs 服务端没回」的分水岭
+        AppLog.putDebugWithTag(
+            TAG_LLM_TRACE,
+            "bench 回执 ok=${result.ok} code=${result.errorCode} tok=${result.tokenCount} " +
+                    "tokPerSec=${result.tokPerSec} loadMs=${result.loadMs} target=${target != null}",
+            level = AppLog.Level.INFO
+        )
+        send(target, LlmIpc.MSG_BENCH, if (result.ok) LlmIpc.REPLY_OK else LlmIpc.REPLY_FAIL, bundle)
+    }
+
     private fun startLoad(msg: Message) {
         val modelPath = msg.data?.getString(LlmIpc.KEY_MODEL_PATH).orEmpty()
+        // 同 [startBench]：Message 会被池化回收，异步回执必须在入口先取 replyTo，
+        // 否则 `load` 的回执永远丢失 —— 客户端只能在 65s 后报「连接推理进程超时」并降级规则，
+        // 表现为「本地 AI 打开着却从不生效」（E21 的真实根因，2026-11-06 定位）。
+        val replyTo = msg.replyTo
         if (modelPath.isBlank()) {
-            reply(msg.replyTo, LlmIpc.MSG_LOAD, LlmJobResult.failure(LlmIpc.ERROR_BAD_JOB, "缺少模型路径"))
+            reply(replyTo, LlmIpc.MSG_LOAD, LlmJobResult.failure(LlmIpc.ERROR_BAD_JOB, "缺少模型路径"))
             return
         }
         loading?.cancel()
@@ -109,11 +209,11 @@ class LlmService : Service() {
         ) {
             runtime.load(modelPath)
         }.onSuccess { result ->
-            reply(msg.replyTo, LlmIpc.MSG_LOAD, LlmJobResult.of(result))
+            reply(replyTo, LlmIpc.MSG_LOAD, LlmJobResult.of(result))
             loading = null
         }.onError { error ->
             reply(
-                msg.replyTo, LlmIpc.MSG_LOAD,
+                replyTo, LlmIpc.MSG_LOAD,
                 LlmJobResult.failure(LlmRuntime.LlmErrorCode.UNKNOWN.name, error.localizedMessage.orEmpty())
             )
             loading = null
