@@ -16,8 +16,13 @@ package io.legado.app.help.readaloud.role
  */
 class ScriptArbiterRunner(private val llm: ScriptLlm?) {
 
-    /** 单批最多生成 token（剧本仲裁只需要紧凑 JSON） */
-    private val predictTokens = 256
+    /**
+     * 单批最多生成 token（剧本仲裁只需要紧凑 JSON）。
+     *
+     * 2026-11-06 真机实测：256 会截断（日志 `STOP: hitting stop position: 576`）⇒ JSON 不闭合、
+     * 解析为空 ⇒ `ai=0` 降级。12 段满批 + 关闭思考链后实测 300± 足够，留一倍余量取 512。
+     */
+    private val predictTokens = 512
 
     data class Outcome(
         val merge: ScriptArbiter.MergeResult,

@@ -60,11 +60,12 @@ class DebugLlmOverrideTest {
                 debugBuild = true, wantEnable = true, rawModelId = "qwen"
             )!!.bench
         )
-        assertTrue(
-            DebugLlmOverride.request(
-                debugBuild = true, wantEnable = true, rawModelId = "qwen", wantBench = true
-            )!!.bench
-        )
+        val withBench = DebugLlmOverride.request(
+            debugBuild = true, wantEnable = true, rawModelId = "  qwen  ", wantBench = true
+        )!!
+        assertTrue("显式请求自检时必须带上", withBench.bench)
+        // 自检与模型 id 互不影响：带 bench 也要照常去空白透出（否则调用方会拿 "  qwen  " 去找不到目录）
+        assertEquals("带自检时模型 id 仍须去空白", "qwen", withBench.modelId)
         assertNull(
             DebugLlmOverride.request(
                 debugBuild = false, wantEnable = true, rawModelId = "qwen", wantBench = true

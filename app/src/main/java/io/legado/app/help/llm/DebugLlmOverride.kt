@@ -19,7 +19,10 @@ object DebugLlmOverride {
     /** `--es debugModelId <模型目录名>`（与 `LlmModelManager.scan().id` 同源） */
     const val EXTRA_MODEL_ID = "debugModelId"
 
-    data class Request(val modelId: String)
+    /** `--ez debugLlmBench true`：注入后顺带在 `:llm` 里跑一次自检（加载 + 生成 64 token） */
+    const val EXTRA_BENCH = "debugLlmBench"
+
+    data class Request(val modelId: String, val bench: Boolean = false)
 
     /**
      * 解析调试请求。
@@ -27,12 +30,18 @@ object DebugLlmOverride {
      * @param debugBuild 生产必须传 `BuildConfig.BUILD_DEBUG`
      * @param wantEnable Intent 的 [EXTRA_ENABLE]
      * @param rawModelId Intent 的 [EXTRA_MODEL_ID]
+     * @param wantBench Intent 的 [EXTRA_BENCH]（可选，仅调试链路验证用）
      * @return 需要执行的动作；`null` = 不做任何事（非 debug / 未请求 / 模型 id 为空）
      */
-    fun request(debugBuild: Boolean, wantEnable: Boolean, rawModelId: String?): Request? {
+    fun request(
+        debugBuild: Boolean,
+        wantEnable: Boolean,
+        rawModelId: String?,
+        wantBench: Boolean = false
+    ): Request? {
         if (!debugBuild || !wantEnable) return null
         val id = rawModelId?.trim().orEmpty()
         if (id.isEmpty()) return null
-        return Request(id)
+        return Request(id, bench = wantBench)
     }
 }

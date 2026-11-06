@@ -104,4 +104,31 @@ class ScriptArbiterRunnerTest {
         assertFalse(outcome.modelCalled)
         assertFalse(outcome.merge.degraded)
     }
+
+    /** 捕获实际下发给推理层的 system prompt 与输出预算（真机 E24：256 会截断、Qwen3 思考链会烧光预算）。 */
+    private class CapturingLlm : ScriptLlm {
+        var system: String = ""
+        var predictTokens: Int = 0
+        override suspend fun ready(): Boolean = true
+        override suspend fun setSystemPrompt(prompt: String): LlmRuntime.Result {
+            system = prompt
+            return LlmRuntime.Result()
+        }
+
+        override suspend fun generate(prompt: String, predictLength: Int): LlmRuntime.Result {
+            predictTokens = predictLength
+            return LlmRuntime.Result(text = "{\"a\":[{\"i\":0,\"n\":0,\"c\":0.9}]}", tokenCount = 12)
+        }
+    }
+
+    @Test
+    fun `system prompt 关闭思考链且输出预算不低于 512`() = runBlocking {
+        val llm = CapturingLlm()
+        ScriptArbiterRunner(llm).run(script, ::textOf, listOf("小明", "小红"))
+        assertTrue(
+            "Qwen3 思考链会占满输出预算导致 JSON 截断，system prompt 必须带 /no_think",
+            llm.system.contains("/no_think")
+        )
+        assertEquals("满批 JSON 约 300 token，预算需留余量", 512, llm.predictTokens)
+    }
 }

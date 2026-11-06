@@ -27,6 +27,11 @@ object ScriptPromptTemplates {
             appendLine("规则：i 是本次输入的行号（从 0 开始）；同一段只输出一条；不确定就不要输出该段。")
             appendLine("示例：")
             append(shots)
+            // Qwen3 默认走"先思考再回答"，思考链会把输出预算烧光导致 JSON 被截断（真机实测
+            // `STOP: hitting stop position` 后解析为空 ⇒ 剧本永远降级为规则）。`/no_think`
+            // 是 Qwen3 官方的关闭开关；对其他模型等价于普通指令，不影响解析。
+            appendLine()
+            append("/no_think")
         }.trim()
     }
 

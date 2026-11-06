@@ -245,7 +245,16 @@ class LlmService : Service() {
             context = Dispatchers.Default,
             executeContext = Dispatchers.Default
         ) {
-            if (systemPrompt.isNotBlank()) runtime.setSystemPrompt(systemPrompt)
+            // system prompt 必须先**确实生效**再 generate：官方 binding 只允许 load 后设一次，
+            // 二次设置会抛异常；若把它吞掉继续 generate，native 侧 chat 模板为空会 SIGSEGV，
+            // 整个推理进程直接消失（真机表现为「推理进程无回执」）。ensureSystemPrompt 内部会
+            // 重载模型重试一次；仍失败则抛出去 —— 让客户端收到失败回执并降级为规则结果。
+            if (systemPrompt.isNotBlank()) {
+                val applied = runtime.ensureSystemPrompt(systemPrompt)
+                check(applied.ok) {
+                    "system prompt 未生效：${applied.errorCode?.name.orEmpty()} ${applied.message}"
+                }
+            }
             runtime.generate(text, predictLength)
         }.onSuccess { result ->
             finishJob(jobId, LlmJobResult.of(result))

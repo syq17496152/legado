@@ -27,22 +27,34 @@ class LlmRuntimeTest {
         private val loadError: Exception? = null,
         private val pieces: List<String> = listOf("你好", "世界"),
         private val delayPerPieceMs: Long = 0,
-        private val emitNothing: Boolean = false
+        private val emitNothing: Boolean = false,
+        /** 第 N 次（从 1 起）调用 setSystemPrompt 时抛异常，模拟官方 `_readyForSystemPrompt` 拒绝二次设置 */
+        private val failPromptCalls: Set<Int> = emptySet()
     ) : LlmRuntime.LlmBinding {
         private val _state = MutableStateFlow<InferenceEngine.State>(InferenceEngine.State.Uninitialized)
         override val currentState: InferenceEngine.State get() = _state.value
         override val state: StateFlow<InferenceEngine.State> get() = _state
         var loadedPath: String = ""
+        var loadCalls: Int = 0
+        var promptCalls: Int = 0
+        var userPromptCalls: Int = 0
 
         override suspend fun loadModel(pathToModel: String) {
+            loadCalls += 1
             loadError?.let { throw it }
             loadedPath = pathToModel
             _state.value = InferenceEngine.State.ModelReady
         }
 
-        override suspend fun setSystemPrompt(systemPrompt: String) = Unit
+        override suspend fun setSystemPrompt(systemPrompt: String) {
+            promptCalls += 1
+            if (promptCalls in failPromptCalls) {
+                throw IllegalStateException("System prompt must be set ** RIGHT AFTER ** model loaded!")
+            }
+        }
 
         override fun sendUserPrompt(message: String, predictLength: Int): Flow<String> = flow {
+            userPromptCalls += 1
             if (emitNothing) return@flow
             pieces.forEach {
                 if (delayPerPieceMs > 0) delay(delayPerPieceMs)
@@ -178,5 +190,59 @@ class LlmRuntimeTest {
         assertTrue(bench.ok)
         assertEquals(3, bench.tokenCount)
         assertTrue(bench.tokPerSec > 0f)
+    }
+
+    /**
+     * 真机 P0（2026-11-06）：官方 binding 只允许 load 之后设一次 system prompt。
+     * 自检用掉窗口后，剧本任务再设会抛 IllegalStateException；旧实现吞掉异常继续 generate，
+     * native 侧 chat 模板为空 ⇒ SIGSEGV 打崩 `:llm`，客户端只能看到「推理进程无回执」。
+     * 现要求：第二次设置失败 ⇒ 重载模型并重试，成功才算可用。
+     */
+    @Test
+    fun `二次设置 system prompt 失败时重载模型后重试成功`() = runBlocking {
+        // 第 2 次设置失败（第 1 次在 load 后由任务 A 用掉），第 3 次（重载后）成功
+        val binding = FakeBinding(failPromptCalls = setOf(2))
+        val runtime = LlmRuntime(binding, tickingClock())
+        assertTrue(runtime.load("/m.gguf").ok)
+        assertTrue(runtime.ensureSystemPrompt("任务A").ok)
+
+        val result = runtime.ensureSystemPrompt("任务B")
+        assertTrue("重载后第二次设置应成功", result.ok)
+        assertEquals("必须触发一次重载", 2, binding.loadCalls)
+        assertEquals(LlmRuntime.Phase.READY, runtime.snapshot.value.phase)
+    }
+
+    /**
+     * 重载后仍设不上 ⇒ 必须返回错误让调用方降级，绝不能放行 generate（否则 native 必崩）。
+     */
+    @Test
+    fun `重载后仍失败返回错误且不触发用户提示`() = runBlocking {
+        val binding = FakeBinding(failPromptCalls = setOf(1, 2, 3))
+        val runtime = LlmRuntime(binding, tickingClock())
+        assertTrue(runtime.load("/m.gguf").ok)
+
+        val result = runtime.ensureSystemPrompt("任务A")
+        assertFalse(result.ok)
+        assertEquals(LlmRuntime.LlmErrorCode.UNKNOWN, result.errorCode)
+        assertEquals("必须重载过一次", 2, binding.loadCalls)
+        assertEquals("失败时不得调用 sendUserPrompt", 0, binding.userPromptCalls)
+    }
+
+    @Test
+    fun `未加载时 ensureSystemPrompt 返回 NOT_LOADED`() = runBlocking {
+        val runtime = LlmRuntime(FakeBinding(), tickingClock())
+        val result = runtime.ensureSystemPrompt("x")
+        assertEquals(LlmRuntime.LlmErrorCode.NOT_LOADED, result.errorCode)
+    }
+
+    /** 自检在 system prompt 设不上时必须直接失败，不能继续 generate（否则同样会打崩推理进程）。 */
+    @Test
+    fun `自检在 system prompt 失败时返回错误且不生成`() = runBlocking {
+        val binding = FakeBinding(failPromptCalls = setOf(1, 2, 3))
+        val runtime = LlmRuntime(binding, tickingClock())
+        val bench = runtime.benchmark("/m.gguf")
+        assertFalse(bench.ok)
+        assertEquals(LlmRuntime.LlmErrorCode.UNKNOWN, bench.errorCode)
+        assertEquals(0, binding.userPromptCalls)
     }
 }

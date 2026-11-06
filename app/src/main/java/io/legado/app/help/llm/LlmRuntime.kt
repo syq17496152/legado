@@ -145,6 +145,65 @@ class LlmRuntime(
     }
 
     /**
+     * 保证 system prompt 已生效（官方 binding 只允许在 load 之后设置一次）。
+     *
+     * 为什么必须做：官方实现用 `_readyForSystemPrompt` 拒绝第二次设置（抛 IllegalStateException），
+     * 而 native 侧 chat 模板只在首次设置成功时建好。若吞掉失败继续 generate，
+     * `processUserPrompt` 会拿空模板指针 ⇒ **SIGSEGV 打崩整个 `:llm` 进程**
+     * （2026-11-06 真机铁证：tombstone 落在 libllama-common.so 的
+     * `common_chat_templates_was_explicit`，调用方表现为「推理进程无回执」）。
+     *
+     * 处置：设置失败 ⇒ 卸载后重载一次再设（自检与剧本任务会各自设置不同 system prompt，
+     * 这是常态而不是异常）；重载后仍失败则返回错误，调用方**必须放弃本次生成**并回落规则。
+     */
+    suspend fun ensureSystemPrompt(prompt: String, timeoutMs: Long = LOAD_TIMEOUT_MS): Result =
+        gate.withLock {
+            if (!binding.currentState.isModelLoaded) {
+                return@withLock Result(errorCode = LlmErrorCode.NOT_LOADED, message = "模型未加载")
+            }
+            val first = runCatching { binding.setSystemPrompt(prompt) }
+            if (first.isSuccess) return@withLock Result()
+
+            val path = _snapshot.value.modelPath
+            if (path.isBlank()) {
+                return@withLock Result(
+                    errorCode = LlmErrorCode.UNKNOWN,
+                    message = first.exceptionOrNull()?.localizedMessage.orEmpty()
+                )
+            }
+            runCatching { binding.cleanUp() }
+            _snapshot.value = Snapshot(Phase.LOADING, path)
+            val reloadError: LlmErrorCode? = try {
+                withTimeout(timeoutMs) { binding.loadModel(path) }
+                null
+            } catch (e: TimeoutCancellationException) {
+                LlmErrorCode.TIMEOUT
+            } catch (e: CancellationException) {
+                // 保留取消语义：调用方主动取消（服务销毁）不能当成一次失败
+                _snapshot.value = Snapshot(Phase.UNINITIALIZED, path)
+                throw e
+            } catch (e: Exception) {
+                LlmErrorCode.UNKNOWN
+            }
+            if (reloadError != null) {
+                fail(reloadError, "重载模型失败（system prompt 需要重新设置）")
+                return@withLock Result(errorCode = reloadError, message = "重载模型失败")
+            }
+            _snapshot.value = Snapshot(Phase.READY, path)
+            val second = runCatching { binding.setSystemPrompt(prompt) }
+            _snapshot.value = Snapshot(Phase.READY, path)
+            second.fold(
+                onSuccess = { Result() },
+                onFailure = {
+                    Result(
+                        errorCode = LlmErrorCode.UNKNOWN,
+                        message = "system prompt 设置失败：${it.localizedMessage.orEmpty()}"
+                    )
+                }
+            )
+        }
+
+    /**
      * 生成一段完整文本（内部收集官方流式 token）。
      * 超时/空输出/未加载都返回错误码，调用方据此回落规则结果。
      */
@@ -225,11 +284,17 @@ class LlmRuntime(
             return Bench(loadMs = load.elapsedMs, generateMs = 0, tokenCount = 0, tokPerSec = 0f,
                 errorCode = load.errorCode, message = load.message)
         }
-        // 必须在 generate 前设置 system prompt：官方引擎用 chat 模板拼回合，
-        // 不设 system 时 assistant 回合没被正确打开，实测 Qwen3 首个 token 即命中停止位 ⇒ 一直 0 token
-        // （2026-11-06 模拟器铁证：`generateNextToken: STOP: hitting stop position: 94` 后立刻 complete）。
-        // 失败不阻断自检：引擎若已错过设置窗口（`_readyForSystemPrompt=false`），仍按原样生成。
-        runCatching { setSystemPrompt(BENCH_SYSTEM_PROMPT) }
+        // 必须在 generate 前**确保** system prompt 生效：官方引擎用 chat 模板拼回合，
+        // 不设 system 时 assistant 回合没被正确打开，实测 Qwen3 首个 token 即命中停止位 ⇒ 一直 0 token；
+        // 更致命的是设置失败后继续 generate 会在 native 侧对空模板取指针 ⇒ SIGSEGV（见 ensureSystemPrompt）。
+        // 因此这里失败直接返回错误，不再"按原样生成"。
+        val applied = ensureSystemPrompt(BENCH_SYSTEM_PROMPT)
+        if (!applied.ok) {
+            return Bench(
+                loadMs = load.elapsedMs, generateMs = 0, tokenCount = 0, tokPerSec = 0f,
+                errorCode = applied.errorCode, message = applied.message
+            )
+        }
         val gen = generate(prompt, predictLength)
         val tokPerSec = if (gen.elapsedMs > 0) {
             gen.tokenCount * 1000f / gen.elapsedMs
