@@ -115,6 +115,7 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.model.VideoPlaybackQueue
+import io.legado.app.help.video.NextEpisodeResolver
 import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.video.VideoTrace
 import io.legado.app.service.VideoPlayService
@@ -2725,6 +2726,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
             // 失败必须收起加载反馈，避免遮罩残留（spec Drawbacks 兜底闭环之一）
             binding.switchLoading.gone()
+            // §6.5：播放失败 ⇒ 当前集预解析结果失效（地址/token 过期后不得在下次切集继续命中）
+            NextEpisodeResolver.invalidate(
+                NextEpisodeResolver.key(
+                    VideoPlay.originalPlayUrl.orEmpty(),
+                    VideoPlay.source?.getKey(),
+                    VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
+                )
+            )
             // R3 阶段5：同步更新设置面板的调试日志
             settingsPanel?.appendDebugLog(it)
             // W2 / REQ-13（AD-04）：**首线路失败自动换线** —— 播放器终端点已把错误大类写入

@@ -42,6 +42,7 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.videoStreamClient
 import io.legado.app.help.player.SniffRace
 import io.legado.app.help.player.SniffRaceLimiter
+import io.legado.app.help.video.VideoBufferPolicy
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
@@ -150,58 +151,58 @@ object ExoPlayerHelper {
     }
 
     /**
-     * R3: 按带宽档位构建 LoadControl（激进策略，优化当前视频快速缓冲）
+     * 按带宽档位 + 用户策略构建 LoadControl（唯一参数来源见 [VideoBufferPolicy]）
      *
-     * 分档策略（R3 大幅提升 maxBuffer，减少当前视频卡顿）：
-     * - 弱网（<1Mbps）：minBuffer=10s, maxBuffer=30s, bufferForPlayback=500ms, bufferForPlaybackAfterRebuffer=1s
-     * - 中网（1-5Mbps）：minBuffer=8s, maxBuffer=90s（原30s→90s，提升3倍）, bufferForPlayback=1s, bufferForPlaybackAfterRebuffer=2s
-     * - 好网（≥5Mbps）：minBuffer=8s, maxBuffer=120s（原50s→120s，提升2.4倍）, bufferForPlayback=1s, bufferForPlaybackAfterRebuffer=2s
+     * 档位基准：
+     * - 弱网（<1Mbps）：minBuffer=5s, maxBuffer=30s, 起播阈值 500ms
+     * - 中网（1-5Mbps）：minBuffer=8s, maxBuffer=90s, 起播阈值 800ms
+     * - 好网（≥5Mbps）：minBuffer=8s, maxBuffer=120s, 起播阈值 500ms
      *
-     * R3 用户可配置：videoMaxBufferSec >0 时覆盖档位默认值（秒转毫秒）
+     * 用户策略（`playerBufferStrategy`）：自动/均衡保持档位；激进 maxBuffer×1.5 且起播阈值≤500ms；
+     * 保守 maxBuffer×0.6 且起播阈值 1.5s（弱网省流）。`videoMaxBufferSec>0` 时优先于档位基准。
      *
-     * 首帧优化（2026-07-28）：降低 minBufferMs 从 15s→8s（MEDIUM/GOOD）和 10s→5s（WEAK），
-     * 让首帧更快渲染（原 minBuffer=15s 导致首帧需缓冲 15s 才播放，用户感知卡顿）。
-     * maxBuffer 保持 90/120s 防播放中 rebuffer。
+     * 字节上限：不再 `-1` 不限，按 `maxBuffer秒数 × 基准码率 × 1.3` 计算并封顶 256MB（防 allocator 爆涨）。
      *
      * @param tier 带宽档位
      * @param allocator 共享内存分配器（T5.1 实例池场景传入共享 allocator，多实例共用同一缓冲内存池；null 则各实例独立）
-     * @return 对应档位的 DefaultLoadControl
+     * @return 对应档位与策略的 DefaultLoadControl
      */
     fun createLoadControlByTier(tier: BandwidthTier, allocator: DefaultAllocator? = null): DefaultLoadControl {
         val builder = DefaultLoadControl.Builder()
         allocator?.let { builder.setAllocator(it) }
         // R3: 用户可配置 maxBuffer（0=按档位自动，>0=用户指定秒数）
         val userMaxBufferSec = VideoPlay.videoMaxBufferSec
-        // 缓冲速度优化（P0）：解除字节上限，让缓冲完全由 maxBuffer 时长控制
-        // 默认 DEFAULT_TARGET_BUFFER_BYTES(~50MB) 会截断高码率视频的 maxBuffer 时长
-        // -1 表示不限制字节总量（对齐 Media3 官方推荐 Large buffer for high-bitrate content）
-        builder.setTargetBufferBytes(-1)
-        // 缓冲速度优化（P0）：时间优先于字节，确保 maxBuffer 时长真正生效
-        builder.setPrioritizeTimeOverSizeThresholds(true)
-        val loadControl = when (tier) {
-            BandwidthTier.WEAK -> {
-                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 30) * 1000
-                // 首帧优化：minBuffer 从 10s→5s，让弱网首帧更快渲染
-                builder.setBufferDurationsMs(5_000, maxBufferMs, 500, 1_000).build()
-            }
-            BandwidthTier.MEDIUM -> {
-                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 90) * 1000
-                // 首帧优化：minBuffer 从 15s→8s，bufferForPlayback 从 1s→800ms 加速起播
-                builder.setBufferDurationsMs(8_000, maxBufferMs, 800, 2_000).build()
-            }
-            BandwidthTier.GOOD -> {
-                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 120) * 1000
-                // 首帧优化：minBuffer 从 15s→8s，bufferForPlayback 从 1s→500ms 中高端机激进起播
-                builder.setBufferDurationsMs(8_000, maxBufferMs, 500, 2_000).build()
-            }
+        // §13.10：playerBufferStrategy 接线（原为死配置）；档位给出基准，策略只调 maxBuffer/起播阈值
+        val strategy = VideoPlay.playerBufferStrategy
+        val (tierMinMs, tierMaxMs, tierPlayMs) = when (tier) {
+            // 首帧优化：minBuffer 5s（弱网）/8s（中/好网），与历史优化保持一致
+            BandwidthTier.WEAK -> Triple(5_000, 30_000, 500)
+            BandwidthTier.MEDIUM -> Triple(8_000, 90_000, 800)
+            BandwidthTier.GOOD -> Triple(8_000, 120_000, 500)
         }
-        // 缓冲速度优化（P0）：日志验证 LoadControl 实际参数生效
+        val profile = VideoBufferPolicy.resolve(
+            tierMinBufferMs = tierMinMs,
+            tierMaxBufferMs = tierMaxMs,
+            tierBufferForPlaybackMs = tierPlayMs,
+            strategy = strategy,
+            userMaxBufferSec = userMaxBufferSec
+        )
+        // §13.5（B3）：不再用 -1 不限字节——按 maxBuffer 秒数×基准码率×安全系数封顶，防 allocator 无界增长
+        val targetBytes = VideoBufferPolicy.targetBufferBytes(profile.maxBufferMs)
+        builder.setTargetBufferBytes(targetBytes)
+        // 时间优先于字节，确保 maxBuffer 时长真正生效
+        builder.setPrioritizeTimeOverSizeThresholds(true)
+        val loadControl = builder.setBufferDurationsMs(
+            profile.minBufferMs,
+            profile.maxBufferMs,
+            profile.bufferForPlaybackMs,
+            profile.bufferForPlaybackAfterRebufferMs
+        ).build()
+        // 日志验证 LoadControl 实际参数生效（含策略归因）
         AppLog.put(
-            "[BufferSpeed] LoadControl tier=$tier maxBufferMs=${when (tier) {
-                BandwidthTier.WEAK -> (userMaxBufferSec.takeIf { it > 0 } ?: 30) * 1000
-                BandwidthTier.MEDIUM -> (userMaxBufferSec.takeIf { it > 0 } ?: 90) * 1000
-                BandwidthTier.GOOD -> (userMaxBufferSec.takeIf { it > 0 } ?: 120) * 1000
-            }} targetBufferBytes=-1 prioritizeTime=true"
+            "[BufferSpeed] LoadControl tier=$tier strategy=$strategy " +
+                "minBufferMs=${profile.minBufferMs} maxBufferMs=${profile.maxBufferMs} " +
+                "playMs=${profile.bufferForPlaybackMs} targetBufferBytes=$targetBytes prioritizeTime=true"
         )
         return loadControl
     }
@@ -1232,7 +1233,12 @@ object ExoPlayerHelper {
         } else {
             // P0-4: 注入防盗链默认请求头（UA + Referer 兜底）
             // 说明：setDefaultHeaders 被调用时会覆盖此默认值；此默认值仅用于未被 setDefaultHeaders 显式覆盖的请求
-            androidx.media3.datasource.cronet.CronetDataSource.Factory(engine, java.util.concurrent.Executors.newSingleThreadExecutor())
+            // §13.6（B4）：原 newSingleThreadExecutor 单线程供给不足（长视频高吞吐 + 缓存写调度共用）
+            // ⇒ 固定 3 线程；HTTP/1.1 与 TLS 回退策略不变
+            androidx.media3.datasource.cronet.CronetDataSource.Factory(
+                engine,
+                java.util.concurrent.Executors.newFixedThreadPool(3)
+            )
                 .setDefaultRequestProperties(buildAntiLeechHeaders())
         }
     }
