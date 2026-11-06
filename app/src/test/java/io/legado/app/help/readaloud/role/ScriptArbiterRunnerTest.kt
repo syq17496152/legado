@@ -159,4 +159,18 @@ class ScriptArbiterRunnerTest {
         assertEquals(1, outcome.merge.aiApplied)
         assertEquals("小红", outcome.merge.segments[0].characterName)
     }
+
+    /**
+     * 真机模型常按 1 起编号回答（i=批大小、n=候选个数）。旧实现直接越界丢弃 ⇒ ai=0。
+     * 现在出现"恰好越界一位"即判定整批 1 起并整体回退一位。
+     */
+    @Test
+    fun `模型按 1 起下标回答时也能落位`() = runBlocking {
+        val runtime = readyRuntime("{\"a\":[{\"i\":1,\"n\":1,\"c\":0.9}]}")
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(script, ::textOf, listOf("小明", "小红"))
+        assertEquals(1, outcome.merge.aiApplied)
+        assertEquals("小明", outcome.merge.segments[0].characterName)
+        assertEquals("local-ai", outcome.merge.segments[0].source)
+    }
 }

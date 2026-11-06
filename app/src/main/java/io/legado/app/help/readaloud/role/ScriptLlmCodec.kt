@@ -59,17 +59,27 @@ object ScriptLlmCodec {
         items: List<RawItem>,
         batch: List<ScriptSegment>,
         candidates: List<String>
-    ): List<ScriptArbiter.AiSuggestion> = items.mapNotNull { item ->
-        val segment = batch.getOrNull(item.segmentIndex) ?: return@mapNotNull null
-        val name = candidates.getOrNull(item.candidateIndex)?.trim().orEmpty()
-        if (name.isBlank()) return@mapNotNull null
-        ScriptArbiter.AiSuggestion(
-            paragraphIndex = segment.paragraphIndex,
-            start = segment.start,
-            end = segment.end,
-            characterName = name,
-            confidence = effectiveConfidence(item.confidence)
-        )
+    ): List<ScriptArbiter.AiSuggestion> {
+        // 下标基准自适应：提示词要求 0 起，但真机模型经常按 1 起回答（段号=批大小、候选号=候选数）。
+        // 只在出现「恰好越界一位」（== size）这种**确定性证据**时才判定整批 1 起；
+        // 明显越界（> size，多为模型幻觉）不参与判定，避免把整批带偏。
+        val oneBased = items.any {
+            it.segmentIndex == batch.size || it.candidateIndex == candidates.size
+        }
+        return items.mapNotNull { item ->
+            val i = if (oneBased) item.segmentIndex - 1 else item.segmentIndex
+            val n = if (oneBased) item.candidateIndex - 1 else item.candidateIndex
+            val segment = batch.getOrNull(i) ?: return@mapNotNull null
+            val name = candidates.getOrNull(n)?.trim().orEmpty()
+            if (name.isBlank()) return@mapNotNull null
+            ScriptArbiter.AiSuggestion(
+                paragraphIndex = segment.paragraphIndex,
+                start = segment.start,
+                end = segment.end,
+                characterName = name,
+                confidence = effectiveConfidence(item.confidence)
+            )
+        }
     }
 
     /** 去掉 ```json / ``` 围栏与首尾闲话，只保留最外层对象 */

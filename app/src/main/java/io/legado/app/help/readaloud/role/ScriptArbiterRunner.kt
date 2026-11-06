@@ -59,20 +59,18 @@ class ScriptArbiterRunner(private val llm: ScriptLlm?) {
             val gen = llm.generate(prompt, predictLength = predictTokens)
             if (gen.ok) {
                 val items = ScriptLlmCodec.parse(gen.text)
-                // 诊断留痕（测试包日志是排障命脉）：只记长度/条数/JSON 片段，不含正文。
-                // 真机若再出现 ai=0，可据此区分"没出 JSON"还是"出了但序号越界"。
+                val mapped = ScriptLlmCodec.toSuggestions(items, batch, candidates)
+                // 诊断留痕（测试包日志是排障命脉）：只记长度/条数/序号，不含正文。
+                // 真机若再出现 ai=0，可据此区分"没出 JSON / 段号越界 / 候选号越界"。
                 AppLog.putDebugWithTag(
                     AppLog.TAG_TTS_TRACE,
                     "scriptLlm batch=${batch.size} chars=${gen.text.length} items=${items.size}" +
-                        if (items.isEmpty() && gen.text.isNotBlank()) {
-                            " preview=${gen.text.take(160).replace('\n', ' ')}"
+                        " mapped=${mapped.size} cand=${candidates.size}" +
+                        if (items.isNotEmpty() && mapped.isEmpty()) {
+                            " firstI=${items.first().segmentIndex} firstN=${items.first().candidateIndex}"
                         } else ""
                 )
-                suggestions += ScriptLlmCodec.toSuggestions(
-                    items = items,
-                    batch = batch,
-                    candidates = candidates
-                )
+                suggestions += mapped
             } else if (error.isBlank()) {
                 error = gen.message
             }
