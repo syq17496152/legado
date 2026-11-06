@@ -29,9 +29,13 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
+import io.legado.app.BuildConfig
 import io.legado.app.base.BaseActivity
+import io.legado.app.constant.AppLog
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalLlmPrefs
+import io.legado.app.help.llm.DebugLlmOverride
+import io.legado.app.help.llm.LlmClient
 import io.legado.app.help.llm.LlmModelCatalog
 import io.legado.app.help.llm.LlmModelDownloader
 import io.legado.app.help.llm.LlmModelManager
@@ -116,6 +120,27 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
     }
 
     override fun onActivityCreated(savedInstanceState: android.os.Bundle?) {
+        // 仅 DEBUG：允许通过 Intent extra 注入本地 AI 开关。低内存设备被 RAM 门限拦在 UI 外，
+        // 而端侧链路验证（tasks 7.2/7.6）必须能打开它；改 prefs 文件会被平台回写（E15）。
+        DebugLlmOverride.request(
+            debugBuild = BuildConfig.BUILD_DEBUG,
+            wantEnable = intent?.getBooleanExtra(DebugLlmOverride.EXTRA_ENABLE, false) == true,
+            rawModelId = intent?.getStringExtra(DebugLlmOverride.EXTRA_MODEL_ID)
+        )?.let { request ->
+            AppConfig.localLlmProfileId = request.modelId
+            AppConfig.localLlmEnabled = true
+            // 顺带做一次 IPC 连通性自检：把「主进程 ↔ :llm」是否真的建立写进日志，
+            // 这样 7.2/7.6 的 L3 脚本不必依赖"某本书有正文"就能判定推理链路是否可用
+            lifecycleScope.launch {
+                val client = LlmClient.forContext(this@LlmSettingsActivity)
+                val connected = client.ensureConnected()
+                val phase = if (connected) client.status().phase else ""
+                AppLog.put(LlmSettingsState.ipcSelfCheckMessage(connected, phase))
+                client.close()
+                finish()
+            }
+            return
+        }
         reload()
         lifecycleScope.launch {
             val profiles = withContext(Dispatchers.IO) { LlmModelCatalog.load(this@LlmSettingsActivity) }

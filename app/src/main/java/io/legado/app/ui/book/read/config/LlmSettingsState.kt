@@ -106,4 +106,17 @@ object LlmSettingsState {
         if (profileId.isNullOrBlank() || profileTitle.isNullOrBlank()) return ""
         return if (profileId in installedIds) "" else profileTitle
     }
+
+    /**
+     * 调试注入后的 IPC 自检日志文案（仅 debug 路径会调用）。
+     *
+     * 为什么收在这里：`ai_tests/scripts/l3_local_ai_generate.py` 用「连接推理进程 成功」断言链路成立，
+     * 文案是脚本契约的一部分 —— 放纯函数里既能单测锁定，也避免后续改字把 L3 判据改坏。
+     */
+    fun ipcSelfCheckMessage(connected: Boolean, phase: String = ""): String =
+        if (connected) {
+            "DebugLlmOverride: 连接推理进程 成功（状态=${phase.ifBlank { "未知" }}）"
+        } else {
+            "DebugLlmOverride: 连接推理进程 失败"
+        }
 }

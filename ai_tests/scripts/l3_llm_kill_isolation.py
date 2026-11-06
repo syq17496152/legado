@@ -80,31 +80,49 @@ def pid_of(dev, name):
     return int(parts[0]) if parts else None
 
 
+def hard_kill(dev, package, tries=10):
+    """SIGKILL 主进程直到真的消失（返回 True）。
+
+    为什么不用 `am force-stop`：它是**异步**的，进程在退出过程中会把 SharedPreferences
+    内存镜像整文件回写，把外部刚写入的偏好覆盖掉（E15 实测：写 qwen → 启动后变空）。
+    SIGKILL 不给回写机会，是自动化改偏好唯一可靠的前置动作。
+    """
+    for _ in range(tries):
+        pid = pid_of(dev, package)
+        if not pid:
+            return True
+        dev.sh("kill -9 %d" % pid, root=True)
+        time.sleep(1)
+    return pid_of(dev, package) is None
+
+
 def read_prefs(dev):
     return dev.sh("cat /data/data/%s/shared_prefs/%s" % (PACKAGE, PREFS_NAME), root=True)
 
 
+def prefs_pairs(xml):
+    """把 SharedPreferences XML 归一化成 {name: value}。
+
+    为什么要归一化：应用重启后会把整份偏好**重新序列化**（缩进/空行/自闭合写法都可能变），
+    逐字节比较会误报"没写进去/没还原"（2026-11-06 实测：内容已生效但空行数不同）。
+    只比键值，才能区分"真的没写进去"和"格式被重排"。
+    """
+    pairs = {}
+    if not xml:
+        return pairs
+    for m in re.finditer(r'<(\w+)\s+name="([^"]+)"([^>]*?)(?:/>|>([^<]*)</\1>)', xml, re.S):
+        attrs, text = m.group(3), m.group(4)
+        val = re.search(r'value="([^"]*)"', attrs)
+        pairs[m.group(2)] = val.group(1) if val else (text or "")
+    return pairs
+
+
 def write_prefs(dev, text, owner=""):
-    tmp = ROOT / ".temp" / "prefs_patch.xml"
-    tmp.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_text(text, encoding="utf-8")
-    target = "/data/local/tmp/prefs_patch.xml"
-    subprocess.run([dev.adb, "-s", dev.serial, "push", str(tmp), target],
-                   capture_output=True, text=True, timeout=120)
-    path = "/data/data/%s/shared_prefs/%s" % (PACKAGE, PREFS_NAME)
-    dev.sh("cp %s %s" % (target, path), root=True)
-    # 属主必须沿用原文件（写错属主会让应用读不到偏好，表现为"设置全丢"）
-    if owner and ":" in owner:
-        dev.sh("chown %s %s" % (owner, path), root=True)
-    dev.sh("chmod 660 %s" % path, root=True)
-    dev.sh("restorecon %s 2>/dev/null" % path, root=True)
+    """把整份 XML 覆盖到应用偏好文件，并**回读校验**（返回是否写入成功）。
 
-
-def write_prefs_and_start(dev, text, owner, activity, extra=""):
-    """把「写偏好」和「拉起应用」放进**同一条 root shell**，把竞态窗口压到最小。
-
-    实测：先 force-stop 再单独 push/cp/am start 时，应用可能在两步之间被系统/自身逻辑拉起，
-    它会用旧内容回写 prefs（表现为"写进去的 profileId 启动后又变空"）。
+    用 `cat > 目标` 而不是 `cp`：`cp` 会新建 inode（可能带 shell 的 SELinux 标签，应用读不到），
+    在部分 ROM 上还会直接失败但退出码被 adb 吞掉 ⇒ 表现为「写了但值没变」。
+    覆盖原文件则保持 inode 与上下文，再补 chown/chmod/restorecon 三重保险。
     """
     tmp = ROOT / ".temp" / "prefs_patch.xml"
     tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -113,12 +131,28 @@ def write_prefs_and_start(dev, text, owner, activity, extra=""):
     subprocess.run([dev.adb, "-s", dev.serial, "push", str(tmp), target],
                    capture_output=True, text=True, timeout=120)
     path = "/data/data/%s/shared_prefs/%s" % (PACKAGE, PREFS_NAME)
-    script = "cp %s %s" % (target, path)
+    dev.sh("cat %s > %s" % (target, path), root=True)
+    # 属主必须沿用原文件（写错属主会让应用读不到偏好，表现为"设置全丢"）
     if owner and ":" in owner:
-        script += " && chown %s %s" % (owner, path)
-    script += " && chmod 660 %s && restorecon %s 2>/dev/null; am start -n %s/%s %s" % (
-        path, path, PACKAGE, activity, extra)
-    return dev.sh(script, root=True)
+        dev.sh("chown %s %s" % (owner, path), root=True)
+    dev.sh("chmod 660 %s" % path, root=True)
+    dev.sh("restorecon %s 2>/dev/null" % path, root=True)
+    # 归一化比对键值（应用会把整份 XML 重排，逐字节比较会误报）
+    return prefs_pairs(read_prefs(dev)) == prefs_pairs(text)
+
+
+def stop_app(dev, package):
+    """确保主进程消失（返回 True）。
+
+    先 `am force-stop`（系统层面标记停止，避免被杀后立刻重启），进程若仍存活再 SIGKILL。
+    必须等到**真的没有 pid** 才写偏好：否则应用退出/重启过程中的整文件回写会覆盖补丁（E15）。
+    """
+    dev.sh("am force-stop %s" % package, root=True)
+    for _ in range(8):
+        if not pid_of(dev, package):
+            return True
+        time.sleep(1)
+    return hard_kill(dev, package)
 
 
 def patch_local_ai(xml, profile_id):
@@ -205,27 +239,21 @@ def main():
     owner = dev.sh("stat -c %%u:%%g /data/data/%s/shared_prefs/%s" % (PACKAGE, PREFS_NAME), root=True)
     evidence["prefs_owner"] = owner
 
-    # force-stop 是异步的：进程没真正退出前，它的 SharedPreferences 缓存会在退出时回写，
-    # 把刚写进去的值覆盖掉（实测表现为「写入 qwen、启动后变空」）。
-    dead = False
-    for attempt in range(3):
-        dev.sh("am force-stop %s" % PACKAGE, root=(attempt > 0))
-        for _ in range(10):
-            if not pid_of(dev, PACKAGE):
-                dead = True
-                break
-            time.sleep(1)
-        if dead:
-            break
+    # 必须先让主进程**彻底**退出再写偏好：进程退出/重启过程中的整文件回写会覆盖补丁（E15）。
+    dead = stop_app(dev, PACKAGE)
     step("应用已停止", dead, "pid=%s" % pid_of(dev, PACKAGE))
 
     patched = patch_local_ai(original_prefs, model_id)
-    # 写偏好与拉起应用放在同一条 root shell 里（压小竞态窗口），并允许最多 3 次重试
     activity = "io.legado.app.ui.book.read.ReadBookActivity"
     extra = "--es bookUrl %s" % args.book_url
     kept = False
     for attempt in range(3):
-        write_prefs(dev, patched, owner)
+        written = write_prefs(dev, patched, owner)
+        step("写入偏好（第 %d 次）" % (attempt + 1), written,
+             "回读一致=%s" % written)
+        if not written:
+            # 文件写不进去（权限/SELinux）时继续拉起应用只会得到「值又变空」的假象
+            continue
         started = dev.sh("am start -n %s/%s %s" % (PACKAGE, activity, extra), root=True)
         time.sleep(12)
         on_disk = read_prefs(dev)
@@ -234,13 +262,25 @@ def main():
              "profileId=%s owner=%s start=%s" % (model_id, owner, started[:60]))
         if kept:
             break
-        dev.sh("am force-stop %s" % PACKAGE, root=True)
+        stop_app(dev, PACKAGE)
         time.sleep(2)
 
-    dev.sh("logcat -c")
+    # 基线进程必须**确定存在**：偏好路线失败时应用已被 force-stop 且没被成功拉起
+    # （ReadBookActivity 依赖有效 bookUrl），实测会让 main_pid_before=None，
+    # 使「主进程存活且 pid 未变」这条核心判据退化成不可验证。这里用 MainActivity 兜底建立基线。
+    dev.sh("am start -n %s/io.legado.app.ui.main.MainActivity" % PACKAGE, root=True)
     main_pid_before = pid_of(dev, PACKAGE)
+    for _ in range(15):
+        if main_pid_before:
+            break
+        time.sleep(2)
+        main_pid_before = pid_of(dev, PACKAGE)
+    dev.sh("logcat -c")
     evidence["main_pid_before"] = main_pid_before
-    step("打开书籍", bool(main_pid_before), "pid=%s" % main_pid_before)
+    step("主进程基线就绪", bool(main_pid_before), "pid=%s" % main_pid_before)
+    if not main_pid_before:
+        evidence["conclusion"] = "主进程未起来，无法建立 kill 前基线"
+        return _dump(evidence, 2)
     evidence["prefs_after_start"] = {"profileId_kept": kept}
 
     dev.sh("am start -n %s/io.legado.app.ui.book.read.config.CastSceneActivity" % PACKAGE, root=True)
@@ -295,11 +335,13 @@ def main():
     step("剧本已落盘（降级或正常）", (scripts.strip() or "0") != "0", "files=%s" % scripts.strip())
 
     if not args.keep_prefs:
-        dev.sh("am force-stop %s" % PACKAGE)
+        stop_app(dev, PACKAGE)
         write_prefs(dev, original_prefs, owner)
         restored = read_prefs(dev)
-        step("恢复原偏好", restored == original_prefs,
-             "已还原 %d 字节（校验一致=%s）" % (len(original_prefs), restored == original_prefs))
+        # 归一化比键值（应用重启会重排整份 XML，逐字节比较会误报"没还原"）
+        same = prefs_pairs(restored) == prefs_pairs(original_prefs)
+        step("恢复原偏好", same,
+             "已还原 %d 字节（校验一致=%s）" % (len(original_prefs), same))
 
     passed = survived and evidence["fatal_count"] == 0
     evidence["result"] = "PASS" if passed else "FAIL"

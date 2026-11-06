@@ -138,4 +138,22 @@ class LlmSettingsStateTest {
             LlmSettingsState.downloadEntryTitle("id", " ", emptyList())
         )
     }
+
+    /**
+     * 调试注入的 IPC 自检文案：L3 脚本按「连接推理进程 成功」判断链路是否成立，
+     * 文案即契约 —— 这里锁死，防止后续改字把 7.2 的判据悄悄改坏。
+     */
+    @Test
+    fun `IPC 自检文案是 L3 脚本契约`() {
+        val ok = LlmSettingsState.ipcSelfCheckMessage(connected = true, phase = "READY")
+        assertTrue("必须含脚本断言的关键词", ok.contains("连接推理进程 成功"))
+        assertTrue("必须带出推理进程状态", ok.contains("READY"))
+
+        val unknown = LlmSettingsState.ipcSelfCheckMessage(connected = true, phase = "")
+        assertTrue("状态为空要有兜底文案，不能出现空括号", unknown.contains("状态=未知"))
+
+        val failed = LlmSettingsState.ipcSelfCheckMessage(connected = false)
+        assertFalse("失败文案不得包含「成功」，否则脚本会误判 PASS", failed.contains("成功"))
+        assertTrue(failed.contains("连接推理进程 失败"))
+    }
 }

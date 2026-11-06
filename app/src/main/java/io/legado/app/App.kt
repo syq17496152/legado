@@ -91,6 +91,7 @@ import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import splitties.init.appCtx
+import splitties.init.injectAsAppCtx
 import splitties.systemservices.notificationManager
 import java.io.File
 import java.net.URL
@@ -115,10 +116,22 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        if (isIsolatedSandboxProcess(currentProcessName())) {
+        val processName = currentProcessName()
+        if (isIsolatedSandboxProcess(processName)) {
             // 隔离进程只承载 quickjs 沙箱（DB/通知/网络/CrashHandler 在该进程均不可用或无意义）
             return
         }
+        // `:llm` 推理进程只应承载 llama.cpp：**不得**跑主进程初始化。
+        // 2026-11-06 模拟器铁证：修复 appCtx 注入后 `:llm` 会继续执行下面的整套初始化，
+        // 其中某处加载了 WebView provider，抢占「同一 data 目录只能有一个进程用 WebView」的锁，
+        // 随后主进程创建 WebView 直接 FATAL：
+        //   `Using WebView from more than one process at once ... lock owner <pkg>:llm`
+        // 此外它还会重复初始化 DB/Cronet/DoH 并写 shared_prefs（多进程整文件回写会丢设置）。
+        if (isLlmInferenceProcess(processName)) {
+            injectAppCtxIfNeeded(this)
+            return
+        }
+        injectAppCtxIfNeeded(this)
         CrashHandler(this)
         // MCP 内腿服务（8765）· debug 变体专属（release 为空实现）：web-mcp-productization 二期 tasks 5.1
         DebugAppHook.onAppCreate()
@@ -272,10 +285,13 @@ class App : Application() {
     }
 
     override fun attachBaseContext(base: Context) {
-        if (isIsolatedSandboxProcess(currentProcessName())) {
+        val processName = currentProcessName()
+        if (isIsolatedSandboxProcess(processName) || isLlmInferenceProcess(processName)) {
             // 隔离进程（quickjs_sandbox）只承载 JS 沙箱：
             // 该进程的 ContextImpl 拿不到 UserManager ⇒ defaultSharedPreferences 直接 NPE
             // （2026-10-22 真机实测：进程启动即 FATAL，绑定超时 → BIND_TIMEOUT）。
+            // `:llm` 推理进程同理不需要语言包装与主题迁移——**尤其不能在这里写 shared_prefs**：
+            // 两个进程各持一份整文件镜像回写，会互相覆盖设置（用户侧表现为"设置莫名丢失"）。
             super.attachBaseContext(base)
             return
         }
@@ -621,3 +637,40 @@ internal fun isIsolatedSandboxProcess(processName: String?): Boolean =
 
 /** 与 `quickjs-sandbox` 模块的 `QuickJsSandboxProtocol.PROCESS_SUFFIX` 保持一致（模块内为 internal）。 */
 internal const val SANDBOX_PROCESS_SUFFIX = ":quickjs_sandbox"
+
+/** 端侧 LLM 推理进程后缀（`AndroidManifest` 里 `LlmService` 的 `android:process`）。 */
+internal const val LLM_PROCESS_SUFFIX = ":llm"
+
+/**
+ * 是否为端侧 LLM 推理进程（`:llm`）。
+ *
+ * 该进程只允许承载 llama.cpp 推理（design AD-11）：它**不应**跑 [App.onCreate] 的主进程初始化链
+ * （DB / Cronet / DoH / WebView / 主题迁移 / `shared_prefs` 写入）。
+ * 2026-11-06 模拟器铁证：`:llm` 跑完整初始化后加载了 WebView provider，抢占
+ * 「同一 data 目录只能有一个进程使用 WebView」的锁，主进程随后创建 WebView 直接 FATAL。
+ */
+internal fun isLlmInferenceProcess(processName: String?): Boolean =
+    processName != null && processName.endsWith(LLM_PROCESS_SUFFIX)
+
+/**
+ * 是否需要在本进程内兜底注入 `appCtx`（E14：本地 AI 推理进程启动即崩）。
+ *
+ * 判定方式：**只做一次探测读取**，抛异常（`appCtx has not been initialized!`）才返回 true。
+ * 因此主进程（App Startup 已注入）零副作用，重复调用幂等；判断依据不是进程名，
+ * 避免新增次级进程时再逐个补白名单。
+ *
+ * 提取为纯函数是为了让 JVM 单测能直接覆盖「已初始化不注入 / 未初始化注入」两条分支。
+ */
+internal fun shouldInjectAppCtx(probe: () -> Unit): Boolean = runCatching(probe).isFailure
+
+/**
+ * 幂等兜底注入 `appCtx`：只在本进程确实没有注入时执行（主进程恒为 no-op）。
+ *
+ * 适用场景：`androidx.startup` 的 `AppCtxInitializer` 在次级进程（`:llm`）实测未生效，
+ * 首个 `appCtx` 访问即抛 `IllegalStateException` ⇒ 进程起不来。
+ */
+private fun injectAppCtxIfNeeded(context: Context) {
+    if (shouldInjectAppCtx { appCtx }) {
+        context.injectAsAppCtx()
+    }
+}

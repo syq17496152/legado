@@ -51,6 +51,8 @@ class LlmClient private constructor(private val context: Context) {
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             messenger = service?.let { Messenger(it) }
+            // 诊断日志（保留）：这是"本地 AI 到底连上没有"的唯一直接证据
+            AppLog.put("LlmClient onServiceConnected binder=${service != null}")
             connectDeferred?.complete(messenger != null)
         }
 
@@ -172,12 +174,15 @@ class LlmClient private constructor(private val context: Context) {
         }.getOrDefault(false)
         if (!bound) {
             connectDeferred = null
+            AppLog.putWarn("LlmClient bindService 返回 false（系统拒绝绑定）")
             return@withContext false
         }
         // bindService 是异步的：以 onServiceConnected 回调完成为准，超时即失败并解绑
         val ok = withTimeoutOrNull(timeoutMs) { deferred.await() } ?: false
         connectDeferred = null
         if (!ok) {
+            // 诊断日志（保留）：区分"回调没来"与"回调来了但 binder 为空"
+            AppLog.putWarn("LlmClient 等 onServiceConnected 超时（${timeoutMs}ms）")
             runCatching { context.unbindService(connection) }
         }
         ok

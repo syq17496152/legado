@@ -65,7 +65,12 @@ class LlmService : Service() {
         AppLog.put("LlmService 启动（进程隔离推理）")
     }
 
-    override fun onBind(intent: Intent?): IBinder? = messenger?.binder
+    override fun onBind(intent: Intent?): IBinder? {
+        // 诊断日志（保留）：bind 是否真的回调 + binder 是否为空，是排查 7.2 链路的第一步
+        val binder = messenger?.binder
+        AppLog.put("LlmService onBind binder=${binder != null}")
+        return binder
+    }
 
     override fun onDestroy() {
         runCatching { running?.cancel() }
