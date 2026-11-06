@@ -979,7 +979,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                     val responseCodeField = cause403.javaClass.getDeclaredField("responseCode")
                     responseCodeField.isAccessible = true
                     val responseCode = responseCodeField.get(cause403) as? Int
-                    if (responseCode == 403 || responseCode == 410 || responseCode == 451) {
+                    // 策略抽取（纯函数单测）：403/410/451 才补头重试，其余走降级链
+                    if (responseCode != null &&
+                        PlaybackHttpRetryPolicy.decide(responseCode, retryCount, MAX_RETRY) ==
+                        HttpRetryAction.REFRESH_HEADERS
+                    ) {
                         retryCount++
                         val refreshedHeaders = (currentHeaders ?: emptyMap()).toMutableMap()
                         val refreshedCookie = runCatching {
@@ -995,7 +999,14 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                         currentHeaders = refreshedHeaders
                         ExoPlayerHelper.setDefaultHeaders(refreshedHeaders)
                         mInternalPlayer?.let { player ->
-                            player.seekToDefaultPosition()
+                            // §13.9（design §1.14 #7）：补头重试必须**续播原进度**。
+                            // 旧实现用 seekToDefaultPosition()，长视频中途 403 会直接回到 0 从头播。
+                            val resumePosMs = player.currentPosition.coerceAtLeast(0L)
+                            AppLog.put(
+                                "ExoPlayer 403 补头重试续播: resumePosMs=$resumePosMs, " +
+                                    "durMs=${player.duration}"
+                            )
+                            player.seekTo(resumePosMs)
                             player.prepare()
                         }
                         return

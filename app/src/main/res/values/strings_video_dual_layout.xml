@@ -40,4 +40,7 @@
     <string name="video_listen_mode">听视频</string>
     <string name="video_listen_mode_on">听视频模式：画面已隐藏，可锁屏或退后台继续听</string>
     <string name="video_listen_mode_off">已恢复画面</string>
+    <!-- 7.1（2026-11-07）：播完续播 3 秒倒计时，可取消（避免误连播） -->
+    <string name="video_advance_countdown">%1$d 秒后播放下一集</string>
+    <string name="video_advance_cancel">取消</string>
 </resources>

@@ -140,6 +140,7 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.text.ScrollTextView
+import com.google.android.material.snackbar.Snackbar
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
@@ -689,8 +690,48 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             kotlin.runCatching { VideoPlay.videoManager.currentPosition }.getOrDefault(0L)
     }
 
+    // ==================== §7.1 播完续播倒计时提示（3 秒可取消） ====================
+
+    private var advanceSnackbar: Snackbar? = null
+
+    /** 前台注册 / 离屏注销的幂等协调（纯行为，单测锁定） */
+    private val advanceCountdownHost = AdvanceCountdownHost(
+        register = { VideoPlay.addAdvanceCountdownListener(advanceCountdownListener) },
+        unregister = { VideoPlay.removeAdvanceCountdownListener(advanceCountdownListener) }
+    )
+
+    /**
+     * 倒计时宿主：Snackbar 文案随剩余秒数刷新，点「取消」终止本次续播。
+     * 仅在 Activity 前台注册；悬浮窗/后台播放仍由 VideoPlay 立即续播。
+     */
+    private val advanceCountdownListener = object : VideoPlay.AdvanceCountdownListener {
+        override fun onAdvanceCountdown(secondsLeft: Int) {
+            val text = getString(R.string.video_advance_countdown, secondsLeft)
+            val bar = advanceSnackbar ?: Snackbar.make(
+                binding.root,
+                text,
+                Snackbar.LENGTH_INDEFINITE
+            ).apply {
+                setAction(R.string.video_advance_cancel) {
+                    VideoPlay.cancelPendingAdvance("user")
+                }
+                show()
+            }.also { advanceSnackbar = it }
+            bar.setText(text)
+        }
+
+        override fun onAdvanceCountdownFinished() {
+            advanceSnackbar?.dismiss()
+            advanceSnackbar = null
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        // §7.1：离开前台时注销倒计时宿主（悬浮窗/后台无提示载体 ⇒ VideoPlay 恢复立即续播）
+        advanceCountdownHost.onPause()
+        advanceSnackbar?.dismiss()
+        advanceSnackbar = null
         // add-dlna-cast AD-14：Activity 离开前台即注销通道，防止单例持有 Activity
         DlnaCastManager.playerControl = null
         if (initSourceJob?.isActive == true) {
@@ -711,6 +752,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     override fun onResume() {
         super.onResume()
+        // §7.1：注册播完续播倒计时宿主（有宿主才延迟；见 AdvanceCountdown.plan）
+        advanceCountdownHost.onResume()
         FirstFramePreloader.cancelDelayedClear()
         // 兜底补跑：onPause 取消 initSourceJob 后若会话仍未就绪（含「onResume→onPause→onResume」
         // 瞬态把刚起的协程打断），必须重新初始化，否则界面停在无播放器的白屏（播放不了）。

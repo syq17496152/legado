@@ -47,6 +47,7 @@ import io.legado.app.help.gsyVideo.ExoVideoManager
 import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
 import io.legado.app.help.gsyVideo.FloatingPlayer
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.video.AdvanceCountdown
 import io.legado.app.help.video.AdvanceTarget
 import io.legado.app.help.video.EndedTokenDeduper
 import io.legado.app.help.video.EntryContext
@@ -81,6 +82,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import splitties.systemservices.connectivityManager
@@ -1462,6 +1464,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 可能吞掉真实结束事件。释放语义只做解绑。
      */
     fun release() {
+        cancelPendingAdvance("release")
         sMediaPlayerListener = null
         sSwitchVideo = null
     }
@@ -1472,6 +1475,8 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     suspend fun initSource(sourceKey: String?, sourceType: Int?, bookUrl: String?, record:String?): Boolean = withContext(IO) {
         isLoading = true
+        // §7.1：新会话开始前取消上一会话尚未执行的续播倒计时
+        cancelPendingAdvance("session_switch")
         // A2 修复：新源加载视为首次播放（CDN 冷启动场景，BUFFERING 超时 25s）
         hasPlayedSuccessfully = false
         // 多线路多集状态初始化：initSource 是所有 isNew=true 新会话的必经入口
@@ -1828,14 +1833,15 @@ object VideoPlay : CoroutineScope by MainScope(){
             )
             return false
         }
+        // §7.1：倒计时等待期内的再次结束回调同样视为重复（去重窗口只有 1.2s，短于 3s 倒计时）
         val stdPlayer = player as? StandardGSYVideoPlayer
-        val guardReason = when {
-            switchingInProgress -> "switching"
-            layoutSwitchInProgress -> "layout_switching"
-            stdPlayer == null -> "player_invalid"
-            lastPlaybackErrorKind != null -> "play_error"
-            else -> null
-        }
+        val guardReason = advanceBlockReason(
+            switching = switchingInProgress,
+            layoutSwitching = layoutSwitchInProgress,
+            playerValid = stdPlayer != null,
+            playError = lastPlaybackErrorKind != null,
+            countdownPending = advanceCountdownJob?.isActive == true
+        )
         if (guardReason != null) {
             VideoTrace.event(
                 "advance_decision", "entry" to origin, "target" to "STOP",
@@ -1867,33 +1873,156 @@ object VideoPlay : CoroutineScope by MainScope(){
             "target" to target::class.simpleName
         )
         val targetPlayer = stdPlayer ?: return false
-        return when (target) {
-            is AdvanceTarget.NextEpisode -> {
-                val ok =
-                    if (isBook) upDurIndex(1, targetPlayer) else upRssEpisodeIndex(1, targetPlayer)
-                VideoTrace.event(
-                    "advance_decision", "entry" to origin, "target" to "NEXT_EPISODE",
-                    "next" to target.nextIndex, "executed" to ok
-                )
-                ok
-            }
-            is AdvanceTarget.NextArticle -> {
-                val ok = switchToArticle(target.nextIndex, targetPlayer)
-                VideoTrace.event(
-                    "advance_decision", "entry" to origin, "target" to "NEXT_ARTICLE",
-                    "next" to target.nextIndex, "executed" to ok
-                )
-                ok
-            }
-            is AdvanceTarget.AskNextRoute -> {
-                appCtx.toastOnUi("${EpisodeAdvancePolicy.REASON_ROUTE_END}")
-                false
-            }
-            is AdvanceTarget.Stop -> {
-                appCtx.toastOnUi(target.reason)
-                false
+        // §7.1：有 UI 宿主时先给 3 秒可取消提示，避免误连播；
+        // 无宿主（悬浮窗 / 后台 Service）保持原来的立即续播，避免「播完黑屏 3 秒」。
+        if (target is AdvanceTarget.NextEpisode || target is AdvanceTarget.NextArticle) {
+            val plan = AdvanceCountdown.plan(advanceCountdownListeners.isNotEmpty())
+            if (plan is AdvanceCountdown.Plan.Delay) {
+                scheduleAdvance(target, origin, targetPlayer, plan.seconds)
+                return true
             }
         }
+        return dispatchAdvance(target, origin, targetPlayer)
+    }
+
+    /**
+     * 立即执行续播分派（书源章节 / 订阅源集数 / 文章）
+     *
+     * 从 [advanceEpisode] 抽出，供「倒计时到点」与「无倒计时宿主」两条路径共用。
+     */
+    private fun dispatchAdvance(
+        target: AdvanceTarget,
+        origin: String,
+        targetPlayer: StandardGSYVideoPlayer
+    ): Boolean = when (target) {
+        is AdvanceTarget.NextEpisode -> {
+            val ok =
+                if (book != null) upDurIndex(1, targetPlayer) else upRssEpisodeIndex(1, targetPlayer)
+            VideoTrace.event(
+                "advance_decision", "entry" to origin, "target" to "NEXT_EPISODE",
+                "next" to target.nextIndex, "executed" to ok
+            )
+            ok
+        }
+        is AdvanceTarget.NextArticle -> {
+            val ok = switchToArticle(target.nextIndex, targetPlayer)
+            VideoTrace.event(
+                "advance_decision", "entry" to origin, "target" to "NEXT_ARTICLE",
+                "next" to target.nextIndex, "executed" to ok
+            )
+            ok
+        }
+        is AdvanceTarget.AskNextRoute -> {
+            appCtx.toastOnUi("${EpisodeAdvancePolicy.REASON_ROUTE_END}")
+            false
+        }
+        is AdvanceTarget.Stop -> {
+            appCtx.toastOnUi(target.reason)
+            false
+        }
+    }
+
+    // ==================== §7.1 播完续播倒计时（可取消） ====================
+
+    /** 倒计时提示宿主（Activity 注册；无宿主时保持立即续播） */
+    interface AdvanceCountdownListener {
+        /** 剩余秒数（每秒级刷新） */
+        fun onAdvanceCountdown(secondsLeft: Int)
+
+        /** 倒计时结束或取消：宿主应隐藏提示 */
+        fun onAdvanceCountdownFinished()
+    }
+
+    private val advanceCountdownListeners =
+        java.util.concurrent.CopyOnWriteArraySet<AdvanceCountdownListener>()
+
+    /** 待执行的续播倒计时任务（跨线程读写：initSource 在 IO，调度在主线程） */
+    @Volatile
+    private var advanceCountdownJob: Job? = null
+
+    /**
+     * 世代号：新倒计时/取消时递增。
+     * 旧协程被取消后仍会进入 finally，靠世代号避免把新任务引用清空。
+     */
+    private var advanceCountdownGeneration = 0
+
+    fun addAdvanceCountdownListener(listener: AdvanceCountdownListener) {
+        advanceCountdownListeners.add(listener)
+    }
+
+    fun removeAdvanceCountdownListener(listener: AdvanceCountdownListener) {
+        advanceCountdownListeners.remove(listener)
+    }
+
+    /**
+     * 取消待执行的续播（用户点「取消」/会话切换）
+     *
+     * @return true=确实取消了一个待执行倒计时
+     */
+    fun cancelPendingAdvance(reason: String): Boolean {
+        val job = advanceCountdownJob ?: return false
+        advanceCountdownGeneration++
+        advanceCountdownJob = null
+        job.cancel()
+        // 调用方可能位于 IO（initSource）；宿主 UI 回调统一切回主线程
+        launch { notifyAdvanceCountdownFinished() }
+        VideoTrace.event("advance_countdown", "action" to "cancel", "reason" to reason)
+        return true
+    }
+
+    private fun notifyAdvanceCountdown(secondsLeft: Int) {
+        advanceCountdownListeners.forEach {
+            runCatching { it.onAdvanceCountdown(secondsLeft) }
+        }
+    }
+
+    private fun notifyAdvanceCountdownFinished() {
+        advanceCountdownListeners.forEach {
+            runCatching { it.onAdvanceCountdownFinished() }
+        }
+    }
+
+    /**
+     * 调度延迟续播：倒计时结束才执行 [dispatchAdvance]；被取消则什么也不做。
+     */
+    private fun scheduleAdvance(
+        target: AdvanceTarget,
+        origin: String,
+        targetPlayer: StandardGSYVideoPlayer,
+        seconds: Int
+    ) {
+        advanceCountdownJob?.cancel()
+        val generation = ++advanceCountdownGeneration
+        val totalMs = seconds * 1000L
+        VideoTrace.event(
+            "advance_countdown", "action" to "start", "seconds" to seconds, "entry" to origin
+        )
+        var fired = false
+        val job = launch {
+            val start = android.os.SystemClock.uptimeMillis()
+            try {
+                notifyAdvanceCountdown(seconds)
+                while (true) {
+                    delay(AdvanceCountdown.TICK_MS)
+                    val left = AdvanceCountdown.secondsLeft(
+                        android.os.SystemClock.uptimeMillis() - start, totalMs
+                    )
+                    if (left <= 0) break
+                    notifyAdvanceCountdown(left)
+                }
+                fired = true
+                notifyAdvanceCountdownFinished()
+                VideoTrace.event("advance_countdown", "action" to "fire", "entry" to origin)
+                dispatchAdvance(target, origin, targetPlayer)
+            } finally {
+                // 取消路径也要隐藏提示；到点路径已在上面隐藏过
+                if (!fired) notifyAdvanceCountdownFinished()
+                if (generation == advanceCountdownGeneration) {
+                    advanceCountdownJob = null
+                }
+            }
+        }
+        advanceCountdownJob = job
     }
 
     /**
