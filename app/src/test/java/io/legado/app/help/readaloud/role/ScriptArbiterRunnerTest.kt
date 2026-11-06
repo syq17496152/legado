@@ -146,4 +146,17 @@ class ScriptArbiterRunnerTest {
         assertEquals("local-ai", outcome.merge.segments[0].source)
         assertEquals(0, outcome.merge.rejectedAi)
     }
+
+    /**
+     * 真机上模型常省略 `c` 字段；旧实现把它当非法整条丢弃 ⇒ 同样表现为 ai=0。
+     * 现在缺省/越界一律归一为固定可信值，只要 i/n 合法就要能落位。
+     */
+    @Test
+    fun `模型省略置信度字段时仍能落位`() = runBlocking {
+        val runtime = readyRuntime("{\"a\":[{\"i\":0,\"n\":1}]}")
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(script, ::textOf, listOf("小明", "小红"))
+        assertEquals(1, outcome.merge.aiApplied)
+        assertEquals("小红", outcome.merge.segments[0].characterName)
+    }
 }

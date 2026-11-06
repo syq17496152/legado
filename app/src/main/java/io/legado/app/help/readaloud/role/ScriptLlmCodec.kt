@@ -26,10 +26,11 @@ object ScriptLlmCodec {
                 val obj = element.asJsonObject
                 val i = runCatching { obj.get("i").asInt }.getOrNull() ?: return@mapNotNull null
                 val n = runCatching { obj.get("n").asInt }.getOrNull() ?: return@mapNotNull null
-                val c = runCatching { obj.get("c").asDouble }.getOrNull() ?: return@mapNotNull null
-                // 非法值直接丢弃（段号/候选号不能为负，置信度必须落在 [0,1]）
-                if (i < 0 || n < 0 || c < 0.0 || c > 1.0) return@mapNotNull null
-                RawItem(i, n, c)
+                if (i < 0 || n < 0) return@mapNotNull null
+                // c 允许缺省/越界：模型自报置信度不可靠（见 effectiveConfidence），不能因为少一个 c
+                // 就把整条建议丢掉（真机上很容易表现为"模型答了但 ai=0"）。
+                val c = runCatching { obj.get("c").asDouble }.getOrNull() ?: MODEL_CONFIDENCE_FALLBACK
+                RawItem(i, n, effectiveConfidence(c))
             }
         }.getOrDefault(emptyList())
     }

@@ -1,5 +1,7 @@
 package io.legado.app.help.readaloud.role
 
+import io.legado.app.constant.AppLog
+
 /**
  * 3.4 剧本仲裁执行器：把「组批 → 调模型 → 解析 → 合并」串起来（纯业务编排，不碰线程）。
  *
@@ -56,8 +58,18 @@ class ScriptArbiterRunner(private val llm: ScriptLlm?) {
             val prompt = ScriptPromptTemplates.user(batch.map { it to textOf(it) })
             val gen = llm.generate(prompt, predictLength = predictTokens)
             if (gen.ok) {
+                val items = ScriptLlmCodec.parse(gen.text)
+                // 诊断留痕（测试包日志是排障命脉）：只记长度/条数/JSON 片段，不含正文。
+                // 真机若再出现 ai=0，可据此区分"没出 JSON"还是"出了但序号越界"。
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "scriptLlm batch=${batch.size} chars=${gen.text.length} items=${items.size}" +
+                        if (items.isEmpty() && gen.text.isNotBlank()) {
+                            " preview=${gen.text.take(160).replace('\n', ' ')}"
+                        } else ""
+                )
                 suggestions += ScriptLlmCodec.toSuggestions(
-                    items = ScriptLlmCodec.parse(gen.text),
+                    items = items,
                     batch = batch,
                     candidates = candidates
                 )
