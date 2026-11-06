@@ -686,12 +686,24 @@ object VideoUrlExtractor {
         ruleData: RuleDataInterface?
     ): SniffCandidate? {
         if (url.isBlank()) return null
+        val sniffStart = android.os.SystemClock.uptimeMillis()
+        VideoTrace.event(
+            stage = "sniff_start",
+            "url" to VideoTrace.urlPath(url),
+            "source" to (source?.javaClass?.simpleName ?: "-")
+        )
         // Bug-fix 2026-07-26: URL 已是视频流格式时直接返回，跳过三层解析
         // 铁证：logcat 11 次 .m3u8 URL 走完整 12 秒超时返回 null 触发 WebView 降级（WebView 也不支持 HLS）
         // 回归原因：R4 T2.9 改造加入"超时返回 null"逻辑，但未补充"URL已是视频流"快速路径
         // 修复：识别 .m3u8/.mpd/.mp4/.flv/.mkv/.webm/.ts(排除) 等视频流后缀，直接交给 ExoPlayer
         if (isDirectVideoStreamUrl(url)) {
             AppLog.putInfo("extractVideoUrlForEpisode: URL已是视频流, 跳过三层解析直接返回, ${sanitizeUrl(url)}")
+            VideoTrace.event(
+                stage = "sniff_hit",
+                "engine" to "fast_direct",
+                "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                "final" to VideoTrace.urlPath(url)
+            )
             return SniffCandidate(url = url, source = SniffCandidate.SOURCE_FAST)
         }
         // 2026-10-24 回归修复：无扩展名的媒体直链（CDN path 不带 .mp4）按 Content-Type 判直连。
@@ -705,6 +717,12 @@ object VideoUrlExtractor {
         playerPageCache[url]?.let { entry ->
             if (System.currentTimeMillis() - entry.timestamp < PLAYER_PAGE_CACHE_TTL_MS) {
                 AppLog.putInfo("FR-8 预解析缓存命中, url=${sanitizeUrl(url)}")
+                VideoTrace.event(
+                    stage = "sniff_hit",
+                    "engine" to "page_cache",
+                    "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                    "final" to VideoTrace.urlPath(entry.videoUrl)
+                )
                 // 静态解析路径无 WebView 上下文，headers 留空由消费端走源配置兜底
                 return SniffCandidate(url = entry.videoUrl, source = SniffCandidate.SOURCE_MACCMS)
             }
@@ -738,6 +756,12 @@ object VideoUrlExtractor {
                 val m3u8Url = extractPlayerAaaaUrl(playPageHtml)
                 if (!m3u8Url.isNullOrBlank()) {
                     AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析成功, m3u8UrlLen=${m3u8Url.length}")
+                    VideoTrace.event(
+                        stage = "sniff_hit",
+                        "engine" to "maccms",
+                        "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                        "final" to VideoTrace.urlPath(m3u8Url)
+                    )
                     playerPageCache[url] = PlayerPageCacheEntry(m3u8Url, System.currentTimeMillis())
                     // 静态解析无 WebView 上下文，headers 留空走消费端源配置兜底
                     return SniffCandidate(url = m3u8Url, source = SniffCandidate.SOURCE_MACCMS)
@@ -747,6 +771,13 @@ object VideoUrlExtractor {
                     val domUrls = extract(playPageHtml, resolvedUrl)
                     if (domUrls.isNotEmpty()) {
                         AppLog.put("extractVideoUrlForEpisode: 第二层DOM解析成功, urlCount=${domUrls.size}")
+                        VideoTrace.event(
+                            stage = "sniff_hit",
+                            "engine" to "dom",
+                            "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                            "count" to domUrls.size,
+                            "final" to VideoTrace.urlPath(domUrls[0])
+                        )
                         playerPageCache[url] = PlayerPageCacheEntry(domUrls[0], System.currentTimeMillis())
                         return SniffCandidate(url = domUrls[0], source = SniffCandidate.SOURCE_DOM)
                     }
@@ -764,17 +795,35 @@ object VideoUrlExtractor {
             val webViewUrl = webViewCandidate?.url
             if (!webViewUrl.isNullOrBlank() && webViewUrl != url) {
                 AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包成功, urlLen=${webViewUrl.length}")
+                VideoTrace.event(
+                    stage = "sniff_hit",
+                    "engine" to "webview",
+                    "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                    "final" to VideoTrace.urlPath(webViewUrl)
+                )
                 playerPageCache[url] = PlayerPageCacheEntry(webViewUrl, System.currentTimeMillis())
                 webViewCandidate
             } else {
                 // T2.9: 第三层失败返回 null（解决 Bug-16：不返回非视频流URL给 ExoPlayer）
                 // 原 resolvedUrl 可能是文章页 URL（非视频流），传给 ExoPlayer 会触发 UnrecognizedInputFormatException
                 AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包返回null或等于原URL, ${sanitizeUrl(url)}")
+                VideoTrace.event(
+                    stage = "sniff_fail",
+                    "engine" to "webview",
+                    "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                    "url" to VideoTrace.urlPath(url)
+                )
                 null
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
             // 嗅探超时只算本层失败；原实现按 CancellationException 重抛会取消整条播放协程（2026-10-24 回归）
             AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包超时, 返回 null 交由上层回退直连")
+            VideoTrace.event(
+                stage = "sniff_fail",
+                "engine" to "webview_timeout",
+                "costMs" to (android.os.SystemClock.uptimeMillis() - sniffStart),
+                "url" to VideoTrace.urlPath(url)
+            )
             null
         } catch (e: kotlinx.coroutines.CancellationException) {
             // T2.11: CancellationException 守卫（解决 Bug-17 + Bug-18：协程取消必须传播）

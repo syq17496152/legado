@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.legado.app.constant.AppLog
+import io.legado.app.help.video.VideoTrace
 import splitties.init.appCtx
 
 /**
@@ -176,6 +177,13 @@ object PlayerInstancePool {
                 "PlayerPool: POOL_DISABLED acquire (create new), " +
                     "playerId=${System.identityHashCode(player)}"
             )
+            VideoTrace.event(
+                stage = "player_acquire",
+                "playerId" to System.identityHashCode(player),
+                "hit" to false,
+                "poolEnabled" to false,
+                "thread" to Thread.currentThread().name
+            )
             return player
         }
         val reused = pool.removeFirstOrNull()
@@ -184,6 +192,13 @@ object PlayerInstancePool {
                 "PlayerPool: acquire hit (reuse), poolSize=${pool.size}, " +
                     "playerId=${System.identityHashCode(reused)}, " +
                     "selector=${System.identityHashCode(selectorMap[reused])}"
+            )
+            VideoTrace.event(
+                stage = "player_acquire",
+                "playerId" to System.identityHashCode(reused),
+                "hit" to true,
+                "poolSize" to pool.size,
+                "thread" to Thread.currentThread().name
             )
             return reused
         }
@@ -205,6 +220,13 @@ object PlayerInstancePool {
         AppLog.put(
             "PlayerPool: acquire miss (create new), " +
                 "selector=${System.identityHashCode(selector)}"
+        )
+        VideoTrace.event(
+            stage = "player_acquire",
+            "playerId" to System.identityHashCode(player),
+            "hit" to false,
+            "poolSize" to pool.size,
+            "thread" to Thread.currentThread().name
         )
         return player
     }
@@ -271,6 +293,12 @@ object PlayerInstancePool {
         }
         pool.addFirst(player)
         AppLog.put("PlayerPool: recycled, poolSize=${pool.size}")
+        VideoTrace.event(
+            stage = "player_recycle",
+            "playerId" to System.identityHashCode(player),
+            "poolSize" to pool.size,
+            "thread" to Thread.currentThread().name
+        )
     }
 
     /**
@@ -296,5 +324,10 @@ object PlayerInstancePool {
         if (count > 0) {
             AppLog.put("PlayerPool: cleared $count instances on activity destroy")
         }
+        VideoTrace.event(
+            stage = "player_clear",
+            "released" to count,
+            "thread" to Thread.currentThread().name
+        )
     }
 }

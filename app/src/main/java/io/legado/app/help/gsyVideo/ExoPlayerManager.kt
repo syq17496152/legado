@@ -19,6 +19,7 @@ import com.shuyu.gsyvideoplayer.model.VideoOptionModel
 import com.shuyu.gsyvideoplayer.player.BasePlayerManager
 import io.legado.app.constant.AppLog
 import io.legado.app.help.exoplayer.ExoPlayerHelper
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.model.VideoPlay
 import tv.danmaku.ijk.media.player.IMediaPlayer
 
@@ -46,7 +47,13 @@ class ExoPlayerManager : BasePlayerManager() {
         optionModelList: List<VideoOptionModel>?,
         cacheManager: ICacheManager
     ) {
+        val initStart = android.os.SystemClock.uptimeMillis()
         mediaPlayer = Exo2MediaPlayer(context)
+        VideoTrace.event(
+            stage = "init_video_start",
+            "playerId" to System.identityHashCode(mediaPlayer),
+            "thread" to Thread.currentThread().name
+        )
         mediaPlayer!!.setAudioStreamType(AudioManager.STREAM_MUSIC)
         if (dummySurface == null) {
             dummySurface = PlaceholderSurface.newInstance(context, false)
@@ -109,6 +116,12 @@ class ExoPlayerManager : BasePlayerManager() {
             if (reuseSurface != null) {
                 mediaPlayer!!.setSurface(reuseSurface)
                 AppLog.put("ExoPlayerManager.initVideoPlayer: 复用已存在显示面（切集不重建 Surface）")
+                VideoTrace.event(
+                    stage = "surface",
+                    "mode" to "reuse",
+                    "playerId" to System.identityHashCode(mediaPlayer),
+                    "initCostMs" to (android.os.SystemClock.uptimeMillis() - initStart)
+                )
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 surfaceControl = SurfaceControl.Builder()
                     .setName(SURFACE_CONTROL_NAME)
@@ -117,6 +130,11 @@ class ExoPlayerManager : BasePlayerManager() {
                 videoSurface = Surface(surfaceControl!!)
                 mediaPlayer!!.setSurface(videoSurface)
                 AppLog.put("ExoPlayerManager.initVideoPlayer: 无可用显示面，先用 0x0 占位（等待 setDisplay）")
+                VideoTrace.event(
+                    stage = "surface",
+                    "mode" to "placeholder_0x0",
+                    "playerId" to System.identityHashCode(mediaPlayer)
+                )
             } else {
                 mediaPlayer!!.setSurface(dummySurface)
                 AppLog.put("ExoPlayerManager.initVideoPlayer: 无可用显示面，先用 dummy 占位（等待 setDisplay）")

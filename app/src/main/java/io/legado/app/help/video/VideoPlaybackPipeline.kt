@@ -28,6 +28,7 @@ import io.legado.app.utils.postEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
@@ -57,6 +58,7 @@ object VideoPlaybackPipeline {
      * @param refererFallback Referer 最终兜底（文章链接/章节 URL）
      * @param ruleData AnalyzeUrl 规则数据（Book / RssArticle）
      * @param onStarted 起播后 hook（订阅源 triggerPreload；书源无）
+     * @param preResolved 预解析结果（§6.2：命中则跳过嗅探；null 时按缓存键自动查 [NextEpisodeResolver]）
      */
     data class PipelineContext(
         val scope: CoroutineScope,
@@ -71,7 +73,8 @@ object VideoPlaybackPipeline {
         val chapter: BookChapter? = null,
         val article: RssArticle? = null,
         val episode: RssEpisode? = null,
-        val onStarted: (() -> Unit)? = null
+        val onStarted: (() -> Unit)? = null,
+        val preResolved: NextEpisodeResolver.PreResolved? = null
     )
 
     /**
@@ -93,7 +96,24 @@ object VideoPlaybackPipeline {
         SniffEngine.invalidate()
         // CENC（AD-05）：新一次采集先清空上一集声明，避免 kid/encryption 跨集残留
         VideoPlay.clearCenc()
+        // §6.2：书源同线路下一章的预解析结果（命中则跳过 getContent + 三层嗅探）
+        val cacheKey = NextEpisodeResolver.key(chapter.url, ctx.source?.getKey(), null)
         return Coroutine.async(ctx.scope, IO) {
+            val pre = ctx.preResolved ?: NextEpisodeResolver.get(cacheKey)
+            if (pre != null) {
+                VideoTrace.event(
+                    stage = "sniff_resolved",
+                    "chain" to "book",
+                    "preResolved" to true,
+                    "final" to VideoTrace.urlPath(pre.finalUrl)
+                )
+                VideoPlay.videoUrl = pre.finalUrl
+                // 登记已解析章节（布局切换短路重采集依据）
+                VideoPlay.resolvedChapterUrl = chapter.url
+                setUpAndPlay(ctx, pre.finalUrl, pre.headers, resolvePageUrl = false)
+                VideoPlay.isLoadingFalse()
+                return@async
+            }
             if (VideoUrlExtractor.isDirectVideoStreamUrl(chapter.url)) {
                 AppLog.put("Pipeline: L0 直链快速路径, urlEnd=${chapter.url.takeLast(24)}")
                 VideoPlay.videoUrl = chapter.url
@@ -261,11 +281,34 @@ object VideoPlaybackPipeline {
         SniffEngine.invalidate()
         // CENC（AD-05）：新一次采集先清空上一集声明，避免 kid/encryption 跨集残留
         VideoPlay.clearCenc()
+        // §6.2：预解析缓存键（命中即跳过嗅探；失败时按同一键失效）
+        val cacheKey = NextEpisodeResolver.key(episode.url, ctx.source?.getKey(), article.link)
         return Coroutine.async(ctx.scope, IO) {
+            val pipeStart = android.os.SystemClock.uptimeMillis()
+            VideoTrace.event(
+                stage = "pipe_start",
+                "token" to ctx.token,
+                "episode" to ctx.title,
+                "url" to VideoTrace.urlPath(episode.url),
+                "cacheKey" to cacheKey
+            )
+            val pre = ctx.preResolved ?: NextEpisodeResolver.get(cacheKey)
             // 三层降级采集：MacCMS 播放页解析 → DOM 解析 → 网络抓包（URL 已是视频流时内部快速返回）
-            val resolvedCandidate = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, ctx.source, article)
-            val resolvedUrl = resolvedCandidate?.url
+            val resolvedCandidate =
+                if (pre == null) VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, ctx.source, article)
+                else null
+            val resolvedUrl = pre?.finalUrl ?: resolvedCandidate?.url
+            VideoTrace.event(
+                stage = "sniff_resolved",
+                "token" to ctx.token,
+                "ok" to (resolvedUrl != null),
+                "costMs" to (android.os.SystemClock.uptimeMillis() - pipeStart),
+                "final" to VideoTrace.urlPath(resolvedUrl),
+                "direct" to (resolvedUrl != null && resolvedUrl == episode.url),
+                "preResolved" to (pre != null)
+            )
             if (resolvedUrl == null) {
+                NextEpisodeResolver.invalidate(cacheKey)
                 AppLog.putWarn("extractVideoUrlForEpisode 返回null, 触发统一错误提示, ${VideoUrlExtractor.sanitizeUrl(episode.url)}")
                 withContext(Main) {
                     postEvent(EventBus.VIDEO_SWITCH_LOADING, false)
@@ -277,12 +320,14 @@ object VideoPlaybackPipeline {
                 return@async
             }
             val analyzeUrl = AnalyzeUrl(episode.url, source = ctx.source, ruleData = article)
-            val merged = HeaderResolver.merge(
-                candidate = resolvedCandidate,
-                baseHeaders = analyzeUrl.headerMap,
-                refererFallback = article.link,
-                targetUrl = resolvedUrl
-            )
+            val merged =
+                if (pre != null && pre.headers.isNotEmpty()) pre.headers
+                else HeaderResolver.merge(
+                    candidate = resolvedCandidate,
+                    baseHeaders = analyzeUrl.headerMap,
+                    refererFallback = article.link,
+                    targetUrl = resolvedUrl
+                )
             withContext(Main) {
                 if (VideoPlay.currentSwitchToken != ctx.token) {
                     AppLog.put("Pipeline.playEpisode: token expired (${ctx.token} < ${VideoPlay.currentSwitchToken}), drop late callback")
@@ -293,8 +338,61 @@ object VideoPlaybackPipeline {
                 postEvent(EventBus.VIDEO_SUB_TITLE, ctx.displayTitle ?: ctx.title)
                 ctx.player.mapHeadData = merged
                 VideoPlay.currentPlayHeaders = merged
-                ctx.player.setUp(resolvedUrl, VideoPlay.cachePlay, File(appCtx.externalCache, "exoplayer"), ctx.title)
+                VideoTrace.event(
+                    stage = "pipe_headers",
+                    "token" to ctx.token,
+                    "count" to merged.size,
+                    "keys" to merged.keys.take(6).joinToString(",")
+                )
+                val setUpStart = android.os.SystemClock.uptimeMillis()
+                VideoTrace.event(
+                    stage = "setUp_call",
+                    "token" to ctx.token,
+                    "playerId" to System.identityHashCode(ctx.player),
+                    "url" to VideoTrace.urlPath(resolvedUrl),
+                    "chain" to "rss"
+                )
+                var setUpOk = ctx.player.setUp(
+                    resolvedUrl,
+                    VideoPlay.cachePlay,
+                    File(appCtx.externalCache, "exoplayer"),
+                    ctx.title
+                )
+                if (!setUpOk) {
+                    // §14.1：GSY setUp 有 2 秒保护（刚 release 未就绪会静默返回 false），
+                    // 快速连点/自动连播场景下重试一次，避免「点了没反应」
+                    VideoTrace.event(
+                        stage = "setUp_rejected",
+                        "token" to ctx.token,
+                        "playerId" to System.identityHashCode(ctx.player),
+                        "chain" to "rss"
+                    )
+                    delay(300)
+                    setUpOk = ctx.player.setUp(
+                        resolvedUrl,
+                        VideoPlay.cachePlay,
+                        File(appCtx.externalCache, "exoplayer"),
+                        ctx.title
+                    )
+                }
+                VideoTrace.event(
+                    stage = "setUp_ret",
+                    "token" to ctx.token,
+                    "playerId" to System.identityHashCode(ctx.player),
+                    "ok" to setUpOk,
+                    "costMs" to (android.os.SystemClock.uptimeMillis() - setUpStart)
+                )
+                if (!setUpOk) {
+                    // §14.1：setUp 2 秒保护返回 false ⇒ 本次地址不可用，预解析缓存立即失效，避免下次继续命中
+                    NextEpisodeResolver.invalidate(cacheKey)
+                }
                 if (VideoPlay.autoPlay) {
+                    VideoTrace.event(
+                        stage = "start_play",
+                        "token" to ctx.token,
+                        "playerId" to System.identityHashCode(ctx.player),
+                        "chain" to "rss"
+                    )
                     ctx.player.startPlayLogic()
                 }
                 // 2026-10-25：订阅源集同理——setUp 下发即收起切集加载反馈
@@ -302,6 +400,7 @@ object VideoPlaybackPipeline {
                 ctx.onStarted?.invoke()
             }
         }.onError {
+            NextEpisodeResolver.invalidate(cacheKey)
             AppLog.put("加载订阅源视频集失败: ${episode.title}", it, true)
             // 2026-10-25：订阅源集采集异常同样收起加载反馈并给出可读提示
             notifyPlayFailure(playFailureMessage(it))
@@ -355,18 +454,73 @@ object VideoPlaybackPipeline {
             postEvent(EventBus.VIDEO_SUB_TITLE, ctx.title)
             ctx.player.mapHeadData = headers
             VideoPlay.currentPlayHeaders = headers
+            VideoTrace.event(
+                stage = "pipe_headers",
+                "token" to ctx.token,
+                "count" to headers.size,
+                "keys" to headers.keys.take(6).joinToString(",")
+            )
             val playUrl = if (resolvePageUrl) {
                 VideoUrlExtractor.resolvePlayerPageUrl(url)
             } else {
                 url
             }
-            ctx.player.setUp(playUrl, VideoPlay.cachePlay, File(appCtx.externalCache, "exoplayer"), ctx.title)
+            val setUpStart = android.os.SystemClock.uptimeMillis()
+            VideoTrace.event(
+                stage = "setUp_call",
+                "token" to ctx.token,
+                "playerId" to System.identityHashCode(ctx.player),
+                "url" to VideoTrace.urlPath(playUrl),
+                "resolvePageUrl" to resolvePageUrl
+            )
+            var setUpOk = ctx.player.setUp(
+                playUrl,
+                VideoPlay.cachePlay,
+                File(appCtx.externalCache, "exoplayer"),
+                ctx.title
+            )
+            if (!setUpOk) {
+                // §14.1：2 秒保护返回 false ⇒ 重试一次（书源快速连点/自动连播同收益）
+                VideoTrace.event(
+                    stage = "setUp_rejected",
+                    "token" to ctx.token,
+                    "playerId" to System.identityHashCode(ctx.player),
+                    "chain" to "book"
+                )
+                delay(300)
+                setUpOk = ctx.player.setUp(
+                    playUrl,
+                    VideoPlay.cachePlay,
+                    File(appCtx.externalCache, "exoplayer"),
+                    ctx.title
+                )
+            }
+            VideoTrace.event(
+                stage = "setUp_ret",
+                "token" to ctx.token,
+                "playerId" to System.identityHashCode(ctx.player),
+                "ok" to setUpOk,
+                "costMs" to (android.os.SystemClock.uptimeMillis() - setUpStart)
+            )
+            if (!setUpOk) {
+                // 预解析结果不可用 ⇒ 失效，避免下次继续命中死地址
+                NextEpisodeResolver.invalidate(
+                    NextEpisodeResolver.key(ctx.chapter?.url ?: "", ctx.source?.getKey(), null)
+                )
+            }
             if (VideoPlay.autoPlay) {
+                VideoTrace.event(
+                    stage = "start_play",
+                    "token" to ctx.token,
+                    "playerId" to System.identityHashCode(ctx.player)
+                )
                 ctx.player.startPlayLogic()
             }
             // 2026-10-25：setUp 已下发 ⇒ 采集/嗅探空窗结束，收起切集加载反馈。
             // 此后等待首帧期间的缓冲由播放器内置 loading 圈承担，避免双重提示。
             postEvent(EventBus.VIDEO_SWITCH_LOADING, false)
+            // 起播后 hook（§6.3 书源下一章预解析）
+            ctx.onStarted?.invoke()
         }
     }
 

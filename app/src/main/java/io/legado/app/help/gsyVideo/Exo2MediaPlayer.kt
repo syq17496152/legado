@@ -36,6 +36,7 @@ import io.legado.app.help.exoplayer.PlayerInstancePool
 import io.legado.app.help.player.PlaybackErrorAction
 import io.legado.app.help.player.PlaybackErrorPolicy
 import io.legado.app.constant.AppLog
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.constant.EventBus
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.postEvent
@@ -920,6 +921,17 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // FR-3: scope cancelled 后忽略回调，防止 cancelled 后仍触发重试/降级等业务逻辑
         if (isScopeCancelled.get()) return
 
+        runCatching {
+            VideoTrace.event(
+                stage = "player_error",
+                "code" to error.errorCode,
+                "name" to error.errorCodeName,
+                "playerId" to mInternalPlayer?.let { System.identityHashCode(it) },
+                "retry" to retryCount,
+                "url" to VideoTrace.urlPath(currentUrl)
+            )
+        }
+
         // P1-3: 直播流 1002 BEHIND_LIVE_WINDOW 自动重试
         // 直播流播放时，如果播放器追直播落在直播窗口后面，ExoPlayer 抛出 BehindLiveWindowException
         // 正确处理：重新 seek 到直播边缘并 prepare，不显示错误
@@ -1408,6 +1420,32 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             else -> "UNKNOWN($state)"
         }
         AppLog.put("ExoPlayer state: $stateName, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+        runCatching {
+            val player = mInternalPlayer
+            val pos = player?.currentPosition ?: 0L
+            val dur = player?.duration ?: 0L
+            val buf = (player?.bufferedPosition ?: 0L) - pos
+            VideoTrace.event(
+                stage = "engine_state",
+                "state" to stateName,
+                "playerId" to player?.let { System.identityHashCode(it) },
+                "posMs" to pos,
+                "bufMs" to buf,
+                "durMs" to dur,
+                "fallbackIdx" to currentFallbackIndex,
+                "url" to VideoTrace.urlPath(currentUrl)
+            )
+            if (state == Player.STATE_READY) {
+                VideoTrace.sampled(
+                    stage = "buffer",
+                    intervalMs = 1000L,
+                    "posMs" to pos,
+                    "bufMs" to buf,
+                    "durMs" to dur,
+                    "url" to VideoTrace.urlPath(currentUrl)
+                )
+            }
+        }
 
         // T1.1: STATE_READY 播放成功埋点（统计播放成功率）
         // AD-01: 双标志位防同一 URL 重复埋点（seek/rebuffer 后重复 READY 不重复统计）

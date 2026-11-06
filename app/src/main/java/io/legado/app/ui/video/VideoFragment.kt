@@ -35,6 +35,7 @@ import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.source.isVideoSource
 import io.legado.app.help.video.LocalMediaResolver
 import io.legado.app.help.video.VideoPlaylistHolder
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.model.Download
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.DownloadTaskType
@@ -241,6 +242,8 @@ class VideoFragment : Fragment() {
     private var seekTarget = 0L
     /** 修复: ACTION_DOWN 时记录的播放位置，避免滑动过程中 currentPosition 持续变化导致 seekTarget 漂移 */
     private var slideSeekStartPos = 0L
+    /** 修复: ACTION_DOWN 时记录的播放地址，切集后丢弃本次 seek（否则会把旧集进度套到新集，连锁触发播完） */
+    private var slideSeekStartUrl: String? = null
 
     // FLING_MIN_VELOCITY 定义在文件尾部既有 companion object 中
 
@@ -390,6 +393,20 @@ class VideoFragment : Fragment() {
                         }
                     }
                 }
+            }
+
+            // §3.3：沉浸式续播入口——与播放器自身 onAutoCompletion 共用统一去重（design §1.5），
+            // 同一次结束只会推进一次，不会双跳
+            override fun onAutoComplete(url: String?, vararg objects: Any?) {
+                super.onAutoComplete(url, *objects)
+                VideoTrace.event(
+                    stage = "ended",
+                    "entry" to "fragment",
+                    "isBook" to (VideoPlay.book != null),
+                    "rssIndex" to VideoPlay.rssEpisodeIndex,
+                    "chapterInVolumeIndex" to VideoPlay.chapterInVolumeIndex
+                )
+                VideoPlay.advanceEpisode(pv, "fragment")
             }
         })
 
@@ -1367,6 +1384,7 @@ class VideoFragment : Fragment() {
                 isSeeking = false
                 // 修复 seek 预览漂移: ACTION_DOWN 时记录播放位置，避免滑动中 currentPosition 持续变化导致 seekTarget 漂移
                 slideSeekStartPos = VideoPlay.videoManager.currentPosition
+                slideSeekStartUrl = VideoPlay.videoUrl
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (event.pointerCount == 2) {
@@ -1444,6 +1462,7 @@ class VideoFragment : Fragment() {
                 isSeeking = false
                 // 修复 seek 预览漂移: ACTION_DOWN 时记录播放位置，避免滑动中 currentPosition 持续变化导致 seekTarget 漂移
                 slideSeekStartPos = VideoPlay.videoManager.currentPosition
+                slideSeekStartUrl = VideoPlay.videoUrl
             }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount >= 2 && isTwoFingerSwipe && currentState == PlayState.NORMAL) {
@@ -1561,7 +1580,10 @@ class VideoFragment : Fragment() {
     private fun handleSlideSeekRelease() {
         if (isSeeking) {
             val pv = _playerView
-            if (pv != null && seekTarget >= 0) {
+            // 切集竞态：按下与抬起之间已换集（播完自动续播/手动选集），本次 seek 目标属于旧集，
+            // 直接丢弃；否则会把旧集进度套到新集并连锁触发「又播完」
+            val sameEpisode = slideSeekStartUrl == VideoPlay.videoUrl
+            if (pv != null && seekTarget >= 0 && sameEpisode) {
                 pv.currentPlayer.seekTo(seekTarget)
             }
             isSeeking = false

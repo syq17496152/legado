@@ -116,6 +116,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.model.VideoPlaybackQueue
 import io.legado.app.help.video.VideoPlaylistHolder
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.service.VideoPlayService
 import io.legado.app.service.DlnaCastService
 import io.legado.app.ui.video.cast.DlnaCastDialog
@@ -1353,9 +1354,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             return
         }
         if (velocityY < 0) {
-            VideoPlay.switchToBookFromList(+1, player)
+            // §12.3：按会话模式分派（FEED=下一部 / SERIES=下一集 / SINGLE=提示）
+            VideoPlay.dispatchVerticalSwitch(+1, player)
         } else {
-            VideoPlay.switchToBookFromList(-1, player)
+            VideoPlay.dispatchVerticalSwitch(-1, player)
         }
     }
 
@@ -2423,19 +2425,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
             override fun onAutoComplete(url: String?, vararg objects: Any?) {
                 super.onAutoComplete(url, *objects)
-                // video-player-dual-layout K5：传统布局末集播完自动连播（R5 跨影片语义）
-                // 书源：upDurIndex 末集自动切列表下一影片（无下一影片时内部 toast 边界提示）；
-                // 订阅源集数模式：顺延下一集（有队列才推进）
-                if (VideoPlay.book != null) {
-                    VideoPlay.upDurIndex(+1, playerView.getCurrentPlayer())
-                } else {
-                    val episodes = VideoPlay.rssEpisodes
-                    val next = VideoPlay.rssEpisodeIndex + 1
-                    if (!episodes.isNullOrEmpty() && next < episodes.size) {
-                        VideoPlay.rssEpisodeIndex = next
-                        VideoPlay.playRssEpisode(playerView, episodes[next])
-                        upRssEpisodesView()
-                    }
+                VideoTrace.event(
+                    stage = "ended",
+                    "entry" to "activity",
+                    "isBook" to (VideoPlay.book != null),
+                    "rssIndex" to VideoPlay.rssEpisodeIndex,
+                    "chapterInVolumeIndex" to VideoPlay.chapterInVolumeIndex
+                )
+                // §3.4：统一续播入口（原「书源 upDurIndex / 订阅源手动顺延」双分支已收敛）
+                if (VideoPlay.advanceEpisode(playerView, "activity")) {
+                    upRssEpisodesView()
                 }
             }
         })
@@ -3014,6 +3013,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     override fun onDestroy() {
+        VideoTrace.event(
+            stage = "destroy",
+            "activityId" to System.identityHashCode(this),
+            "mode" to if (useViewPagerMode) "viewpager" else "legacy"
+        )
         releaseListenWakeLock()
         // app-stability-round2 P2-2: 先取消抓取协程（含嗅探 WebView），再释放播放器资源
         // 根因：原顺序 destroyWeb 先执行、stopLoading 后置，嗅探协程取消时序混乱，且 runCatching 误捕获 CancellationException
