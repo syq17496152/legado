@@ -131,4 +131,19 @@ class ScriptArbiterRunnerTest {
         )
         assertEquals("满批 JSON 约 300 token，预算需留余量", 512, llm.predictTokens)
     }
+
+    /**
+     * 真机实测 Qwen3 置信度退化为 0；原样透传会被仲裁阈值 0.80 拒绝 ⇒ 永远 ai=0。
+     * 这里用 c=0 的模型输出跑完整「解析 → 落位 → 合并」，锁定"退化置信度也能被采纳"。
+     */
+    @Test
+    fun `模型置信度为 0 时仍能被仲裁采纳`() = runBlocking {
+        val runtime = readyRuntime("{\"a\":[{\"i\":0,\"n\":0,\"c\":0}]}")
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(script, ::textOf, listOf("小明", "小红"))
+        assertEquals(1, outcome.merge.aiApplied)
+        assertEquals("小明", outcome.merge.segments[0].characterName)
+        assertEquals("local-ai", outcome.merge.segments[0].source)
+        assertEquals(0, outcome.merge.rejectedAi)
+    }
 }

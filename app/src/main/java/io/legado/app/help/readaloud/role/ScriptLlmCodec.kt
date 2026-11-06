@@ -34,6 +34,20 @@ object ScriptLlmCodec {
         }.getOrDefault(emptyList())
     }
 
+    /** 模型置信度不可采信时的固定值（见 [effectiveConfidence]） */
+    const val MODEL_CONFIDENCE_FALLBACK = 0.85
+
+    /**
+     * 模型自报置信度 → 仲裁可用的置信度。
+     *
+     * 为什么不能直接用：POC 与真机都实测 Qwen3 的 `c` **退化为 0/1**（`poc-20261105.md` 结论：
+     * 仲裁只能认候选序号 n）。若原样透传，`c=0` 会被 [ScriptArbiter.AI_MIN_CONFIDENCE]=0.80
+     * 一律拒绝 ⇒ 模型答了也永远 `ai=0`（表现为"始终降级为规则"）。
+     * 这里只把 0/越界值归一为固定可信值；0<c≤1 仍尊重模型自报。
+     */
+    fun effectiveConfidence(raw: Double): Double =
+        if (raw > 0.0 && raw <= 1.0) raw else MODEL_CONFIDENCE_FALLBACK
+
     /**
      * 把模型输出落位到批次内：
      * @param batch 该批次送出的段（顺序即模型看到的段号）
@@ -53,7 +67,7 @@ object ScriptLlmCodec {
             start = segment.start,
             end = segment.end,
             characterName = name,
-            confidence = item.confidence
+            confidence = effectiveConfidence(item.confidence)
         )
     }
 
