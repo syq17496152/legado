@@ -38,7 +38,7 @@ class ScriptArbiterRunner(private val llm: ScriptLlm?) {
         textOf: (ScriptSegment) -> String,
         candidates: List<String>
     ): Outcome {
-        val whitelist = candidates.toSet()
+        val whitelist = candidates.map { it.trim() }.toSet()
         val batches = ScriptArbiter.batches(script.segments, textOf)
         if (batches.isEmpty()) {
             return Outcome(ScriptArbiter.apply(script, emptyList(), whitelist), batches = 0, modelCalled = false)
@@ -75,8 +75,25 @@ class ScriptArbiterRunner(private val llm: ScriptLlm?) {
                 error = gen.message
             }
         }
+        val merge = ScriptArbiter.apply(script, suggestions, whitelist)
+        // 合并层诊断：区分"没建议 / 被拒（白名单或置信度）/ 落位成功"。真机上曾出现
+        // mapped>0 却 ai=0，没有这行就只能靠猜（只记计数/布尔/技术字段，不含角色名与正文）。
+        val firstSuggestion = suggestions.firstOrNull()
+        val hit = firstSuggestion?.let { s ->
+            script.segments.firstOrNull {
+                it.paragraphIndex == s.paragraphIndex && it.start == s.start && it.end == s.end
+            }
+        }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "scriptMerge sugg=${suggestions.size} applied=${merge.aiApplied} " +
+                "rejected=${merge.rejectedAi} targets=${script.segments.count { it.needsArbitration }}" +
+                " firstInWhite=${firstSuggestion?.let { it.characterName in whitelist }}" +
+                " hit=${hit != null} hitConf=${hit?.confidence} hitSrc=${hit?.source}" +
+                " hitNeeds=${hit?.needsArbitration}"
+        )
         return Outcome(
-            merge = ScriptArbiter.apply(script, suggestions, whitelist),
+            merge = merge,
             batches = batches.size,
             modelCalled = true,
             errorMessage = error

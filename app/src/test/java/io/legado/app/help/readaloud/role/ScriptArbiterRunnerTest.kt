@@ -173,4 +173,17 @@ class ScriptArbiterRunnerTest {
         assertEquals("小明", outcome.merge.segments[0].characterName)
         assertEquals("local-ai", outcome.merge.segments[0].source)
     }
+
+    /**
+     * 候选名可能带首尾空白（书名/角色名从缓存读出）；若白名单不做 trim，模型答对也会被拒。
+     * 锁定：带空白的候选也要能落位且落位后名字是去空白的。
+     */
+    @Test
+    fun `候选名带空白时仍能落位`() = runBlocking {
+        val runtime = readyRuntime("{\"a\":[{\"i\":0,\"n\":0,\"c\":0.9}]}")
+        val outcome = ScriptArbiterRunner(RuntimeScriptLlm(runtime))
+            .run(script, ::textOf, listOf(" 小明 ", "小红"))
+        assertEquals(1, outcome.merge.aiApplied)
+        assertEquals("小明", outcome.merge.segments[0].characterName)
+    }
 }
