@@ -1178,6 +1178,15 @@ object ExoPlayerHelper {
 
 
     /**
+     * tasks §13.1：缓存读取指标出口。
+     *
+     * 由当前活跃的 `Exo2MediaPlayer` 在 attach 时注册、detach 时清空；`CacheDataSource`
+     * 每次命中缓存都会回调，用于输出「缓存命中率」（含 SimpleCache 预填链路的命中）。
+     */
+    @Volatile
+    var cacheMetricsSink: ((Long) -> Unit)? = null
+
+    /**
      * 支持缓存的DataSource.Factory
      */
     val cacheDataSourceFactory: DataSource.Factory by lazy {
@@ -1212,6 +1221,16 @@ object ExoPlayerHelper {
                         .setCache(cache)
                         .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
                 )
+                // tasks §13.1：缓存命中率埋点（每次从 SimpleCache 读出字节即回调）
+                .setEventListener(object : CacheDataSource.EventListener {
+                    override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
+                        cacheMetricsSink?.invoke(cachedBytesRead)
+                    }
+
+                    override fun onCacheIgnored(reason: Int) {
+                        // 缓存条目不可用（过期/不可缓存）：不输出，避免分片级噪声
+                    }
+                })
         }
     }
 

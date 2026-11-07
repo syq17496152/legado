@@ -574,6 +574,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         player.addListener(this@Exo2MediaPlayer)
         player.addAnalyticsListener(this@Exo2MediaPlayer)
         mEventLogger?.let { player.addListener(it) }
+        // tasks §13.1：缓存命中率出口（CacheDataSource 事件 → 本实例统计）
+        ExoPlayerHelper.cacheMetricsSink = { cachedBytes -> onCacheBytesRead(cachedBytes) }
     }
 
     /**
@@ -587,6 +589,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             player.removeListener(this@Exo2MediaPlayer)
             player.removeAnalyticsListener(this@Exo2MediaPlayer)
             mEventLogger?.let { player.removeListener(it) }
+            // tasks §13.1：解绑缓存指标出口，避免写入已释放实例
+            ExoPlayerHelper.cacheMetricsSink = null
         }.onFailure {
             AppLog.put("detachFromPlayer failed", it)
         }
@@ -1481,6 +1485,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 "ExoPlayer play success (STATE_READY): urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}, " +
                     "contentType=${currentSniffResult.contentType}, fallbackIndex=$currentFallbackIndex/${fallbackTypes.size}"
             )
+            // tasks §13.1：首帧 READY 时输出一次编解码信息（解码器缺口补齐）
+            logTrackCodecIfVideo()
         }
 
         // T2.3: BUFFERING 超时 12 秒触发 tryNextFallback（解决 Bug-8 + Bug-9：弱网卡死无法自动降级）
@@ -1577,6 +1583,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     private var loadStartTimeMs: Long = 0L
 
+    /** tasks §13.1：累计从缓存读取的字节（SimpleCache 命中量） */
+    private var cachedBytesTotal: Long = 0L
+
+    /** tasks §13.1：累计网络加载字节（与 cachedBytesTotal 一起算命中率） */
+    private var networkBytesTotal: Long = 0L
+
     /**
      * FR-5: TTFB 降档统计字段
      *
@@ -1667,7 +1679,56 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                     ttfbSlowCount = 0
                 }
             }
+            networkBytesTotal += bytesLoaded
             loadStartTimeMs = 0L
+        }
+    }
+
+    /**
+     * tasks §13.1：编解码信息（补「解码器」缺口）。
+     *
+     * 框架限制：本仓 GSY 基类未暴露 `onDecoderInitialized`（AnalyticsListener 该回调
+     * 在当前 AAR 的转发集合之外，override 会编译失败），故改为从 `currentTracks`
+     * 读取 Format 的 `codecs` / `sampleMimeType` / 码率——同样是「用什么解码」的可观测证据，
+     * 且不臆造实现名。
+     */
+    private fun logTrackCodecIfVideo() {
+        val player = mInternalPlayer ?: return
+        val videoFormat = player.currentTracks.groups
+            .firstOrNull { it.type == C.TRACK_TYPE_VIDEO }
+            ?.let { group -> (0 until group.length).firstNotNullOfOrNull { group.getTrackFormat(it) } }
+            ?: return
+        AppLog.put(
+            "[BufferSpeed] codec: " + formatCodecSummary(
+                codecs = videoFormat.codecs,
+                sampleMimeType = videoFormat.sampleMimeType,
+                bitrate = videoFormat.bitrate,
+                width = videoFormat.width,
+                height = videoFormat.height,
+            )
+        )
+    }
+
+    /** tasks §13.1：缓存读取次数（限频输出用） */
+    private var cacheReadCount = 0
+
+    /**
+     * tasks §13.1：缓存命中累计（由 ExoPlayerHelper 的 CacheDataSource 事件回调驱动）。
+     *
+     * 为什么不在本类 override `onCachedBytesRead`：GSY 基类未转发该 AnalyticsListener
+     * 回调（override 编译失败）。改走 `CacheDataSource.Factory.setEventListener`，
+     * 语义一致（都是「本次从 SimpleCache 读出的字节」）。
+     */
+    internal fun onCacheBytesRead(cachedBytes: Long) {
+        cachedBytesTotal += cachedBytes
+        cacheReadCount++
+        if (cacheReadCount <= 3 || cacheReadCount % 10 == 0) {
+            AppLog.put(
+                "[BufferSpeed] cache_stat: cachedBytes=$cachedBytesTotal, " +
+                    "networkBytes=$networkBytesTotal, " +
+                    "hitRate=${io.legado.app.help.exoplayer.cacheHitRatePercent(cachedBytesTotal, networkBytesTotal)}%, " +
+                    "reads=$cacheReadCount"
+            )
         }
     }
 
