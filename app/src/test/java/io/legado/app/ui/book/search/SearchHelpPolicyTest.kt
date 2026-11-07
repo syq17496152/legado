@@ -49,4 +49,12 @@ class SearchHelpPolicyTest {
             )
         )
     }
+
+    /** 兜底时序：输入框已聚焦、之后才返回结果（不触发焦点回调）时也必须收起帮助层。 */
+    @Test
+    fun `结果到达即收起帮助层`() {
+        assertTrue(shouldCollapseHelpOnResults(resultCount = 100, query = "关键词"))
+        assertFalse(shouldCollapseHelpOnResults(resultCount = 0, query = "关键词"))
+        assertFalse(shouldCollapseHelpOnResults(resultCount = 100, query = "   "))
+    }
 }

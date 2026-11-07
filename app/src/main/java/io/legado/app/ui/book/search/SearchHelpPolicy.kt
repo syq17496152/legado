@@ -21,3 +21,12 @@ internal fun shouldHideInputHelp(
     if (hasFocus && intentWindowActive) return true
     return !hasFocus && hasResult
 }
+
+/**
+ * 结果到达后是否应立即收起帮助层（`LaunchedEffect` 兜底）。
+ *
+ * 与 [shouldHideInputHelp] 的分工：后者在焦点变化时判定，本函数在「结果数/关键词变化」时判定，
+ * 覆盖「输入框已聚焦、之后才有结果」这条不触发焦点回调的时序（真机 2026-11-08 01:02）。
+ */
+internal fun shouldCollapseHelpOnResults(resultCount: Int, query: String): Boolean =
+    resultCount > 0 && query.isNotBlank()

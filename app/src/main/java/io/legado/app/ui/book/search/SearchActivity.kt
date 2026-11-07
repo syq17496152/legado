@@ -287,6 +287,15 @@ class SearchActivity : VMBaseActivity<ViewBinding, SearchViewModel>(),
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
+                        // 结果变化时收起输入帮助层。
+                        // 必须用副作用而非仅靠聚焦回调：`progressLoading`/结果数变化不会触发
+                        // `onFocusChanged`，早先只监听焦点会导致「intent 直达 + 已聚焦」时
+                        // 帮助层始终盖住结果（真机 2026-11-08 01:02 复现）。
+                        LaunchedEffect(searchRunning, searchResults.size, composeSearchQuery) {
+                            if (shouldCollapseHelpOnResults(searchResults.size, composeSearchQuery)) {
+                                visibleInputHelp(false)
+                            }
+                        }
                         SearchResultScreen(
                             books = searchResults,
                             isLoading = searchRunning,
