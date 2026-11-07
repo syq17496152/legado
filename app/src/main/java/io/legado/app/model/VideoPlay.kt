@@ -875,6 +875,54 @@ object VideoPlay : CoroutineScope by MainScope(){
     @Volatile
     var lastPlaybackErrorKind: PlaybackErrorKind? = null
 
+    // ==================== §13.8 卡顿自愈（会话级累计 + 一次提示） ====================
+
+    /** 本轮会话的稳态卡顿统计（起播首缓冲与 seek 缓冲已由采集侧过滤） */
+    var rebufferStats = RebufferStats()
+        private set
+
+    /** 本轮会话是否已提示过切线路（只提示一次，避免反复打扰） */
+    private var rebufferAlerted = false
+
+    /** 是否存在可切换线路：书源看卷/线路分组，订阅源看 rssRoutes */
+    internal fun hasAlternativeRoute(): Boolean =
+        volumes.size > 1 || (rssRoutes?.size ?: 0) > 1
+
+    /**
+     * 播放器上报一次稳态卡顿（design §1.14 #6）。
+     *
+     * ≥2 次或单次 ≥3s 且存在可切线路时提示一次「可切换线路」；
+     * 单线路场景只记归因日志，不打扰用户。
+     */
+    internal fun onRebuffer(durationMs: Long) {
+        val hasAlternative = hasAlternativeRoute()
+        val update = RebufferAlertPolicy.record(rebufferStats, durationMs, hasAlternative)
+        rebufferStats = update.stats
+        AppLog.putInfo(
+            "RebufferSession: count=${update.stats.count}, maxMs=${update.stats.maxSingleMs}, " +
+                "totalMs=${update.stats.totalMs}, singleMs=$durationMs, altRoute=$hasAlternative"
+        )
+        VideoTrace.event(
+            "rebuffer_session",
+            "count" to update.stats.count,
+            "singleMs" to durationMs,
+            "maxMs" to update.stats.maxSingleMs,
+            "totalMs" to update.stats.totalMs,
+            "altRoute" to hasAlternative
+        )
+        if (update.notifySwitchRoute && !rebufferAlerted) {
+            rebufferAlerted = true
+            appCtx.toastOnUi(R.string.video_rebuffer_route_hint)
+            VideoTrace.event("rebuffer_alert", "count" to update.stats.count)
+        }
+    }
+
+    /** 新会话/换源时复位卡顿累计 */
+    internal fun resetRebufferStats() {
+        rebufferStats = RebufferStats()
+        rebufferAlerted = false
+    }
+
     /**
      * 开始播放
      */
@@ -1490,6 +1538,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         rssEpisodeIndex = 0
         // §1.6：新会话复位结束令牌，避免上一会话的结束事件影响本次推进判定
         EndedTokenDeduper.reset()
+        // §13.8：新会话复位卡顿累计（换片/换源不继承上一部作品的卡顿提示）
+        resetRebufferStats()
         // §6.5：换源/新会话时预解析结果全部失效（禁止跨源命中旧 finalUrl）
         NextEpisodeResolver.clear()
         AppLog.put("VideoRoutesDiag initSource begin: sourceKey=${sourceKey?.take(2)}***, sourceType=$sourceType, singleUrl=$singleUrl, bookUrlNotNull=${bookUrl != null}, recordNotNull=${record != null}, routes=null, episodes=null")

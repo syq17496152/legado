@@ -149,6 +149,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private var retryCount = 0
 
     /**
+     * §13.8 卡顿计时：只统计起播成功后的稳态缓冲，seek 引发的缓冲不计入。
+     * 卡顿时长上报 [io.legado.app.model.VideoPlay.onRebuffer] 做会话累计与自愈提示。
+     */
+    private val rebufferTracker = RebufferTracker { android.os.SystemClock.uptimeMillis() }
+
+    /**
      * exoplayer-resilience Layer 2：累计播放失败次数（不可恢复错误才计数）
      * - 可恢复错误（网络抖动）不计数，仅 retryCount 重试
      * - 不可恢复错误（3002/3003/3004/decoder）计数
@@ -1465,6 +1471,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // A2 修复：首帧渲染成功，置 VideoPlay.hasPlayedSuccessfully = true
             // 后续切换文章 BUFFERING 超时用 12s（CDN 已热），切换源（initSource）时重置为 false
             VideoPlay.hasPlayedSuccessfully = true
+            // §14.3：首帧到达 ⇒ 输出重建耗时（initVideo → 首帧），用于切集成本归因
+            PlaybackRebuildTrace.onFirstFrame()
             // W2 / REQ-13：本次起播成功 ⇒ 自愈记账复位（"会话内成功即清零"，避免历史失败压制后续换线）
             VideoPlay.routeSelfHealSession.reset()
             VideoPlay.lastPlaybackErrorKind = null
@@ -1483,14 +1491,37 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 val isFirstPlay = !VideoPlay.hasPlayedSuccessfully
                 val timeoutMs = if (isFirstPlay) 25_000L else 12_000L
                 bufferingTimeoutHandler.postDelayed(bufferingTimeoutRunnable, timeoutMs)
+                // §13.8：只有起播成功后的缓冲才算卡顿（首缓冲不计）
+                if (VideoPlay.hasPlayedSuccessfully) rebufferTracker.onBufferingStart()
             }
-            Player.STATE_READY, Player.STATE_IDLE, Player.STATE_ENDED -> {
+            Player.STATE_READY, Player.STATE_ENDED -> {
                 // 离开 BUFFERING：清除超时回调，避免误降级
                 // - READY：播放成功，无需降级
-                // - IDLE：播放失败（onPlayerError 会跟进），避免重复降级
                 // - ENDED：播放结束，无需降级
                 bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
+                // §13.8：上报稳态卡顿时长（seek 引发的缓冲由 tracker 过滤）
+                rebufferTracker.onBufferingEnd()?.let { VideoPlay.onRebuffer(it) }
             }
+            Player.STATE_IDLE -> {
+                // IDLE：播放失败（onPlayerError 会跟进），避免重复降级；同时复位计时
+                bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
+                rebufferTracker.reset()
+            }
+        }
+    }
+
+    /**
+     * §13.8：标记用户 seek，避免把「拖动进度条后的一次缓冲」误判为卡顿。
+     */
+    override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int
+    ) {
+        super.onPositionDiscontinuity(oldPosition, newPosition, reason)
+        if (isScopeCancelled.get()) return
+        if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+            rebufferTracker.markSeek()
         }
     }
 

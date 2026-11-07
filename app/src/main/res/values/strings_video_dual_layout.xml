@@ -43,4 +43,6 @@
     <!-- 7.1（2026-11-07）：播完续播 3 秒倒计时，可取消（避免误连播） -->
     <string name="video_advance_countdown">%1$d 秒后播放下一集</string>
     <string name="video_advance_cancel">取消</string>
+    <!-- 13.8（2026-11-07）：稳态卡顿 ≥2 次或单次 ≥3s 且有多线路时提示一次 -->
+    <string name="video_rebuffer_route_hint">当前线路播放卡顿，可在选集面板切换线路</string>
 </resources>

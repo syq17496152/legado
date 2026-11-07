@@ -49,6 +49,8 @@ class ExoPlayerManager : BasePlayerManager() {
     ) {
         val initStart = android.os.SystemClock.uptimeMillis()
         mediaPlayer = Exo2MediaPlayer(context)
+        // §14.3：开始计重建耗时（initVideo → 首帧），首帧到达时由 Exo2MediaPlayer 消费并输出
+        PlaybackRebuildTrace.onSetupStart()
         VideoTrace.event(
             stage = "init_video_start",
             "playerId" to System.identityHashCode(mediaPlayer),
