@@ -877,12 +877,8 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     // ==================== §13.8 卡顿自愈（会话级累计 + 一次提示） ====================
 
-    /** 本轮会话的稳态卡顿统计（起播首缓冲与 seek 缓冲已由采集侧过滤） */
-    var rebufferStats = RebufferStats()
-        private set
-
-    /** 本轮会话是否已提示过切线路（只提示一次，避免反复打扰） */
-    private var rebufferAlerted = false
+    /** 本轮会话的卡顿统计与「只提示一次」状态（纯逻辑，单测锁定） */
+    private val rebufferSession = RebufferSession()
 
     /** 是否存在可切换线路：书源看卷/线路分组，订阅源看 rssRoutes */
     internal fun hasAlternativeRoute(): Boolean =
@@ -896,8 +892,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      */
     internal fun onRebuffer(durationMs: Long) {
         val hasAlternative = hasAlternativeRoute()
-        val update = RebufferAlertPolicy.record(rebufferStats, durationMs, hasAlternative)
-        rebufferStats = update.stats
+        val update = rebufferSession.record(durationMs, hasAlternative)
         AppLog.putInfo(
             "RebufferSession: count=${update.stats.count}, maxMs=${update.stats.maxSingleMs}, " +
                 "totalMs=${update.stats.totalMs}, singleMs=$durationMs, altRoute=$hasAlternative"
@@ -910,8 +905,7 @@ object VideoPlay : CoroutineScope by MainScope(){
             "totalMs" to update.stats.totalMs,
             "altRoute" to hasAlternative
         )
-        if (update.notifySwitchRoute && !rebufferAlerted) {
-            rebufferAlerted = true
+        if (update.notifySwitchRoute) {
             appCtx.toastOnUi(R.string.video_rebuffer_route_hint)
             VideoTrace.event("rebuffer_alert", "count" to update.stats.count)
         }
@@ -919,8 +913,7 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     /** 新会话/换源时复位卡顿累计 */
     internal fun resetRebufferStats() {
-        rebufferStats = RebufferStats()
-        rebufferAlerted = false
+        rebufferSession.reset()
     }
 
     /**

@@ -149,10 +149,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private var retryCount = 0
 
     /**
-     * §13.8 卡顿计时：只统计起播成功后的稳态缓冲，seek 引发的缓冲不计入。
+     * §13.8 卡顿计时：只统计起播成功后的稳态缓冲。
+     * seek 后的稳定期与小于 200ms 的换段抖动由 [RebufferTracker] 过滤（真机误报修正）。
      * 卡顿时长上报 [io.legado.app.model.VideoPlay.onRebuffer] 做会话累计与自愈提示。
      */
-    private val rebufferTracker = RebufferTracker { android.os.SystemClock.uptimeMillis() }
+    private val rebufferTracker = RebufferTracker(clock = { android.os.SystemClock.uptimeMillis() })
 
     /**
      * exoplayer-resilience Layer 2：累计播放失败次数（不可恢复错误才计数）
