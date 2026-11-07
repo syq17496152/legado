@@ -148,6 +148,22 @@ internal fun resumePositionForRestore(positionMs: Int, durationMs: Long): Int {
     return if (positionMs.toLong() >= durationMs - END_SNAP_MS) 0 else positionMs
 }
 
+/**
+ * IF-08：切换线路时保留当前集号的目标索引。
+ *
+ * 旧行为是切线路后一律播新线路第 1 集（`chapterInVolumeIndex = 0`），用户换线路后
+ * 必须重新选集数（2026-11-07 真机：第 50 集切线路 → 秒变第 01 集，`switch_req fromIndex=0`）。
+ * 新行为保持原集号；新线路集数不足时退到最后一集（不越界、不静默播空）。
+ *
+ * @param keepIndex 切换前的集内索引（0-based）
+ * @param newSize 新线路集数总数
+ * @return 目标索引；新线路无集数时返回 0（调用方需再判空）
+ */
+internal fun routeTargetIndex(keepIndex: Int, newSize: Int): Int {
+    if (newSize <= 0) return 0
+    return keepIndex.coerceIn(0, newSize - 1)
+}
+
 object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_NAME = "video_pos_" //单链接播放进度
     private const val VIDEO_POS_SAVE_TIME = 60 * 60 * 24 * 20 //20天
@@ -2334,7 +2350,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         val ruleEpisodes = rssSource.ruleEpisodes?.takeIf { it.isNotBlank() } ?: return false
         val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
             ?: rssArticles?.getOrNull(rssArticleIndex) ?: return false
-        // 重置集数状态
+        // 重置集数状态（IF-08：保留切换前集号，供新线路按同索引定位）
+        val keepEpisodeIndex = rssEpisodeIndex
         rssRouteIndex = routeIndex
         rssEpisodeIndex = 0
         // 竞态守卫：记录切换序号，异步回调时校验是否过期
@@ -2351,8 +2368,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 rssEpisodes = episodes
                 // 更新 VideoFragment 集数列表 UI
                 postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
-                // 默认播放新线路第一集
-                episodes?.firstOrNull()?.let { playRssEpisode(player, it) }
+                // IF-08：按原集号落到新线路（越界退到最后一集），不再一律回第 1 集
+                val targetIndex = routeTargetIndex(keepEpisodeIndex, episodes?.size ?: 0)
+                episodes?.getOrNull(targetIndex)?.let { playRssEpisode(player, it) }
             }
         }.onError {
             AppLog.put("切换线路采集集数失败: routeIndex=$routeIndex", it, true)
@@ -2364,7 +2382,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * video-booksource-multiroute：视频书源切换线路（内存卷章切片，无网络采集）
      *
      * 切 durVolumeIndex → upEpisodes() 重新切片 → 同步映射集数到 rssEpisodes
-     * （复用订阅源集数选择器 UI）→ 播放新线路第一集（章节播放链）。
+     * （复用订阅源集数选择器 UI）→ **保留当前集号**播放（IF-08；集数不足退末集）。
      *
      * @param routeIndex 线路索引（0-based，对应 volumes 索引）
      * @param player 播放器实例
@@ -2375,10 +2393,11 @@ object VideoPlay : CoroutineScope by MainScope(){
         if (volumes.getOrNull(routeIndex) == null) return false
         // 竞态守卫：与订阅源 switchToRoute 同一令牌池
         val switchToken = ++switchToRouteToken
+        // IF-08：保留切换前的集号（旧实现直接归零 ⇒ 第 50 集换线路后秒变第 01 集）
+        val keepIndex = chapterInVolumeIndex
         durVolumeIndex = routeIndex
         // 线路索引镜像同步（订阅源 switchToRoute 同款），详情抽屉线路 Tab 高亮依赖
         rssRouteIndex = routeIndex
-        chapterInVolumeIndex = 0
         upEpisodes()
         // 卷章 → RssEpisode 映射，复用订阅源集数选择器 UI（数据源 rssEpisodes）
         val routeEpisodes = episodes.orEmpty().map { RssEpisode(title = it.title, url = it.url) }
@@ -2388,8 +2407,10 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         rssEpisodes = routeEpisodes
         postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
-        // 默认播放新线路第一集（章节播放链）
-        routeEpisodes.firstOrNull()?.let { playBookEpisode(player, 0, it) }
+        // IF-08：按原集号落到新线路（越界退到最后一集），播放链用章节索引
+        val targetIndex = routeTargetIndex(keepIndex, routeEpisodes.size)
+        chapterInVolumeIndex = targetIndex
+        routeEpisodes.getOrNull(targetIndex)?.let { playBookEpisode(player, targetIndex, it) }
         return true
     }
 
