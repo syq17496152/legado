@@ -1350,6 +1350,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             videoManager.listener().onCompletion()
         }
         videoManager.releaseMediaPlayer()
+        // §14.5：会话结束统一释放预解析/预填/预缓冲（先取消在途预取，避免释放后又写回残留；
+        // 日志 stage=preload_release 可证）
+        clearPreloadCache("session_end")
         // 布局切换修复（2026-09-14 用户真机铁证 17:27:25 段落：沉浸式→传统 0->1 无响应）：
         // switchLayoutMode 释放旧容器（GSYVideoView.release→releaseVideos）牵连本函数清空
         // source/book/toc 全局状态，而 setupLegacyMode→startLegacyPlayback 依赖残留状态起播，
@@ -1447,7 +1450,7 @@ object VideoPlay : CoroutineScope by MainScope(){
             isLoadingMoreArticles = false
             lastPlayedArticleLink = null
         }
-        clearPreloadCache()
+        clearPreloadCache("new_intent")
     }
 
     /**
@@ -1533,8 +1536,9 @@ object VideoPlay : CoroutineScope by MainScope(){
         EndedTokenDeduper.reset()
         // §13.8：新会话复位卡顿累计（换片/换源不继承上一部作品的卡顿提示）
         resetRebufferStats()
-        // §6.5：换源/新会话时预解析结果全部失效（禁止跨源命中旧 finalUrl）
-        NextEpisodeResolver.clear()
+        // §6.5 / §14.5：换源/新会话时预解析与预填结果全部失效（禁止跨源命中旧 finalUrl），
+        // 释放日志 stage=preload_release reason=source_switch 可证无残留
+        clearPreloadCache("source_switch")
         AppLog.put("VideoRoutesDiag initSource begin: sourceKey=${sourceKey?.take(2)}***, sourceType=$sourceType, singleUrl=$singleUrl, bookUrlNotNull=${bookUrl != null}, recordNotNull=${record != null}, routes=null, episodes=null")
         source = sourceKey?.let {
             when (sourceType) {
@@ -2660,8 +2664,16 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 阶段8：清理预缓冲缓存
      *
      * 退出播放器时调用，释放内存。
+     *
+     * §14.5：同时释放下一集预解析缓存与预填记录（会话结束/换源后无残留 prepared），
+     * 并通过 `stage=preload_release` 日志（含释放条目数）提供可验证证据。
      */
-    fun clearPreloadCache() {
+    fun clearPreloadCache(reason: String = "unspecified") {
+        // 先取消在途预取任务：否则任务在 clear 之后完成会重新写回，造成「已释放仍有残留」
+        preloadJob?.cancel()
+        bookPreloadJob?.cancel()
+        val resolved = NextEpisodeResolver.size()
+        val articles = preloadedArticles.size
         preloadedHtmls.clear()
         preloadedArticles.clear()
         // T2.2/T2.3: 退出播放器时同步清理预加载器缓存，释放内存
@@ -2669,6 +2681,14 @@ object VideoPlay : CoroutineScope by MainScope(){
         VideoPreloader.clearCache()
         // 4.8a：清理新预填器记录（video-sniff-403-and-rss-classic-fix）
         VideoPrefiller.clearCache()
+        // §14.5：下一集预解析结果同样失效，禁止跨会话命中
+        NextEpisodeResolver.clear()
+        VideoTrace.event(
+            "preload_release",
+            "reason" to reason,
+            "resolved" to resolved,
+            "articles" to articles
+        )
     }
 
     /**
@@ -2795,8 +2815,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 targetUrl = finalUrl
             )
             // §6.3：结果入缓存，切到该集时管线直接 setUp（跳过三层嗅探）
+            val cacheKey = NextEpisodeResolver.key(nextEpisode.url, rssSource.getKey(), rssArticle.link)
             NextEpisodeResolver.put(
-                NextEpisodeResolver.key(nextEpisode.url, rssSource.getKey(), rssArticle.link),
+                cacheKey,
                 NextEpisodeResolver.PreResolved(
                     finalUrl = finalUrl,
                     headers = headers,
@@ -2805,6 +2826,13 @@ object VideoPlay : CoroutineScope by MainScope(){
                 )
             )
             VideoPrefiller.prefill(finalUrl, headers)
+            // §14.5：预 prepared 成功证据（resolved=1 可由后续 preload_release 对账）
+            VideoTrace.event(
+                "preload_ready",
+                "chain" to "rss",
+                "engine" to candidate.source,
+                "key" to cacheKey
+            )
         }.onError {
             // 失败静默（预加载不干扰播放主链路）
             AppLog.put("triggerPreload: pre-sniff/prefill failed silently", it)
@@ -2857,14 +2885,23 @@ object VideoPlay : CoroutineScope by MainScope(){
                 refererFallback = next.url,
                 targetUrl = candidate.url
             )
+            val cacheKey = NextEpisodeResolver.key(next.url, bookSource.getKey(), null)
             NextEpisodeResolver.put(
-                NextEpisodeResolver.key(next.url, bookSource.getKey(), null),
+                cacheKey,
                 NextEpisodeResolver.PreResolved(
                     finalUrl = candidate.url,
                     headers = headers,
                     resolvedAt = android.os.SystemClock.uptimeMillis(),
                     engine = candidate.source
                 )
+            )
+            // §14.5：书源链补齐首分片预填（此前仅订阅源链预填），切集可直接命中 SimpleCache
+            VideoPrefiller.prefill(candidate.url, headers)
+            VideoTrace.event(
+                "preload_ready",
+                "chain" to "book",
+                "engine" to candidate.source,
+                "key" to cacheKey
             )
         }.onError {
             AppLog.put("triggerBookPreload: failed silently", it)

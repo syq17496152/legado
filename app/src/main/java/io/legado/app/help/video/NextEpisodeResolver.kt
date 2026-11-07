@@ -65,6 +65,10 @@ object NextEpisodeResolver {
         cache.clear()
     }
 
+    /** 当前缓存条目数（§14.5：释放链路日志用于证明无残留） */
     @Synchronized
-    internal fun sizeForTest(): Int = cache.size
+    fun size(): Int = cache.size
+
+    @Synchronized
+    internal fun sizeForTest(): Int = size()
 }

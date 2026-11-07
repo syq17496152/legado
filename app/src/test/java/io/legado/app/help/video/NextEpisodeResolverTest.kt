@@ -65,6 +65,17 @@ class NextEpisodeResolverTest {
     }
 
     @Test
+    fun `释放后条目清零且不再命中`() {
+        NextEpisodeResolver.put("k1", pre("http://x/1.m3u8"))
+        NextEpisodeResolver.put("k2", pre("http://x/2.m3u8"))
+        assertEquals(2, NextEpisodeResolver.size())
+        NextEpisodeResolver.clear()
+        assertEquals(0, NextEpisodeResolver.size())
+        assertNull(NextEpisodeResolver.get("k1", now = 1000L))
+        assertNull(NextEpisodeResolver.get("k2", now = 1000L))
+    }
+
+    @Test
     fun `键随集地址或源或文章变化`() {
         val base = NextEpisodeResolver.key("http://e/1", "srcA", "http://a/1")
         assertEquals(base, NextEpisodeResolver.key("http://e/1", "srcA", "http://a/1"))
