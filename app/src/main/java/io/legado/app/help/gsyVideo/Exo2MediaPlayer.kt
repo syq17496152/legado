@@ -576,6 +576,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         mEventLogger?.let { player.addListener(it) }
         // tasks §13.1：缓存命中率出口（CacheDataSource 事件 → 本实例统计）
         ExoPlayerHelper.cacheMetricsSink = { cachedBytes -> onCacheBytesRead(cachedBytes) }
+        // tasks §13.3/§13.4：缓存写策略所需的当前时长（READY 后由写 sink 现算）
+        ExoPlayerHelper.currentDurationProvider = { mInternalPlayer?.duration ?: 0L }
     }
 
     /**
@@ -591,6 +593,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             mEventLogger?.let { player.removeListener(it) }
             // tasks §13.1：解绑缓存指标出口，避免写入已释放实例
             ExoPlayerHelper.cacheMetricsSink = null
+            ExoPlayerHelper.currentDurationProvider = null
         }.onFailure {
             AppLog.put("detachFromPlayer failed", it)
         }

@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSink
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.FileDataSource
@@ -1187,6 +1188,20 @@ object ExoPlayerHelper {
     var cacheMetricsSink: ((Long) -> Unit)? = null
 
     /**
+     * tasks §13.3/§13.4：当前媒体时长供应器（毫秒，未知返回 0）。
+     *
+     * 由活跃的 `Exo2MediaPlayer` 在 attach 时注册。缓存写 sink 是**按请求懒创建**的
+     * （`CacheDataSource` 每次 open 都调 `Factory.createDataSink()`），因此 READY 后
+     * 拿到真实时长即可对后续分片生效——无需重建 media source。
+     */
+    @Volatile
+    var currentDurationProvider: (() -> Long)? = null
+
+    /** tasks §13.4：缓存写开关的日志限频计数 */
+    @Volatile
+    private var cacheWriteLogCount = 0
+
+    /**
      * 支持缓存的DataSource.Factory
      */
     val cacheDataSourceFactory: DataSource.Factory by lazy {
@@ -1216,11 +1231,31 @@ object ExoPlayerHelper {
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, upstreamFactory))
                 .setCacheReadDataSourceFactory(FileDataSource.Factory())
-                .setCacheWriteDataSinkFactory(
-                    CacheDataSink.Factory()
+                .setCacheWriteDataSinkFactory(object : DataSink.Factory {
+                    private val cacheSinkFactory = CacheDataSink.Factory()
                         .setCache(cache)
                         .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
-                )
+
+                    /**
+                     * tasks §13.3/§13.4：长视频不落盘、短视频边下边存。
+                     *
+                     * 每次请求创建 sink 时现算时长 ⇒ READY 后自动生效（无需重建 media source）；
+                     * 时长未知（prepare 前/直播）按短视频处理，宁多写不漏写。
+                     */
+                    override fun createDataSink(): DataSink {
+                        val durationMs = currentDurationProvider?.invoke() ?: 0L
+                        val write = shouldWriteCache(durationMs)
+                        cacheWriteLogCount++
+                        if (cacheWriteLogCount <= 3 || cacheWriteLogCount % 20 == 0) {
+                            AppLog.put(
+                                "[BufferSpeed] cache_write=${if (write) "on" else "off"}" +
+                                    (if (write) "" else "(reason=long_video)") +
+                                    ", durMs=$durationMs"
+                            )
+                        }
+                        return if (write) cacheSinkFactory.createDataSink() else DiscardingDataSink()
+                    }
+                })
                 // tasks §13.1：缓存命中率埋点（每次从 SimpleCache 读出字节即回调）
                 .setEventListener(object : CacheDataSource.EventListener {
                     override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
