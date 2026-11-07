@@ -64,6 +64,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
+import com.shuyu.gsyvideoplayer.GSYVideoManager
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
@@ -358,6 +359,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * T2.8: initSource 协程 Job 引用（onPause 时取消，解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
      */
     private var initSourceJob: Job? = null
+
+    /** 选集补播重试世代号：连续切集时旧的重试协程自动失效 */
+    private var pickerResumeGeneration = 0
 
     /**
      * 会话初始化是否已完成（含 dispatchLayoutMode/upView/restorePlayHistory）。
@@ -2083,14 +2087,50 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             VideoPlay.chapterInVolumeIndex = position
             VideoPlay.saveRead(0)
             upEpisodesView()
-            VideoPlay.startPlay(playerView)
+            if (currentFragment?.restartCurrentEpisode() != true) {
+                VideoPlay.startPlay(playerView)
+            }
+            schedulePickerResume()
         } else {
             val episodes = VideoPlay.rssEpisodes ?: return
             if (position == VideoPlay.rssEpisodeIndex) return
             endCastForLocalSwitch()
             VideoPlay.rssEpisodeIndex = position
-            VideoPlay.playRssEpisode(playerView, episodes[position])
+            if (currentFragment?.restartCurrentEpisode() != true) {
+                VideoPlay.playRssEpisode(playerView, episodes[position])
+            }
             upRssEpisodesView()
+            schedulePickerResume()
+        }
+    }
+
+    /**
+     * 选集切集补播：弹框关闭的焦点丢失会暂停刚起播的播放器（真机：黑屏 + 播放键）。
+     * 沉浸式布局的活跃播放器在 [VideoFragment] 内（Activity 的 `playerView` 不是它），
+     * 故优先委托 `currentFragment.resumeIfPaused()`；传统布局再走本页 playerView。
+     * 短窗口内最多检查 3 次，一旦在播放立即结束；连续切集时旧协程因世代号失效。
+     */
+    private fun schedulePickerResume() {
+        val generation = ++pickerResumeGeneration
+        lifecycleScope.launch {
+            repeat(3) { attempt ->
+                delay(if (attempt == 0) 1_200L else 1_000L)
+                if (generation != pickerResumeGeneration || isFinishing || isDestroyed) return@launch
+                val playing = runCatching {
+                    GSYVideoManager.instance()?.isPlaying() == true
+                }.getOrDefault(false)
+                if (!needResumeAfterPickerSwitch(switched = true, playerPlaying = playing)) {
+                    return@launch
+                }
+                val fragmentHandled = currentFragment?.ensurePlaying() == true
+                if (!fragmentHandled && playerView.currentState == GSYVideoView.CURRENT_STATE_PAUSE) {
+                    playerView.startAfterPrepared()
+                }
+                AppLog.put(
+                    "VideoPickerResume: attempt=${attempt + 1} playing=$playing " +
+                        "fragmentHandled=$fragmentHandled"
+                )
+            }
         }
     }
 

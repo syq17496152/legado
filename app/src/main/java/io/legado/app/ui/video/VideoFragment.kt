@@ -1735,6 +1735,48 @@ class VideoFragment : Fragment() {
     }
 
     /**
+     * 选集切集后的「确保在播」（重试轮询用）。
+     *
+     * 与 [restartCurrentEpisode] 的区别：准备中/播放中不重复 setUp，只在真正停住（NORMAL/ERROR）
+     * 或暂停态时才重启/恢复，避免一次切集触发多次重建。
+     */
+    internal fun ensurePlaying(): Boolean {
+        val pv = _playerView ?: return false
+        return when (pv.currentState) {
+            GSYVideoView.CURRENT_STATE_PLAYING -> true
+            GSYVideoView.CURRENT_STATE_PAUSE -> {
+                pv.startAfterPrepared()
+                true
+            }
+            GSYVideoView.CURRENT_STATE_NORMAL, GSYVideoView.CURRENT_STATE_ERROR -> {
+                restartCurrentEpisode()
+            }
+            // 其余状态（准备中/缓冲中/自动完成）已处于播放管线内，重复 setUp 反而更慢
+            else -> true
+        }
+    }
+
+    /**
+     * 按 `VideoPlay` 当前索引重启沉浸式播放器（选集切集专用）。
+     *
+     * 沉浸式布局的活跃播放器在本 Fragment 内，Activity 持有的 `playerView` 不是它；
+     * 选集弹框切集后必须由这里重走起播入口（与首次 activatePlayer 同一路径），否则黑屏停在播放键。
+     */
+    internal fun restartCurrentEpisode(): Boolean {
+        val pv = _playerView ?: return false
+        val book = VideoPlay.book
+        when {
+            book != null -> VideoPlay.startPlay(pv)
+            !VideoPlay.rssEpisodes.isNullOrEmpty() -> {
+                val episode = VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex) ?: return false
+                VideoPlay.playRssEpisode(pv, episode)
+            }
+            else -> VideoPlay.startPlay(pv)
+        }
+        return true
+    }
+
+    /**
      * Bug修复：重新注册触摸监听
      *
      * GSY 的 setUp/startPlayLogic 可能覆盖我们在 surface_container 上设置的 OnTouchListener。
