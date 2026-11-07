@@ -1,5 +1,6 @@
 package io.legado.app.help.exoplayer
 
+import androidx.media3.datasource.DataSink
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,5 +39,21 @@ class LongVideoCachePolicyTest {
         assertFalse(shouldLogCacheWriteDecision(changed = false, count = 31))
         assertTrue(shouldLogCacheWriteDecision(changed = false, count = 40))
         assertFalse(shouldLogCacheWriteDecision(changed = false, count = 41))
+    }
+
+    @Test
+    fun `分流 sink 未决策前写入被安全丢弃`() {
+        // 真机铁证：决策必须按请求（open）做；未 open 的写入不得落到任何 cache sink
+        val neverCalled = object : DataSink.Factory {
+            override fun createDataSink(): DataSink =
+                throw AssertionError("未 open 时不得创建 cache 写 sink")
+        }
+        val sink = PolicySwitchDataSink(
+            cacheSinkFactory = neverCalled,
+            durationProvider = { 40 * 60 * 1000L }
+        )
+        // 丢弃路径：不抛异常、不写盘
+        sink.write(ByteArray(8), 0, 8)
+        sink.close()
     }
 }

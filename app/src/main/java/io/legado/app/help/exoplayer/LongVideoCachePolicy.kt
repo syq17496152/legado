@@ -17,15 +17,14 @@ internal fun shouldWriteCache(durationMs: Long): Boolean =
     durationMs <= 0L || durationMs < LONG_VIDEO_CACHE_THRESHOLD_MS
 
 /**
- * tasks §13.4：缓存写决策日志的打点判据（纯函数，便于单测）。
+ * tasks §13.3：缓存写决策日志的打点判据（纯函数，便于单测）。
  *
- * 为什么不是简单限频：HLS 分片较大时，播放数分钟只创建个位数 sink，
- * 「每 N 次」的限频会让「长视频由 on 转 off」这一关键事件长期不可见
- * （真机取证 2026-11-08 02:41：4 分钟仅 3 次 sink 创建）。
- * 因此**决策变化必须打**，限频仅用于稳定状态下的抽样。
+ * 为什么不是简单限频：真机取证（2026-11-08 04:12）表明 `createDataSink()` 并不按请求调用
+ * （一个 session 仅 4 次），限频会让「长视频由 on 转 off」事件不可见。
+ * 因此**决策变化必打**，限频仅用于稳定状态下的抽样。
  *
  * @param changed 本次决策是否与上次不同
- * @param count 本次是第几次 sink 创建（从 1 开始）
+ * @param count 本次是第几次决策（从 1 开始）
  */
 internal fun shouldLogCacheWriteDecision(
     changed: Boolean,
@@ -35,14 +34,39 @@ internal fun shouldLogCacheWriteDecision(
 ): Boolean = changed || count <= firstN || count % logEvery == 0
 
 /**
- * tasks §13.4：不写缓存的空 DataSink。
+ * tasks §13.3/§13.4：**按请求**分流的写 sink。
  *
- * 为什么可以"不写"而不重建 media source：`CacheDataSource` 对写 sink 的语义是
- * 「tee 一份到缓存」——读取永远走 upstream，写入失败/丢弃都会被忽略。
- * 因此把 `open/write/close` 做成空操作即可只保留播放、不落盘（无需二次 prepare）。
+ * 真机铁证（2026-11-08 04:12）：`CacheDataSource` 的写 sink 在一个播放会话里只创建 4 次
+ * （`createDataSink()` 4 次），之后被复用；而缓存文件仍按分片持续写入（1 分钟 23 个 `.exo`）
+ * ⇒ **在 `createDataSink()` 里做决策无效**。决策必须下沉到每次 `open(dataSpec)`：
+ *
+ * - `open` 现算时长 → 长视频不建 delegate（丢弃），短视频交给 `CacheDataSink`；
+ * - `write/close` 透传给当次 delegate，delegate 为空即丢弃；
+ * - 每次 `open` 都重新决策 ⇒ READY 后拿到真实时长即对后续分片生效，无需重建 media source。
  */
-internal class DiscardingDataSink : DataSink {
-    override fun open(dataSpec: DataSpec) = Unit
-    override fun write(buffer: ByteArray, offset: Int, length: Int) = Unit
-    override fun close() = Unit
+internal class PolicySwitchDataSink(
+    private val cacheSinkFactory: DataSink.Factory,
+    private val durationProvider: () -> Long,
+    private val onDecision: (write: Boolean, durationMs: Long) -> Unit = { _, _ -> }
+) : DataSink {
+
+    private var delegate: DataSink? = null
+
+    override fun open(dataSpec: DataSpec) {
+        val durationMs = durationProvider()
+        val write = shouldWriteCache(durationMs)
+        onDecision(write, durationMs)
+        val sink = if (write) cacheSinkFactory.createDataSink() else null
+        delegate = sink
+        sink?.open(dataSpec)
+    }
+
+    override fun write(buffer: ByteArray, offset: Int, length: Int) {
+        delegate?.write(buffer, offset, length)
+    }
+
+    override fun close() {
+        delegate?.close()
+        delegate = null
+    }
 }

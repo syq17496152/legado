@@ -1249,24 +1249,26 @@ object ExoPlayerHelper {
                     /**
                      * tasks §13.3/§13.4：长视频不落盘、短视频边下边存。
                      *
-                     * 每次请求创建 sink 时现算时长 ⇒ READY 后自动生效（无需重建 media source）；
-                     * 时长未知（prepare 前/直播）按短视频处理，宁多写不漏写。
+                     * **决策必须在 `DataSink.open(dataSpec)`（即每次请求）做，不能放在本方法**：
+                     * 真机铁证（2026-11-08 04:12）本方法一个会话只被调用 4 次，之后 sink 被复用，
+                     * 缓存文件仍按分片持续写入 ⇒ 放在这里等于永不生效。
                      */
-                    override fun createDataSink(): DataSink {
-                        val durationMs = currentDurationProvider?.invoke() ?: 0L
-                        val write = shouldWriteCache(durationMs)
-                        val changed = lastCacheWriteDecision != write
-                        lastCacheWriteDecision = write
-                        cacheWriteLogCount++
-                        if (shouldLogCacheWriteDecision(changed, cacheWriteLogCount)) {
-                            AppLog.put(
-                                "[BufferSpeed] cache_write=${if (write) "on" else "off"}" +
-                                    (if (write) "" else "(reason=long_video)") +
-                                    ", durMs=$durationMs, sink#$cacheWriteLogCount"
-                            )
+                    override fun createDataSink(): DataSink =
+                        PolicySwitchDataSink(
+                            cacheSinkFactory = cacheSinkFactory,
+                            durationProvider = { currentDurationProvider?.invoke() ?: 0L }
+                        ) { write, durationMs ->
+                            val changed = lastCacheWriteDecision != write
+                            lastCacheWriteDecision = write
+                            cacheWriteLogCount++
+                            if (shouldLogCacheWriteDecision(changed, cacheWriteLogCount)) {
+                                AppLog.put(
+                                    "[BufferSpeed] cache_write=${if (write) "on" else "off"}" +
+                                        (if (write) "" else "(reason=long_video)") +
+                                        ", durMs=$durationMs, req#$cacheWriteLogCount"
+                                )
+                            }
                         }
-                        return if (write) cacheSinkFactory.createDataSink() else DiscardingDataSink()
-                    }
                 })
                 // tasks §13.1：缓存命中率埋点（每次从 SimpleCache 读出字节即回调）
                 .setEventListener(object : CacheDataSource.EventListener {
