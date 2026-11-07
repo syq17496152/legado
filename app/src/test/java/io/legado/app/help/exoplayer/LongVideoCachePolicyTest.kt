@@ -30,13 +30,13 @@ class LongVideoCachePolicyTest {
     @Test
     fun `缓存写决策日志_变化必打_稳定态抽样`() {
         // 决策变化（长视频 on→off）必须打，否则关键事件在低分片数场景不可见
-        assertTrue(shouldLogCacheWriteDecision(changed = true, count = 8))
-        // 前 3 次起播样本必打
+        assertTrue(shouldLogCacheWriteDecision(changed = true, count = 88))
+        // 起播前 30 次必打（覆盖「请求是否逐个创建 sink」的诊断需求）
         assertTrue(shouldLogCacheWriteDecision(changed = false, count = 1))
-        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 3))
-        // 稳定态：第 4 次不打，第 20 次抽样打
-        assertFalse(shouldLogCacheWriteDecision(changed = false, count = 4))
-        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 20))
-        assertFalse(shouldLogCacheWriteDecision(changed = false, count = 21))
+        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 30))
+        // 稳定态：第 31 次不打，第 40 次抽样打
+        assertFalse(shouldLogCacheWriteDecision(changed = false, count = 31))
+        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 40))
+        assertFalse(shouldLogCacheWriteDecision(changed = false, count = 41))
     }
 }

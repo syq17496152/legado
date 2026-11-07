@@ -33,6 +33,7 @@ import io.legado.app.help.exoplayer.CencLocalFallback
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.exoplayer.HlsKeyDataSourceFactory
 import io.legado.app.help.exoplayer.PlayerInstancePool
+import io.legado.app.help.exoplayer.shouldWriteCache
 import io.legado.app.help.player.PlaybackErrorAction
 import io.legado.app.help.player.PlaybackErrorPolicy
 import io.legado.app.constant.AppLog
@@ -1467,6 +1468,15 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             val dur = player?.duration ?: 0L
             // tasks §13.3/§13.4：应用线程写时长快照（直播/未知时 duration 为 C.TIME_UNSET 或 0，不覆盖）
             if (dur > 0L) knownDurationMs = dur
+            // tasks §13.4：READY 后输出一次分流决策（确定性取证点——写 sink 是否被创建取决于
+            // 是否真有上游读取，命中缓存/预填时不会创建，故不能只依赖 sink 侧日志）
+            if (state == Player.STATE_READY && dur > 0L) {
+                val write = shouldWriteCache(dur)
+                AppLog.put(
+                    "[BufferSpeed] cache_policy durMs=$dur write=${if (write) "on" else "off"}" +
+                        (if (write) "" else "(reason=long_video)")
+                )
+            }
             val buf = (player?.bufferedPosition ?: 0L) - pos
             VideoTrace.event(
                 stage = "engine_state",

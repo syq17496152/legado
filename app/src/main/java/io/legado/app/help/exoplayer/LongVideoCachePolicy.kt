@@ -30,8 +30,8 @@ internal fun shouldWriteCache(durationMs: Long): Boolean =
 internal fun shouldLogCacheWriteDecision(
     changed: Boolean,
     count: Int,
-    firstN: Int = 3,
-    logEvery: Int = 20
+    firstN: Int = 30,
+    logEvery: Int = 10
 ): Boolean = changed || count <= firstN || count % logEvery == 0
 
 /**

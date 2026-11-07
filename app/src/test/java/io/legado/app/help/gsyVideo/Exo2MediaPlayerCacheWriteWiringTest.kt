@@ -81,5 +81,10 @@ class Exo2MediaPlayerCacheWriteWiringTest {
             "新会话必须归零时长快照（避免沿用上一集时长误判分流）",
             player.contains("knownDurationMs = 0L")
         )
+        // READY 处必须给出确定性决策日志（sink 不创建时仍可取证）
+        assertTrue(
+            "STATE_READY 必须输出 cache_policy 决策",
+            player.contains("cache_policy durMs=\$dur write=")
+        )
     }
 }
