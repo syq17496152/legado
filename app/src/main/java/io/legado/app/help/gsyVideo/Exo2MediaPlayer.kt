@@ -265,6 +265,18 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private var playbackStartTime = 0L
 
     /**
+     * tasks §13.3/§13.4：媒体总时长快照（毫秒，未知 0）。
+     *
+     * **只能由应用线程写入、任意线程读取**：缓存写 sink 在 `CacheDataSource` 的加载线程
+     * 现算分流，若在那里直接读 `mInternalPlayer.duration` 会抛
+     * `IllegalStateException: Player is accessed on the wrong thread`
+     * （真机铁证 2026-11-08 02:12，errorCode=1004 ⇒ 播放失败弹窗）。
+     * 故此处仅在状态回调（应用线程）写快照，供应器只读该 volatile 字段。
+     */
+    @Volatile
+    private var knownDurationMs = 0L
+
+    /**
      * R4-T8: 构建降级链类型列表
      *
      * T1.5 V2重构：按嗅探结果排序降级链（解决 Bug-7：降级链默认HLS优先与MP4直链不匹配）
@@ -576,8 +588,10 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         mEventLogger?.let { player.addListener(it) }
         // tasks §13.1：缓存命中率出口（CacheDataSource 事件 → 本实例统计）
         ExoPlayerHelper.cacheMetricsSink = { cachedBytes -> onCacheBytesRead(cachedBytes) }
-        // tasks §13.3/§13.4：缓存写策略所需的当前时长（READY 后由写 sink 现算）
-        ExoPlayerHelper.currentDurationProvider = { mInternalPlayer?.duration ?: 0L }
+        // tasks §13.3/§13.4：缓存写策略所需的当前时长。
+        // **不得在此 lambda 内读 player**（sink 在加载线程创建 ⇒ 跨线程访问播放器会抛 1004），
+        // 只读应用线程写入的时长快照。
+        ExoPlayerHelper.currentDurationProvider = { knownDurationMs }
     }
 
     /**
@@ -698,6 +712,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             hasReportedReadySuccess = false
             hasReportedFirstFrame = false
             playbackStartTime = System.currentTimeMillis()
+            // tasks §13.3/§13.4：新会话未知时长先归零（按短视频处理，宁多写不漏写）
+            knownDurationMs = 0L
             AppLog.put("ExoPlayer state reset: currentSniffResult=UNKNOWN, fallbackTypesSize=${fallbackTypes.size}, currentFallbackIndex=0")
             // T5.1: 三件套改为实例池全局共享（池实例构建参数兼容的前提）
             // - V-P0-1 修正：TrackSelector 每实例独立（共享单例并发二次 init 崩溃 ×5 FATAL），
@@ -1449,6 +1465,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             val player = mInternalPlayer
             val pos = player?.currentPosition ?: 0L
             val dur = player?.duration ?: 0L
+            // tasks §13.3/§13.4：应用线程写时长快照（直播/未知时 duration 为 C.TIME_UNSET 或 0，不覆盖）
+            if (dur > 0L) knownDurationMs = dur
             val buf = (player?.bufferedPosition ?: 0L) - pos
             VideoTrace.event(
                 stage = "engine_state",

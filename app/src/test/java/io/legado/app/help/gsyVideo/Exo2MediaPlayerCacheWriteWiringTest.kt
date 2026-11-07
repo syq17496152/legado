@@ -49,7 +49,7 @@ class Exo2MediaPlayerCacheWriteWiringTest {
         )
         assertTrue(
             "attachToPlayer 必须注册 currentDurationProvider，否则长视频判定永远拿到 0",
-            attachBody.contains("ExoPlayerHelper.currentDurationProvider = { mInternalPlayer?.duration ?: 0L }")
+            attachBody.contains("ExoPlayerHelper.currentDurationProvider = { knownDurationMs }")
         )
         val detachBody = player.substring(
             player.indexOf("private fun detachFromPlayer"),
@@ -58,6 +58,28 @@ class Exo2MediaPlayerCacheWriteWiringTest {
         assertTrue(
             "detachFromPlayer 必须清空 currentDurationProvider（池化复用后不得残留旧实例 lambda）",
             detachBody.contains("ExoPlayerHelper.currentDurationProvider = null")
+        )
+    }
+
+    @Test
+    fun `时长供应器不得跨线程访问播放器`() {
+        // 真机铁证 2026-11-08 02:12：sink 在加载线程创建，lambda 内读 player.duration
+        // 抛 IllegalStateException: Player is accessed on the wrong thread（errorCode=1004）
+        val attachBody = player.substring(
+            player.indexOf("private fun attachToPlayer"),
+            player.indexOf("private fun detachFromPlayer")
+        )
+        assertFalse(
+            "currentDurationProvider 的 lambda 不得直接读 mInternalPlayer（跨线程访问会崩播放）",
+            attachBody.contains("currentDurationProvider = { mInternalPlayer")
+        )
+        assertTrue(
+            "时长必须先由状态回调（应用线程）写入快照",
+            player.contains("if (dur > 0L) knownDurationMs = dur")
+        )
+        assertTrue(
+            "新会话必须归零时长快照（避免沿用上一集时长误判分流）",
+            player.contains("knownDurationMs = 0L")
         )
     }
 }
