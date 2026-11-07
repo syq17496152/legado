@@ -116,6 +116,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.model.VideoPlaybackQueue
 import io.legado.app.help.video.NextEpisodeResolver
+import io.legado.app.help.video.PlaybackMode
 import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.video.VideoTrace
 import io.legado.app.service.VideoPlayService
@@ -205,6 +206,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     companion object {
         const val EXTRA_PREPARE_BOOK_INFO = "prepareBookInfo"
+
+        /** §12.5：入口显式播放模式（值取 [PlaybackMode] 名称；缺省按列表上下文推导） */
+        const val EXTRA_MODE_HINT = "modeHint"
 
         /**
          * F182：布局切换提示的保持时长。
@@ -613,6 +617,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             snapshotInBookshelf = VideoPlay.inBookshelf
             AppLog.put("VideoPlayerActivity state snapshot saved: singleUrl=$snapshotSingleUrl, inBookshelf=$snapshotInBookshelf")
             // T2.8: 保存 initSource 协程 Job 引用，onPause 时取消
+            // §12.5：入口可显式注入播放模式（FEED/SERIES/SINGLE）；未注入时由 initSource 按列表上下文推导。
+            // 必须在 initSource 之前写入 —— initSource 末尾会消费并清空 VideoPlay.modeHint。
+            intent.getStringExtra(EXTRA_MODE_HINT)?.let { hint ->
+                VideoPlay.modeHint = parsePlaybackModeHint(hint)
+                AppLog.put("VideoPlayerActivity modeHint=${VideoPlay.modeHint?.name}")
+            }
             initSourceJob = lifecycleScope.launch {
                 if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
                     // V-004-P0-2: initSource 失败记录日志（VideoPlay.initSource 内部已记录详细原因）
