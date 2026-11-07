@@ -13,6 +13,7 @@ import com.shuyu.gsyvideoplayer.listener.GSYMediaPlayerListener
 import com.shuyu.gsyvideoplayer.utils.CommonUtil
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYBaseVideoPlayer
+import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookSourceType
@@ -94,10 +95,41 @@ import io.legado.app.help.dlna.DlnaConstants
 import io.legado.app.help.exoplayer.DeviceInfoHelper
 import java.io.File
 
+/**
+ * 迟到的播放结束事件判定（IF-04，纯函数，单测锁定）。
+ *
+ * 重播/重建会新建播放器实例，上一轮 AUTO_COMPLETE 仍可能派发到新实例（真机实测 128ms 后到达）；
+ * 此时若「刚开始起播」或「当前正在播放」，该事件必为陈旧事件，必须忽略，
+ * 否则会把刚开始的新播放立即判定 Stop（黑屏 + 「单视频无下一集」）。
+ *
+ * 判据不依赖播放位置 API（GSY 在非播放态可能返回 0，会误伤正常播完推进），
+ * 改用「距本次起播的时长」：短于 [MIN_SETUP_AGE_MS] 的结束事件不可能来自真实播完。
+ *
+ * 已知上限：若用户在距片尾 <1.5s 处恢复播放并立即播完，该次真实结束会被忽略（不自动续播，
+ * 可手动上滑/点下一集）。换取的是重播不再被旧结束事件打断（IF-04 真机缺陷）。
+ */
+internal fun isStaleCompletion(
+    sinceSetupMs: Long,
+    isPlaying: Boolean,
+    minSetupAgeMs: Long = MIN_SETUP_AGE_MS,
+): Boolean = isPlaying || sinceSetupMs < minSetupAgeMs
+
+/** 起播后至少经过该时长，结束事件才可能真实（覆盖短视频最小可播时长） */
+internal const val MIN_SETUP_AGE_MS: Long = 1_500L
+
 object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_NAME = "video_pos_" //单链接播放进度
     private const val VIDEO_POS_SAVE_TIME = 60 * 60 * 24 * 20 //20天
     private var needClearTemp = true //需要清理缓存
+
+    /** IF-04：本次起播时刻（elapsedRealtime），用于识别重播/切集后迟到的结束事件 */
+    @Volatile
+    private var lastPlaybackSetupAt = 0L
+
+    /** 标记一次新的起播（首次/重播/切集均会更新） */
+    private fun markPlaybackSetup() {
+        lastPlaybackSetupAt = android.os.SystemClock.elapsedRealtime()
+    }
     private const val VIDEO_TEMP_PATH = "video_temp"
     internal val videoTempFile by lazy { File(FileUtils.getCachePath(), VIDEO_TEMP_PATH) }
 
@@ -920,6 +952,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 开始播放
      */
     fun startPlay(player: StandardGSYVideoPlayer) {
+        markPlaybackSetup()
         // video-source-multiline-l0-preload AD-03：同 key 300ms 防抖（消除 logs9 双起播铁证：同影片 5ms 内两次 startPlay）
         // key = 章节 URL ?: 当前视频 URL；key 空白（URL 未就绪）时不防抖，护首播/initSource 早期；
         // 新影片（key 不同）不受限；与 switchToken 解耦（token 在两次调用间已递增，同 token 防抖拦不住）。
@@ -1859,6 +1892,20 @@ object VideoPlay : CoroutineScope by MainScope(){
      * @return true=已发起推进；false=未推进（日志已记录 reason）
      */
     fun advanceEpisode(player: GSYBaseVideoPlayer, origin: String): Boolean {
+        // IF-04：重播/重建后，上一轮的 AUTO_COMPLETE 事件仍可能再次派发（旧播放器实例 →
+        // 令牌身份变化导致去重失效）。起播不足 1.5s 或当前在播时，一律视为陈旧事件忽略。
+        val sinceSetup = android.os.SystemClock.elapsedRealtime() - lastPlaybackSetupAt
+        if (isStaleCompletion(
+                sinceSetupMs = sinceSetup,
+                isPlaying = player.currentState == GSYVideoView.CURRENT_STATE_PLAYING
+            )
+        ) {
+            VideoTrace.event(
+                "advance_decision", "entry" to origin, "target" to "IGNORE",
+                "reason" to "stale_completion", "sinceSetupMs" to sinceSetup
+            )
+            return false
+        }
         val isBook = book != null
         val isArticleMode = !isBook && rssEpisodes.isNullOrEmpty() && !rssArticles.isNullOrEmpty()
         val currentIndex = when {
@@ -2327,6 +2374,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * @param episode 集数模型（title/url 与章节一致，来自 rssEpisodes 映射）
      */
     fun playBookEpisode(player: GSYBaseVideoPlayer, episodeIndex: Int, episode: RssEpisode) {
+        markPlaybackSetup()
         val book = book ?: return
         val toc = toc ?: return
         VideoTrace.event(
@@ -2697,6 +2745,7 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 采集链已委托 VideoPlaybackPipeline.playEpisode（AnalyzeUrl/setUp/startPlayLogic 由 Pipeline 统一实现）
      */
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
+        markPlaybackSetup()
         VideoTrace.event(
             stage = "switch_req",
             "chain" to "rss",
