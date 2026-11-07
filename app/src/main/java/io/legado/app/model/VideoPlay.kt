@@ -2300,20 +2300,26 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     /**
-     * R3 多线路支持：切换线路
+     * R3 多线路支持：切换线路（**旧模式内存切换**，新/旧两条路都要保集号）
      *
-     * 切换后自动更新 rssEpisodes + rssEpisodeIndex，并触发 UI 更新事件
-     * 返回新线路的第一集 RssEpisode，由调用方执行播放
+     * IF-08 回归（2026-11-08 真机）：传统布局点线路 chip 时，`isNewRoutesMode()` 因
+     * `volumes` 为空返回 false ⇒ 走到本函数；原实现硬编码 `rssEpisodeIndex = 0`
+     * 把第 51 集换成线路 2 的第 01 集。现与 `switchBookRoute` 同口径：
+     * 用 [routeTargetIndex] 保留集号、越界退末集、空列表安全。
+     *
+     * @return 目标集（由调用方执行播放），索引非法返回 null
      */
     fun switchRssRoute(index: Int): RssEpisode? {
         val routes = rssRoutes ?: return null
         if (index < 0 || index >= routes.size) return null
+        val keepIndex = rssEpisodeIndex
         rssRouteIndex = index
         val route = routes[index]
         rssEpisodes = route.episodes
-        rssEpisodeIndex = 0
+        val targetIndex = routeTargetIndex(keepIndex, route.episodes.size)
+        rssEpisodeIndex = targetIndex
         postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
-        return route.episodes.firstOrNull()
+        return route.episodes.getOrNull(targetIndex)
     }
 
     /**
