@@ -26,4 +26,17 @@ class LongVideoCachePolicyTest {
         assertTrue(shouldWriteCache(durationMs = 0L))
         assertTrue(shouldWriteCache(durationMs = -1L))
     }
+
+    @Test
+    fun `缓存写决策日志_变化必打_稳定态抽样`() {
+        // 决策变化（长视频 on→off）必须打，否则关键事件在低分片数场景不可见
+        assertTrue(shouldLogCacheWriteDecision(changed = true, count = 8))
+        // 前 3 次起播样本必打
+        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 1))
+        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 3))
+        // 稳定态：第 4 次不打，第 20 次抽样打
+        assertFalse(shouldLogCacheWriteDecision(changed = false, count = 4))
+        assertTrue(shouldLogCacheWriteDecision(changed = false, count = 20))
+        assertFalse(shouldLogCacheWriteDecision(changed = false, count = 21))
+    }
 }

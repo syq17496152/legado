@@ -1202,6 +1202,16 @@ object ExoPlayerHelper {
     private var cacheWriteLogCount = 0
 
     /**
+     * tasks §13.4：上一次缓存写决策（null=尚未决策）。
+     *
+     * 真机取证（2026-11-08 02:41）：HLS 分片较大，播放数分钟仅创建个位数 sink，
+     * 「每 20 次」的限频会让「长视频由 on 转 off」这一关键事件长期不可见。
+     * 故改为**决策变化必打**，与限频并行。
+     */
+    @Volatile
+    private var lastCacheWriteDecision: Boolean? = null
+
+    /**
      * 支持缓存的DataSource.Factory
      */
     val cacheDataSourceFactory: DataSource.Factory by lazy {
@@ -1245,12 +1255,14 @@ object ExoPlayerHelper {
                     override fun createDataSink(): DataSink {
                         val durationMs = currentDurationProvider?.invoke() ?: 0L
                         val write = shouldWriteCache(durationMs)
+                        val changed = lastCacheWriteDecision != write
+                        lastCacheWriteDecision = write
                         cacheWriteLogCount++
-                        if (cacheWriteLogCount <= 3 || cacheWriteLogCount % 20 == 0) {
+                        if (shouldLogCacheWriteDecision(changed, cacheWriteLogCount)) {
                             AppLog.put(
                                 "[BufferSpeed] cache_write=${if (write) "on" else "off"}" +
                                     (if (write) "" else "(reason=long_video)") +
-                                    ", durMs=$durationMs"
+                                    ", durMs=$durationMs, sink#$cacheWriteLogCount"
                             )
                         }
                         return if (write) cacheSinkFactory.createDataSink() else DiscardingDataSink()
