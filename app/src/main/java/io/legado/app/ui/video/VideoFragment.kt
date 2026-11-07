@@ -219,8 +219,8 @@ class VideoFragment : Fragment() {
     /** 横屏全屏态下控件是否可见（单击切换） */
     private var controlsVisibleInFullscreen = true
 
-    /** 标记是否需要在 activatePlayer 后重新注册触摸监听 */
-    private var needReRegisterTouchListener = true
+    /** 触摸到达次数（诊断用：采样输出 `stage=gesture_touch`，避免每帧刷屏） */
+    private var touchEventCount = 0
 
     // ==================== 悬浮控件视图引用 ====================
 
@@ -399,6 +399,20 @@ class VideoFragment : Fragment() {
                     // Bug修复：GSY 在 setUp 时可能覆盖我们设置的 OnTouchListener
                     // 在 onPrepared 后重新注册，确保手势检测正常工作
                     reRegisterTouchListener()
+                    // IF-05 兜底（真机 21:21 铁证）：订阅源续播走的是 `VideoPlay.startPlay`
+                    // 的 `player.seekOnStart = durChapterPos`，它在 prepare **之后**才生效，
+                    // 所以本回调里 `currentPosition` 仍是 0、上面的 PlayHistory 归零也拦不住。
+                    // 延迟一拍再检查：起播位置已在片尾（距末尾 <2s）⇒ 回到 0 重新播放，
+                    // 否则用户一进播放页就是 ENDED 黑屏且封面层吞掉上滑手势。
+                    pv.postDelayed({
+                        val endDur = maxOf(pv.duration.toLong(), VideoPlay.videoManager.duration)
+                        val curPos = VideoPlay.videoManager.currentPosition.toLong()
+                        if (shouldSnapToStart(curPos, endDur)) {
+                            VideoTrace.event("resume_snap", "pos" to curPos, "dur" to endDur)
+                            pv.seekTo(0)
+                            pv.startAfterPrepared()
+                        }
+                    }, 400)
                     // 弹幕视图已在 setUp → initDanmaku 内初始化完成，此时同步开关入口
                     updateDanmakuButtonState()
                 }
@@ -419,10 +433,31 @@ class VideoFragment : Fragment() {
                         val videoUrl = VideoPlay.historyKeyUrl ?: return@launch
                         val history = PlayHistoryStore.load(articleUrl, videoUrl)
                         if (history != null && history.position > 10000) {
-                            pv.seekTo(history.position)
-                            val minutes = history.position / 60000
-                            val seconds = (history.position % 60000) / 1000
-                            appCtx.toastOnUi(getString(R.string.video_resume_from_format, minutes, seconds))
+                            // IF-05 读取侧兜底：旧记录/异常退出可能把片尾位置写进来，
+                            // 直接 seek 会导致「一进就 READY→ENDED」黑屏停在播放键。
+                            // 距片尾 <2s 视为已看完 ⇒ 从 0 起播且不弹续播提示。
+                            // duration 取 GSY 与 VideoManager 的较大者：onPrepared 回调时
+                            // `pv.duration` 可能仍为 0（GSY 内部赋值晚于本回调），
+                            // 只读它会导致「时长未知 ⇒ 不归零」，真机上仍 seek 到片尾。
+                            val durMs = maxOf(pv.duration.toLong(), VideoPlay.videoManager.duration)
+                            val resumePos = io.legado.app.model.resumePositionForRestore(
+                                history.position.toInt(),
+                                durMs
+                            )
+                            VideoTrace.event(
+                                "resume_progress",
+                                "pos" to history.position,
+                                "dur" to durMs,
+                                "chosen" to resumePos
+                            )
+                            if (resumePos > 0) {
+                                pv.seekTo(resumePos.toLong())
+                                val minutes = resumePos / 60000
+                                val seconds = (resumePos % 60000) / 1000
+                                appCtx.toastOnUi(
+                                    getString(R.string.video_resume_from_format, minutes, seconds)
+                                )
+                            }
                         }
                     }
                 }
@@ -1341,7 +1376,17 @@ class VideoFragment : Fragment() {
                 velocityY: Float
             ): Boolean {
                 val activity = activity as? VideoPlayerActivity
-                if (activity?.shouldHandleVerticalFling() == true) {
+                val handlesVertical = activity?.shouldHandleVerticalFling() == true
+                if (kotlin.math.abs(velocityY) > 200f) {
+                    // 诊断：区分「手势层未接管」与「速度/方向未达阈值」两类无响应
+                    VideoTrace.event(
+                        "gesture_fling",
+                        "handled" to handlesVertical,
+                        "vx" to velocityX.toInt(),
+                        "vy" to velocityY.toInt()
+                    )
+                }
+                if (handlesVertical) {
                     if (kotlin.math.abs(velocityY) > kotlin.math.abs(velocityX) &&
                         kotlin.math.abs(velocityY) > FLING_MIN_VELOCITY
                     ) {
@@ -1374,8 +1419,33 @@ class VideoFragment : Fragment() {
         // 替换 GSY 的 OnTouchListener，由我们统一处理手势（单击切换+双指缩放+双指滑动+文章切换）。
         // controlsLayer 在 playerView 之上，其按钮（ImageButton）仍可正常接收触摸（buttons 是 clickable）；
         // controlsLayer 的非按钮区域（clickable=false）穿透到 playerView → surface_container → 我们的 listener。
+        // 注意：GSY 每次 setUp/startPlayLogic 都会重新覆盖该 listener，故 onPrepared 时必须重新安装
+        // （`reRegisterTouchListener`）；否则第 2 集起手势层整体失效（2026-11-07 真机：SERIES 上滑零日志）。
+        installGestureTouchListener()
+
+        // video-sniff-403-and-rss-classic-fix Phase 2：原 P0-1.6 WebView 模式触摸事件说明段已随
+        // WebView 播放器删除而失效清理（WebViewVideoPlayer.onInterceptTouchEvent 不复存在）
+    }
+
+    /**
+     * 安装手势触摸监听（幂等）。
+     *
+     * 抽成独立方法的原因：GSY 在 `init()/setUp()` 里会把 surface_container 的 OnTouchListener
+     * 覆盖回它自己 ⇒ 必须在每次 `onPrepared` 后（重新）安装，否则手势层只在首集有效。
+     *
+     * 诊断埋点 `stage=gesture_touch`：用于确认触摸是否到达本层（区分「被 GSY 覆盖」与
+     * 「onFling 条件不满足」两类无响应，测试包日志是唯一可观测证据）。
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun installGestureTouchListener() {
         val touchTarget: View? = _playerView?.findViewById(R.id.surface_container) ?: _playerView
-        touchTarget?.setOnTouchListener { v, event ->
+        touchTarget?.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                touchEventCount++
+                if (touchEventCount <= 3 || touchEventCount % 20 == 0) {
+                    VideoTrace.event("gesture_touch", "count" to touchEventCount)
+                }
+            }
             // 检查触摸点是否在按钮区域内（按钮区域由控件自己处理）
             val x = event.rawX.toInt()
             val y = event.rawY.toInt()
@@ -1397,9 +1467,6 @@ class VideoFragment : Fragment() {
                 false // 控件区域内不消费（让按钮处理；实际按钮在 controlsLayer 上层已消费）
             }
         }
-
-        // video-sniff-403-and-rss-classic-fix Phase 2：原 P0-1.6 WebView 模式触摸事件说明段已随
-        // WebView 播放器删除而失效清理（WebViewVideoPlayer.onInterceptTouchEvent 不复存在）
     }
 
     /**
@@ -1786,44 +1853,14 @@ class VideoFragment : Fragment() {
     }
 
     /**
-     * Bug修复：重新注册触摸监听
+     * 重新安装触摸监听（GSY setUp 后必调）
      *
-     * GSY 的 setUp/startPlayLogic 可能覆盖我们在 surface_container 上设置的 OnTouchListener。
-     * 在 onPrepared 回调后重新注册，确保手势检测正常工作。
-     *
-     * 注意：OnTouchListener 必须设在 R.id.surface_container 上（不是 playerView），
-     * 因为 GSY 在 init() 中对 surface_container 调用了 setOnTouchListener(this)，
-     * surface_container 是实际接收触摸的视图。
+     * GSY 的 setUp/startPlayLogic 会覆盖我们在 surface_container 上设置的 OnTouchListener。
+     * 因此**每次** onPrepared 都要重新安装（不能只在首集装一次）——否则第 2 集起手势层
+     * 整体失效，表现为「上滑/单击/双击全部无响应」且日志只有 GSY 自己的行为。
      */
-    @SuppressLint("ClickableViewAccessibility")
     private fun reRegisterTouchListener() {
-        if (!needReRegisterTouchListener) return
-        needReRegisterTouchListener = false
-        val pv = _playerView ?: return
-        // Bug修复：reRegisterTouchListener 必须与 initGestureDetector 行为完全一致
-        // 之前只注册了 gestureDetector + scaleGestureDetector，丢失了双指左右滑动检测
-        // 现统一调用 handlePlayerTouchEvent/handleArticleModeTouchEvent，确保所有触摸逻辑一致
-        // 文章模式：单指垂直滑动交给 ViewPager2 拦截（切换文章），水平滑动交给 GSY（进度条）
-        // 非文章模式：双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
-        val touchTarget: View? = pv.findViewById(R.id.surface_container) ?: pv
-        touchTarget?.setOnTouchListener { v, event ->
-            val x = event.rawX.toInt()
-            val y = event.rawY.toInt()
-            val onControls = isTouchOnControls(x, y)
-            val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
-                && VideoPlay.rssArticles!!.size > 1
-            if (!onControls) {
-                if (isArticleMode) {
-                    handleArticleModeTouchEvent(event)
-                } else {
-                    handlePlayerTouchEvent(event)
-                }
-                // 始终消费事件（返回 true），阻止 GSY 的 onClick 和 onTouchEvent
-                true
-            } else {
-                false
-            }
-        }
+        installGestureTouchListener()
     }
 
     /**

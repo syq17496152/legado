@@ -132,6 +132,22 @@ internal fun resumePositionForSave(positionMs: Int, durationMs: Long): Int {
     return if (positionMs.toLong() >= durationMs - END_SNAP_MS) 0 else positionMs
 }
 
+/**
+ * IF-05 读取侧兜底：恢复历史进度的口径。
+ *
+ * 与 [resumePositionForSave] 对称——保存侧修好只能保证「新写的记录干净」，
+ * 但设备上已存在的旧记录（或异常退出写入的片尾位置）仍会让用户一进播放页
+ * 就 `READY → ENDED`（黑屏停在播放键）。故读取时同样把「距片尾 < [END_SNAP_MS]」
+ * 归零，从 0 起播。
+ *
+ * @return 实际 seek 位置；0 表示从头播放（调用方应跳过 seek 与「已续播」提示）
+ */
+internal fun resumePositionForRestore(positionMs: Int, durationMs: Long): Int {
+    if (positionMs <= 0) return 0
+    if (durationMs <= 0L) return positionMs
+    return if (positionMs.toLong() >= durationMs - END_SNAP_MS) 0 else positionMs
+}
+
 object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_NAME = "video_pos_" //单链接播放进度
     private const val VIDEO_POS_SAVE_TIME = 60 * 60 * 24 * 20 //20天
