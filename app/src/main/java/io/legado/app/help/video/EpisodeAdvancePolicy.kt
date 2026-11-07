@@ -41,7 +41,14 @@ data class AdvanceSnapshot(
     /** 是否存在下一线路 */
     val hasNextRoute: Boolean = false,
     /** 单 URL（无多集） */
-    val isSingleUrl: Boolean = false
+    val isSingleUrl: Boolean = false,
+    /**
+     * 本集播完即停（预留策略，默认 false）。
+     *
+     * §11.2：仅预留开关位与决策分支，不接 UI、不改变默认行为；
+     * 后续如提供「播完停止」偏好，只需把该字段接到 `VideoPlay` 偏好即可。
+     */
+    val stopAfterCurrent: Boolean = false
 )
 
 /**
@@ -58,6 +65,7 @@ object EpisodeAdvancePolicy {
     const val REASON_LAST_ARTICLE = "已到最后一篇"
     const val REASON_LAST_EPISODE = "已播放完"
     const val REASON_ROUTE_END = "本线路已播完，可切换下一线路"
+    const val REASON_STOP_AFTER_CURRENT = "已开启「本集播完停止」"
 
     /**
      * 由播放上下文构建决策输入（纯函数，单测锁定）
@@ -93,6 +101,8 @@ object EpisodeAdvancePolicy {
             return AdvanceTarget.Stop(REASON_SESSION_LIMIT)
         }
         if (s.mode == PlaybackMode.SINGLE) return AdvanceTarget.Stop(REASON_SINGLE_MODE)
+        // §11.2 预留：用户显式开启「本集播完停止」时不续播（默认 false，行为不变）
+        if (s.stopAfterCurrent) return AdvanceTarget.Stop(REASON_STOP_AFTER_CURRENT)
 
         val next = s.currentIndex + 1
         if (s.isArticleMode) {

@@ -20,7 +20,8 @@ class EpisodeAdvancePolicyTest {
         routeAtEnd: Boolean = false,
         hasNextRoute: Boolean = false,
         isSingleUrl: Boolean = false,
-        mode: PlaybackMode = PlaybackMode.SERIES
+        mode: PlaybackMode = PlaybackMode.SERIES,
+        stopAfter: Boolean = false
     ) = AdvanceSnapshot(
         mode = mode,
         isBook = isBook,
@@ -32,7 +33,8 @@ class EpisodeAdvancePolicyTest {
         sessionLimit = limit,
         routeAtEnd = routeAtEnd,
         hasNextRoute = hasNextRoute,
-        isSingleUrl = isSingleUrl
+        isSingleUrl = isSingleUrl,
+        stopAfterCurrent = stopAfter
     )
 
     @Test
@@ -245,5 +247,18 @@ class EpisodeAdvancePolicyTest {
             singleUrl = false, volumesSize = 0, durVolumeIndex = 0
         )
         assertEquals(AdvanceTarget.NextArticle(1), EpisodeAdvancePolicy.decide(s))
+    }
+
+    @Test
+    fun `预留 stopAfterCurrent 默认关闭时不改变续播行为`() {
+        // 默认 false ⇒ 与既有行为一致，仍推进下一集
+        val d = EpisodeAdvancePolicy.decide(series(index = 1, total = 5))
+        assertEquals(AdvanceTarget.NextEpisode(2), d)
+    }
+
+    @Test
+    fun `开启 stopAfterCurrent 后本集播完即停`() {
+        val d = EpisodeAdvancePolicy.decide(series(index = 1, total = 5, stopAfter = true))
+        assertEquals(EpisodeAdvancePolicy.REASON_STOP_AFTER_CURRENT, (d as AdvanceTarget.Stop).reason)
     }
 }
