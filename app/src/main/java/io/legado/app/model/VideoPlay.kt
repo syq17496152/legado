@@ -117,6 +117,21 @@ internal fun isStaleCompletion(
 /** 起播后至少经过该时长，结束事件才可能真实（覆盖短视频最小可播时长） */
 internal const val MIN_SETUP_AGE_MS: Long = 1_500L
 
+/** IF-05：距片尾小于该阈值即视为「已看完」，进度按 0 落库 */
+internal const val END_SNAP_MS: Long = 2_000L
+
+/**
+ * IF-05：单 URL 播完后的进度落库口径。
+ *
+ * 播到片尾时 `saveRead` 会把「片尾位置」写进 `video_pos_<url>`，下次进入
+ * `seekOnStart` 直接 seek 到片尾 ⇒ 起播即 ENDED（黑屏，需手点）。
+ * 这里在落库前把「距片尾 < [END_SNAP_MS]」的位置归零，下次从 0 重新播放。
+ */
+internal fun resumePositionForSave(positionMs: Int, durationMs: Long): Int {
+    if (durationMs <= 0L) return positionMs
+    return if (positionMs.toLong() >= durationMs - END_SNAP_MS) 0 else positionMs
+}
+
 object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_NAME = "video_pos_" //单链接播放进度
     private const val VIDEO_POS_SAVE_TIME = 60 * 60 * 24 * 20 //20天
@@ -3060,7 +3075,9 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         if (book == null && rssStar == null && rssRecord == null) {
             videoUrl?.let { videoUrl ->
-                CacheManager.put(VIDEO_POS_NAME + videoUrl, durPos, VIDEO_POS_SAVE_TIME)
+                // IF-05：播完（距片尾 <2s）不落库片尾位置，避免下次进入立刻 ENDED
+                val savedPos = resumePositionForSave(durPos, videoManager.duration)
+                CacheManager.put(VIDEO_POS_NAME + videoUrl, savedPos, VIDEO_POS_SAVE_TIME)
             }
             return
         }

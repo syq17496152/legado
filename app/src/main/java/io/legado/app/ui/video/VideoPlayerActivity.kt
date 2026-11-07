@@ -832,8 +832,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.viewPager.apply {
             orientation = ViewPager2.ORIENTATION_VERTICAL
             offscreenPageLimit = 1
-            // 书源/单URL模式禁用滑动
-            isUserInputEnabled = !isSinglePage
+            // §12.6：SERIES 禁翻页（切集走上滑分派），FEED/降级后 SINGLE 有列表才允许翻页
+            isUserInputEnabled = pagerUserInputEnabled(
+                mode = VideoPlay.playbackModeState.mode,
+                isSinglePage = isSinglePage,
+                listSize = VideoPlay.rssArticles?.size ?: 0
+            )
             adapter = videoPagerAdapter
             pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageScrollStateChanged(state: Int) {
@@ -1395,15 +1399,18 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     /**
-     * video-booksource-align-rss AD-02/AD-05：书源单页模式垂直滑动接线
+     * video-booksource-align-rss AD-02/AD-05：垂直滑动统一入口（书源 + §12.6 RSS SERIES）
      *
-     * VideoFragment 手势层检测到垂直 fling 时回调（书源模式 ViewPager 已禁滑，
-     * 由本方法驱动列表切换）；上滑(velocityY<0)=列表下一影片，下滑=上一影片。
-     * 订阅源文章/集数模式不走此路径（其垂直滑动由 ViewPager2 翻页消费）。
+     * VideoFragment 手势层检测到垂直 fling 时回调（ViewPager 已禁滑的场景）。
+     * 上滑(velocityY<0)=下一集/下一影片，下滑=上一集/上一影片；具体语义由
+     * `VideoPlay.dispatchVerticalSwitch` 按会话模式分派（FEED=换作品 / SERIES=切本剧集数）。
      */
     fun onBookVerticalFling(velocityY: Float) {
         if (!useViewPagerMode) return
-        if (VideoPlay.book == null) return
+        // 书源与「有集数上下文的订阅源」都可能走到这里；两者都没有则无事可做
+        if (VideoPlay.book == null && VideoPlay.rssArticles.isNullOrEmpty() &&
+            VideoPlay.rssEpisodes.isNullOrEmpty()
+        ) return
         // add-dlna-cast REQ-08：投屏中竖滑切影片先终止会话再放行
         endCastForLocalSwitch()
         // video-regression-fix-0906 AD-04：播放器未就绪时 toast 明示，不再静默无反应
@@ -2158,6 +2165,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         if (useViewPagerMode) binding.viewPager.currentItem else -1
 
     /**
+     * 垂直手势层是否应接管（design §12.6：与 ViewPager2 输入能力严格互补）。
+     *
+     * VideoFragment 的 onFling / 触摸拦截都以此为准，避免「ViewPager 已禁滑、手势层又放行」
+     * 的双重空档导致上滑无任何响应。
+     */
+    internal fun shouldHandleVerticalFling(): Boolean =
+        useViewPagerMode && !binding.viewPager.isUserInputEnabled
+
+    /**
      * 多集选集弹框（video-cache-and-multiep R7 / AD-03）。
      *
      * 书源（目录 `episodes`）与订阅源（`rssEpisodes`）**共用**同一弹框：
@@ -2249,6 +2265,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // 2026-10-25：内嵌面板高亮跟随（切线路/切集后同步）
             episodePanelBinder?.updateSelection(VideoPlay.rssEpisodeIndex)
         }
+        // §12.6/§12.9：模式可能已降级（SERIES→SINGLE），翻页能力随之刷新
+        binding.viewPager.isUserInputEnabled = pagerUserInputEnabled(
+            mode = VideoPlay.playbackModeState.mode,
+            isSinglePage = VideoPlay.singleUrl || VideoPlay.book != null,
+            listSize = VideoPlay.rssArticles?.size ?: 0
+        )
     }
 
     private fun showVolumes(volumes: List<BookChapter>) {

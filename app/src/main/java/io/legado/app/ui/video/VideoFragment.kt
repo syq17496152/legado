@@ -1328,9 +1328,11 @@ class VideoFragment : Fragment() {
                 return true
             }
 
-            // video-booksource-align-rss AD-02/AD-05：书源单页模式垂直滑动=列表上/下一影片
-            // （ViewPager 已禁滑，由手势层驱动 Activity.onBookVerticalFling）；
-            // 订阅源文章/集数模式不受影响（其垂直滑动由 ViewPager2 翻页消费，且此处不回调）；
+            // video-booksource-align-rss AD-02/AD-05：垂直滑动由手势层驱动 Activity 分派
+            // （ViewPager 已禁滑的场景：书源单页 + §12.6 RSS SERIES）。
+            // 2026-11-07 真机修复：原条件限定 `book != null`，导致 RSS SERIES 禁翻页后
+            // 上滑既不被 ViewPager 消费、也不进入此分支 ⇒ 完全无响应（零日志）。
+            // 现改为与 ViewPager 输入能力严格互补：谁禁滑谁接管。
             // 左右滑动 seek（video-gesture-overhaul R2）由方向锁定互斥，不受影响
             override fun onFling(
                 e1: MotionEvent?,
@@ -1338,11 +1340,12 @@ class VideoFragment : Fragment() {
                 velocityX: Float,
                 velocityY: Float
             ): Boolean {
-                if (VideoPlay.book != null && VideoPlay.rssArticles.isNullOrEmpty()) {
+                val activity = activity as? VideoPlayerActivity
+                if (activity?.shouldHandleVerticalFling() == true) {
                     if (kotlin.math.abs(velocityY) > kotlin.math.abs(velocityX) &&
                         kotlin.math.abs(velocityY) > FLING_MIN_VELOCITY
                     ) {
-                        (activity as? VideoPlayerActivity)?.onBookVerticalFling(velocityY)
+                        activity.onBookVerticalFling(velocityY)
                         return true
                     }
                 }
@@ -1524,8 +1527,14 @@ class VideoFragment : Fragment() {
                         isVerticalSwipe = true
                     }
                     if (isVerticalSwipe) {
-                        // 垂直滑动：恢复 ViewPager2 拦截能力 + 消费事件阻止 GSY 覆盖
-                        _playerView?.parent?.requestDisallowInterceptTouchEvent(false)
+                        // 垂直滑动：ViewPager 可翻页时恢复其拦截能力（交回翻页）；
+                        // §12.6 若 ViewPager 已禁滑（SERIES/书源单页），保持消费并由
+                        // GestureDetector 在 ACTION_UP 计算 fling ⇒ onFling 分派切集。
+                        val pagerTakesVertical =
+                            (activity as? VideoPlayerActivity)?.shouldHandleVerticalFling() != true
+                        if (pagerTakesVertical) {
+                            _playerView?.parent?.requestDisallowInterceptTouchEvent(false)
+                        }
                         return true
                     }
                     // video-gesture-overhaul R2: 水平滑动判定为 seek（方向锁定，与垂直滑动互斥）
