@@ -134,4 +134,23 @@ class ClonettsVoiceImporterTest {
         // 导入内部完成池聚合：roleTags=旁白 ⇒ groupId 已回写
         assertEquals(listOf("旁白", "旁白"), store.list().map { it.groupId })
     }
+
+    @Test
+    fun `音色包不会被当成模型包扫描`() {
+        // 2026-11-08 模拟器实测：228MB 音色包被「一键扫描导入」当模型包解压 ⇒ 长时间无响应且最终失败
+        val voiceZip = buildZip("v1", "旁白文本")
+        val modelZip = File(temp.newFolder("model"), "model.zip").apply {
+            ZipOutputStream(outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("model.onnx"))
+                zip.write(ByteArray(16))
+                zip.closeEntry()
+            }
+        }
+        assertTrue("含 voice-pack.json 的包必须被识别为音色包",
+            BuiltinModelManager.isVoicePackArchive(voiceZip))
+        assertTrue("普通模型包不能被误判为音色包",
+            !BuiltinModelManager.isVoicePackArchive(modelZip))
+        assertTrue("非 zip 文件不参与判定",
+            !BuiltinModelManager.isVoicePackArchive(temp.newFolder("plain")))
+    }
 }

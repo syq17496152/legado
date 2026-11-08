@@ -73,9 +73,11 @@ import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.character.BookCharacterEditActivity
 import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.LogUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -155,20 +157,30 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     private val pickVoiceZip = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
-            pageState.value = pageState.value.copy(busy = true, message = "")
-            val report = runCatching {
-                val target = File(cacheDir, "voice-import.zip")
-                contentResolver.openInputStream(uri)?.use { input ->
-                    target.outputStream().use { out -> input.copyTo(out) }
+            pageState.value = pageState.value.copy(busy = true, message = "正在导入音色包…")
+            // 500 级音色权益包在 200MB 以上：复制**必须**在 IO 线程。原实现把 copyTo 留在 Main
+            // （lifecycleScope 默认主线程）⇒ 主线程被阻塞数十秒，界面无响应甚至被系统杀掉，
+            // 用户侧表现就是"点了导入但音色没进来"。
+            val message = runCatching {
+                withContext(Dispatchers.IO) {
+                    val target = File(cacheDir, "voice-import.zip")
+                    val input = contentResolver.openInputStream(uri)
+                        ?: error("无法读取所选文件")
+                    input.use { source ->
+                        target.outputStream().use { out -> source.copyTo(out, 256 * 1024) }
+                    }
+                    if (target.length() <= 0L) error("复制后的音色包为空")
+                    val report = ClonettsVoiceImporter(BuiltinTtsRuntime.voiceStore()).importZip(target)
+                    // T8.16：导入后按 tag 聚合成声音池（幂等，失败不阻断导入结果）
+                    runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
+                    report.message
                 }
-                ClonettsVoiceImporter(BuiltinTtsRuntime.voiceStore()).importZip(target)
-                // T8.16：导入后按 tag 聚合成声音池（幂等，失败不阻断导入结果）
-                    .also { runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) } }
-            }.getOrNull()
-            pageState.value = pageState.value.copy(
-                busy = false,
-                message = report?.message ?: "音色包导入失败"
-            )
+            }.getOrElse { error ->
+                // 失败原因必须透出：旧实现用 getOrNull 吞掉异常，只剩一句"音色包导入失败"，无从排查
+                AppLog.put("音色包导入失败：${error.message}", error)
+                "音色包导入失败：${error.message ?: error.javaClass.simpleName}"
+            }
+            pageState.value = pageState.value.copy(busy = false, message = message)
             targetCleanup()
             reload()
         }
@@ -673,7 +685,16 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             pageState.value = pageState.value.copy(message = "还没有音色可试听")
             return
         }
-        val batch = BuiltinTtsUiSupport.previewBatch(all, PREVIEW_BATCH_SIZE)
+        val profile = runCatching { BuiltinTtsRuntime.activeProfile() }.getOrNull()
+        // 只连播本档可用音色：跨档音色会被引擎静默回落默认 speaker ⇒ 连播等于"同一句念 N 遍"
+        val usable = if (profile == null) all else all.filter { BuiltinVoiceFilter.usableIn(profile, it) }
+        if (usable.isEmpty()) {
+            pageState.value = pageState.value.copy(
+                message = "当前「${profile?.title.orEmpty()}」档没有可用音色，请先在引擎页切换档位"
+            )
+            return
+        }
+        val batch = BuiltinTtsUiSupport.previewBatch(usable, PREVIEW_BATCH_SIZE)
         val run = {
             val tts = previewTts
             if (tts != null) {
@@ -683,7 +704,12 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                         tts.speak(
                             "这是${voice.displayName}的声音。",
                             TextToSpeech.QUEUE_ADD,
-                            null,
+                            android.os.Bundle().apply {
+                                putString(
+                                    io.legado.app.help.readaloud.casting.TtsVoiceRef.EXTRA_VOICE_NAME,
+                                    voice.voiceName
+                                )
+                            },
                             "builtin_preview_all"
                         )
                     }
@@ -697,7 +723,9 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         } else {
             run()
         }
-        pageState.value = pageState.value.copy(message = "连续试听 ${batch.size} 个音色")
+        pageState.value = pageState.value.copy(
+            message = "连续试听 ${batch.size} 个音色（本档可用 ${usable.size}）"
+        )
     }
 
     /** 单音色试听：复用 [BuiltinVoiceCompare]（与音色页对比试听共用同一套「先切音色再播」逻辑，5.3） */
@@ -705,6 +733,14 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
         val target = BuiltinTtsRuntime.voices().firstOrNull { it.voiceName == voiceName || it.id == voiceName }
         if (target == null) {
             pageState.value = pageState.value.copy(message = "音色不存在")
+            return
+        }
+        val profile = runCatching { BuiltinTtsRuntime.activeProfile() }.getOrNull()
+        if (profile != null && !BuiltinVoiceFilter.usableIn(profile, target)) {
+            // 跨档音色必须显式拒绝：否则引擎静默回落默认音色，用户只会听到"和别的音色一样"
+            pageState.value = pageState.value.copy(
+                message = "该音色不在当前「${profile.title}」档，请先在引擎页切换到对应档位"
+            )
             return
         }
         if (!BuiltinVoiceCompare.preview(this, target)) {

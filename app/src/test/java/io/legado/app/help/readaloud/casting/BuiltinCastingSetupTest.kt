@@ -32,4 +32,15 @@ class BuiltinCastingSetupTest {
         // 前缀相同的另一个 id 不能被误判
         assertFalse(BuiltinCastingSetup.templatePresent("""[{"id":"builtin_immersive_multi_v2"}]"""))
     }
+
+    /**
+     * per-utterance Bundle 的两个键必须互不相同（否则音色键会覆盖角色名，通知徽章/音色都错），
+     * 且统一用 `io.legado.builtin.` 前缀（避免与 framework 自带键冲突）。
+     */
+    @Test
+    fun `音色键与角色名键互不冲突`() {
+        assertTrue(TtsVoiceRef.EXTRA_VOICE_NAME.startsWith("io.legado.builtin."))
+        assertTrue(TtsVoiceRef.EXTRA_ROLE_NAME.startsWith("io.legado.builtin."))
+        assertFalse(TtsVoiceRef.EXTRA_VOICE_NAME == TtsVoiceRef.EXTRA_ROLE_NAME)
+    }
 }

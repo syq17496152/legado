@@ -56,6 +56,34 @@ class BuiltinTtsServiceTest {
         assertEquals("正在朗读 · 正在朗读：张三", BuiltinNotificationText.content("正在朗读", "张三"))
     }
 
+    // ---- BuiltinTtsVoiceKey（「6 个内置音色试听都一样」修复的配对用例） ----
+
+    /**
+     * 音色键必须优先取 per-utterance Bundle：framework 的 setVoice 在实例刚初始化、
+     * 引擎 voices 尚未加载时会静默失败，只有 Bundle 这条通道能保证每个音色各用其声。
+     */
+    @Test
+    fun `音色键优先取 per-utterance Bundle`() {
+        assertEquals(
+            "b6_f_teen|内置·女·少年",
+            BuiltinTtsVoiceKey.resolve("b6_f_teen|内置·女·少年", "b6_m_teen|内置·男·少年")
+        )
+    }
+
+    @Test
+    fun `Bundle 缺失或空白时回落 framework 音色`() {
+        assertEquals(
+            "b6_m_teen|内置·男·少年",
+            BuiltinTtsVoiceKey.resolve(null, "b6_m_teen|内置·男·少年")
+        )
+        assertEquals(
+            "b6_m_teen|内置·男·少年",
+            BuiltinTtsVoiceKey.resolve("   ", " b6_m_teen|内置·男·少年 ")
+        )
+        // 两者都空 ⇒ 空串（引擎侧走默认音色，不抛异常、不阻断合成）
+        assertEquals("", BuiltinTtsVoiceKey.resolve(null, null))
+    }
+
     // ---- BuiltinTtsCallbackWriter（真机「合成完成但无声」修复的配对用例） ----
 
     @Test

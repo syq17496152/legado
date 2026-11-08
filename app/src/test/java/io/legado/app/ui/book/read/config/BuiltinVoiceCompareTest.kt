@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read.config
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -94,5 +95,26 @@ class BuiltinVoiceCompareTest {
 
         assertNull("无可用音色返回 null", BuiltinVoiceCompare.groupPlan(emptyList()))
         assertNull(BuiltinVoiceCompare.groupPlan(listOf(BuiltinVoice(id = "", name = "脏"))))
+    }
+
+    /**
+     * 用户实测「内置 6 个音色试听后都是同一个音色」：根因是 setVoice 在实例初始化竞态下静默失败，
+     * 现已改为 per-utterance Bundle 兜底。这里锁定：连续试听的每一段都必须携带**各自的**音色键，
+     * 任何"计划里都是同一个键/空键"的回归都会让 6 个音色再次听起来一样。
+     */
+    @Test
+    fun `分组连播每段携带各自的音色键`() {
+        val voices = listOf(
+            voice("b6_m_teen", "内置·男·少年"),
+            voice("b6_m_youth", "内置·男·青年"),
+            voice("b6_f_aged", "内置·女·老年")
+        )
+        val plan = BuiltinVoiceCompare.groupPlan(voices)
+        assertEquals(
+            listOf("b6_m_teen|内置·男·少年", "b6_m_youth|内置·男·青年", "b6_f_aged|内置·女·老年"),
+            plan?.map { it.second }
+        )
+        assertEquals("音色键不得重复", 3, plan?.map { it.second }?.distinct()?.size)
+        assertTrue("音色键不得为空", plan.orEmpty().all { it.second.isNotBlank() })
     }
 }

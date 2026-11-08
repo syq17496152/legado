@@ -145,7 +145,17 @@ class BuiltinTtsService : TextToSpeechService() {
             callback.done()
             return
         }
-        val voiceName = request.voiceName.orEmpty()
+        // AD-20 音色键来源：per-utterance Bundle 优先，空则回落 framework 的 setVoice 结果。
+        // 试听场景每次都会新建 TextToSpeech，init 回调时引擎 voices 可能尚未加载 ⇒ setVoice 静默失败
+        // ⇒ 6 个内置音色全部落到默认音色（用户可见现象：听哪个都一样）。
+        val voiceName = BuiltinTtsVoiceKey.resolve(
+            fromParams = runCatching {
+                request.params?.getString(
+                    io.legado.app.help.readaloud.casting.TtsVoiceRef.EXTRA_VOICE_NAME
+                )
+            }.getOrNull(),
+            frameworkName = request.voiceName
+        )
         // T8.7 角色徽章：朗读服务把本段角色名放进 per-utterance Bundle，framework 原样透传给引擎
         val roleName = runCatching {
             request.params?.getString(io.legado.app.help.readaloud.casting.TtsVoiceRef.EXTRA_ROLE_NAME)
@@ -345,6 +355,19 @@ class BuiltinTtsService : TextToSpeechService() {
         const val IDLE_EXIT_MS = 10_000L
         const val WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
     }
+}
+
+/**
+ * 音色键解析（纯函数，可单测）。
+ *
+ * 优先级：调用方 per-utterance Bundle > framework 下发（`setVoice` 之后即 `SynthesisRequest.voiceName`）。
+ * 为什么需要 Bundle 兜底：framework 的 `setVoice` 在实例刚初始化、引擎 voices 尚未加载时静默失败，
+ * 这条链路一旦落空就会让所有音色都合成成引擎默认音色，且**没有任何日志**可查。
+ */
+internal object BuiltinTtsVoiceKey {
+
+    fun resolve(fromParams: String?, frameworkName: String?): String =
+        fromParams?.trim().orEmpty().ifBlank { frameworkName?.trim().orEmpty() }
 }
 
 /** 合成参数换算（纯函数，可单测）：框架以百分比下发语速，回调按 ~200ms 分块 */

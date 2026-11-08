@@ -84,4 +84,42 @@ class BuiltinVoiceFilterTest {
         assertEquals("4 个音色", BuiltinVoiceFilter.summary(4, 4))
         assertEquals("显示 2 / 共 4 个音色", BuiltinVoiceFilter.summary(4, 2))
     }
+
+    /**
+     * 用户实测「内置 6 个音色试听都是同一个音色」：根因是列表跨档混排，而多说话人档只认带 sid 的音色。
+     * 这里锁定口径：clone 档认 zipvoice 参考音色；hq 档只认同档 sid>0 的内置音色。
+     */
+    @Test
+    fun `按当前档位判断音色是否可用`() {
+        val cloneProfile = BuiltinModelProfile(
+            id = "clone", title = "高质量克隆档", engine = BuiltinModelProfile.ENGINE_ZIPVOICE, sampleRate = 24000
+        )
+        val hqProfile = BuiltinModelProfile(
+            id = "hq", title = "高质量音色档", engine = BuiltinModelProfile.ENGINE_KOKORO,
+            sampleRate = 24000, speakerCount = 100
+        )
+        val zipVoice = voice("b6_m_teen", "内置·男·少年")
+        val kokoroVoice = voice("hq-s3", "内置 3").copy(
+            profileId = "hq", engine = BuiltinModelProfile.ENGINE_KOKORO, sid = 3
+        )
+
+        assertEquals("clone 档认参考音色", true, BuiltinVoiceFilter.usableIn(cloneProfile, zipVoice))
+        assertEquals("clone 档不认多说话人音色", false, BuiltinVoiceFilter.usableIn(cloneProfile, kokoroVoice))
+        assertEquals("hq 档只认同档 sid 音色", true, BuiltinVoiceFilter.usableIn(hqProfile, kokoroVoice))
+        assertEquals("hq 档不认克隆音色（这是「听起来一样」的根因）", false, BuiltinVoiceFilter.usableIn(hqProfile, zipVoice))
+    }
+
+    @Test
+    fun `摘要带当前档可用数`() {
+        val cloneProfile = BuiltinModelProfile(
+            id = "clone", title = "高质量克隆档", engine = BuiltinModelProfile.ENGINE_ZIPVOICE, sampleRate = 24000
+        )
+        val mixed = voices + BuiltinVoice(
+            id = "hq-s3", name = "内置 3", profileId = "hq",
+            engine = BuiltinModelProfile.ENGINE_KOKORO, sid = 3
+        )
+        // 5 个音色里 4 个是 clone 档（engine 空 ⇒ 归一 zipvoice），1 个是 hq
+        assertEquals("5 个音色 · 本档可用 4", BuiltinVoiceFilter.summaryForProfile(cloneProfile, mixed, 5))
+        assertEquals("5 个音色", BuiltinVoiceFilter.summaryForProfile(null, mixed, 5))
+    }
 }

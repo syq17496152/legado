@@ -136,7 +136,7 @@ class BuiltinModelManager(
         return dir.listFiles()?.filter {
             it.isDirectory || it.name.endsWith(".zip", true) ||
                     it.name.endsWith(".tar.bz2", true) || it.name.endsWith(".tbz2", true)
-        }.orEmpty()
+        }?.filterNot { isVoicePackArchive(it) }.orEmpty()
     }
 
     /**
@@ -286,5 +286,22 @@ class BuiltinModelManager(
          */
         fun resumeOffset(partLength: Long, savedUrl: String?, url: String): Long =
             if (partLength > 0 && savedUrl?.trim() == url.trim()) partLength else 0L
+
+        /**
+         * 是否是「音色包」而非模型包（纯函数，可单测）。
+         *
+         * 为什么必须排除：音色包（CloneTTS 备份 / voice-pack 清洗包）结构与模型包完全不同，
+         * 一旦被当模型包解压导入，会白读上百 MB、最终失败，并把「一键扫描导入」拖到分钟级无响应
+         * （2026-11-08 模拟器实测：228MB 音色包被误当模型处理）。音色包应走音色导入入口。
+         */
+        internal fun isVoicePackArchive(file: File): Boolean {
+            if (!file.isFile || !file.name.endsWith(".zip", true)) return false
+            return runCatching {
+                java.util.zip.ZipFile(file).use { zip ->
+                    zip.getEntry("voice-pack.json") != null ||
+                        zip.getEntry("shared_prefs/voice_profiles_prefs.xml") != null
+                }
+            }.getOrDefault(false)
+        }
     }
 }

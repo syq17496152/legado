@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.utils.toastOnUi
 import io.legado.app.help.tts.builtin.BuiltinVoice
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
 
 /**
@@ -69,6 +70,12 @@ internal fun VoicesPanel(
     // 自录区默认折叠：音色管理的主任务是"看列表"，录音是低频操作
     var recordOpen by remember { mutableStateOf(false) }
     val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant
+    // 当前激活档：用于标注「哪些音色在本档可用」。跨档音色点了会静默回落默认音色
+    // （用户实测现象：内置 6 个音色试听听起来一模一样），必须在列表与试听前显式提示。
+    // 这里刻意**不做 remember 缓存**：切档后音色列表引用可能不变（store 有缓存），
+    // 一旦命中旧缓存就会把「本档可用 N / 需切档」标错；activeProfile() 只是读状态，开销可忽略。
+    val activeProfile =
+        if (BuiltinTtsRuntime.isInitialized()) BuiltinTtsRuntime.activeProfile() else null
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -188,7 +195,7 @@ internal fun VoicesPanel(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = BuiltinVoiceFilter.summary(state.voices.size, filtered.size),
+                    text = BuiltinVoiceFilter.summaryForProfile(activeProfile, state.voices, filtered.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = mutedColor
                 )
@@ -228,7 +235,11 @@ internal fun VoicesPanel(
                                 maxLines = 1
                             )
                             Text(
-                                text = BuiltinTtsUiSupport.voiceMetaText(voice),
+                                // 「需切档」放最前：该行 maxLines=1，放末尾会被元信息挤掉
+                                text = (if (activeProfile != null &&
+                                        !BuiltinVoiceFilter.usableIn(activeProfile, voice)
+                                    ) "需切档 · " else "") +
+                                    BuiltinTtsUiSupport.voiceMetaText(voice),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = mutedColor,
                                 maxLines = 1

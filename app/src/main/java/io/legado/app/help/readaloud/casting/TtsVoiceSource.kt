@@ -51,6 +51,16 @@ data class TtsVoiceRef(
 
         /** per-utterance 透传角色名的 Bundle 键（framework 会把 Bundle 原样送进 SynthesisRequest.params） */
         const val EXTRA_ROLE_NAME = "io.legado.builtin.roleName"
+
+        /**
+         * per-utterance 透传音色绑定键的 Bundle 键（值为 AD-20 的 `Voice.name` 原样，如 `b6_f_teen|内置·女·少年`）。
+         *
+         * 为什么需要这条通道：framework 的 `setVoice` 在「TextToSpeech 实例刚初始化、引擎 voices
+         * 尚未加载完成」时会**静默失败**（既不抛异常也不回调错误）。音色试听每次都会新建实例，
+         * 于是每次 setVoice 都落空 ⇒ 6 个内置音色听起来全是引擎默认音色。
+         * params 是官方支持的 per-utterance 通道（已有 [EXTRA_ROLE_NAME] 先例），引擎侧优先采信它。
+         */
+        const val EXTRA_VOICE_NAME = "io.legado.builtin.voiceName"
     }
 }
 

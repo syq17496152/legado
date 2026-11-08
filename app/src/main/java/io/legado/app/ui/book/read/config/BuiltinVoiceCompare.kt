@@ -1,10 +1,13 @@
 package io.legado.app.ui.book.read.config
 
 import android.content.Context
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import io.legado.app.constant.AppLog
+import io.legado.app.help.readaloud.casting.TtsVoiceRef
 import io.legado.app.help.tts.builtin.BuiltinVoice
 
 /**
@@ -129,7 +132,9 @@ object BuiltinVoiceCompare {
                 }
             })
             applyVoice(engine, item.second)
-            engine.speak(item.first, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID)
+            // 双保险：framework 的 setVoice 在实例刚初始化时可能静默失败，因此同时用 per-utterance
+            // Bundle 把音色键直接送进引擎（引擎侧优先采信 Bundle，见 TtsVoiceRef.EXTRA_VOICE_NAME）。
+            engine.speak(item.first, TextToSpeech.QUEUE_FLUSH, speakParams(item.second), UTTERANCE_ID)
         }
     }
 
@@ -143,12 +148,28 @@ object BuiltinVoiceCompare {
         startAt(engine, at)
     }
 
-    /** 引擎音色名是 `id|显示名`；按名字从已加载音色集合里取 Voice 再 setVoice */
+    /** per-utterance 音色键（引擎侧优先采信，见 [TtsVoiceRef.EXTRA_VOICE_NAME]） */
+    private fun speakParams(voiceName: String): Bundle = Bundle().apply {
+        putString(TtsVoiceRef.EXTRA_VOICE_NAME, voiceName)
+    }
+
+    /**
+     * 引擎音色名是 `id|显示名`；按名字从已加载音色集合里取 Voice 再 setVoice。
+     *
+     * 诊断日志必须保留：用户反馈「6 个内置音色试听都一样」时，只有这条日志能区分
+     * 「voices 尚未加载（available 很小/0）」与「名字不匹配（matched=false）」，
+     * 否则整条链路静默失败、无任何线索。
+     */
     private fun applyVoice(engine: TextToSpeech, voiceName: String) {
-        val voice = runCatching {
-            engine.voices?.firstOrNull { it.name == voiceName }
-        }.getOrNull() ?: return
-        runCatching { engine.setVoice(voice) }
+        val voices = runCatching { engine.voices }.getOrNull()
+        val voice = voices?.firstOrNull { it.name == voiceName }
+        val ok = voice != null &&
+            runCatching { engine.setVoice(voice) }.getOrDefault(TextToSpeech.ERROR) == TextToSpeech.SUCCESS
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "compare 切音色 id=${voiceName.substringBefore('|')} available=${voices?.size ?: -1}" +
+                " matched=${voice != null} ok=$ok"
+        )
     }
 
     fun shutdown() {

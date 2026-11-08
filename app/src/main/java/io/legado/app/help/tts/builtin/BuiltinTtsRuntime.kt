@@ -2,6 +2,7 @@ package io.legado.app.help.tts.builtin
 
 import android.app.ActivityManager
 import android.content.Context
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.LogUtils
 import androidx.annotation.Keep
 import com.google.gson.Gson
@@ -313,6 +314,16 @@ object BuiltinTtsRuntime {
             return null
         }
         val voice = resolveVoice(profile, voiceName)
+        if (voice == null && voiceName.isNotBlank()) {
+            // 诊断（保留）：请求了音色却解析不到 ⇒ 引擎只能落默认 speaker。
+            // 这是"所有音色听起来一样"的唯一可查信号（跨档点音色 / 参考音频缺失时必现）。
+            AppLog.putDebugWithTag(
+                AppLog.TAG_TTS_TRACE,
+                "builtin 音色不可用 profile=${profile.id} key=${voiceName.substringBefore('|')}" +
+                    " voices=${voiceStore.list().size}",
+                level = AppLog.Level.INFO
+            )
+        }
         // 读音归一唯一入口（T8.2 简繁 → 用户词典 → A6 数字/年份/单位；只影响送引擎文本）
         val normalizedText = speechTextOf(text)
         // 单声档（vits/matcha）音色不参与合成，缓存键固定；多说话人档必须按 sid 分键（否则换声播放旧音频）
