@@ -141,7 +141,7 @@ class ReplaceRuleActivity : VMBaseActivity<ViewBinding, ReplaceRuleViewModel>() 
                     // 6.2 AI 规则助手：只产草稿，勾选后才应用（可在弹框内回滚）
                     AppManagementAction(
                         text = "AI 建议",
-                        iconRes = R.drawable.ic_bottom_ai,
+                        iconRes = R.drawable.ic_bottom_ai_e,
                         onClick = {
                             showDialogFragment(AiRuleAssistantDialog())
                         }

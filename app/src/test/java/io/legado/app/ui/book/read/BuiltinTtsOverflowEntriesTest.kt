@@ -1,6 +1,9 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.testkit.SourceFileProbe
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -24,5 +27,23 @@ class BuiltinTtsOverflowEntriesTest {
         val actions = builtinTtsOverflowEntries(onOpenScene = { scene++ })
         actions[0].invoke()
         assertEquals(1, scene)
+    }
+
+    /**
+     * 2026-11-08 真机 FATAL 回归锁（compose-page-regression-sweep）：听书面板分段角色图标
+     * 曾直接 `painterResource(R.drawable.ic_bottom_person)`，而它是 `<selector>` ⇒ 组合期崩溃。
+     * 同目录配对（G-01）落在本文件。
+     */
+    @Test
+    fun `听书面板角色图标必须引用 vector 资源`() {
+        val source = SourceFileProbe.sourceText("ui/book/read/ReadAloudPlayerPanel.kt")
+        assertTrue(
+            "必须引用 vector 子资源 ic_bottom_person_e/_s",
+            source.contains("R.drawable.ic_bottom_person_e") || source.contains("R.drawable.ic_bottom_person_s")
+        )
+        assertFalse(
+            "禁止再对 <selector> 资源 ic_bottom_person 调用 painterResource",
+            Regex("""painterResource\(R\.drawable\.ic_bottom_person\)""").containsMatchIn(source)
+        )
     }
 }

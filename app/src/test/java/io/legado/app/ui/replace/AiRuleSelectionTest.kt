@@ -4,6 +4,7 @@ import io.legado.app.help.ai.AiRuleAssistant.Confidence
 import io.legado.app.help.ai.AiRuleAssistant.Hit
 import io.legado.app.help.ai.AiRuleAssistant.Kind
 import io.legado.app.help.ai.AiRuleAssistant.Suggestion
+import io.legado.app.testkit.SourceFileProbe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -95,5 +96,23 @@ class AiRuleSelectionTest {
             AiRuleSelection.rollbackSummary(2, 1)
         )
         assertTrue(AiRuleSelection.rollbackSummary(0, 0).contains("还原 0 条"))
+    }
+
+    /**
+     * 2026-11-08 真机 FATAL 回归锁：`painterResource` 只支持 vector/位图，
+     * 而 `ic_bottom_ai` 是 `<selector>` ⇒ 打开替换净化页即抛 IllegalArgumentException。
+     * 同目录配对（G-01）落在本文件。
+     */
+    @Test
+    fun topBarAiIcon_mustReferenceVectorResource() {
+        val source = SourceFileProbe.sourceText("ui/replace/ReplaceRuleActivity.kt")
+        assertTrue(
+            "顶栏 AI 图标必须引用 vector 子资源 ic_bottom_ai_e/_s",
+            source.contains("R.drawable.ic_bottom_ai_e") || source.contains("R.drawable.ic_bottom_ai_s")
+        )
+        assertFalse(
+            "禁止再引用 <selector> 资源 ic_bottom_ai（painterResource 会崩溃）",
+            Regex("""R\.drawable\.ic_bottom_ai\b""").containsMatchIn(source)
+        )
     }
 }
