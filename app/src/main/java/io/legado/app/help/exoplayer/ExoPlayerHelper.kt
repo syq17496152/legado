@@ -1229,17 +1229,19 @@ object ExoPlayerHelper {
         val upstreamFactory: DataSource.Factory = cronetDataFactory?.let { cronet ->
             TlsFallbackDataSourceFactory(cronet, okhttpDataFactory)
         } ?: okhttpDataFactory
+        // fix-live-hls-manifest-cache：清单直连用的上游（不含 CacheDataSource）
+        val directFactory = DefaultDataSource.Factory(appCtx, upstreamFactory)
         // P0-3-cache-play 接线：视频缓存总开关（VideoPlay.videoCache，默认开启）
         // 开启：走 CacheDataSource + SimpleCache 边下边缓存（回看重播零流量、可秒拖缓存区间）
         // 关闭：仅直连播放，不写磁盘缓存（省存储）
         // 注意：cacheDataSourceFactory 为 lazy 单例，修改开关需重启 App 生效
-        if (!VideoPlay.videoCache) {
+        val cachedFactory: DataSource.Factory = if (!VideoPlay.videoCache) {
             // P2 修复：用 DefaultDataSource 包装，支持 file:// 等本地协议
-            DefaultDataSource.Factory(appCtx, upstreamFactory)
+            directFactory
         } else {
             CacheDataSource.Factory()
                 .setCache(cache)
-                .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, upstreamFactory))
+                .setUpstreamDataSourceFactory(directFactory)
                 .setCacheReadDataSourceFactory(FileDataSource.Factory())
                 .setCacheWriteDataSinkFactory(object : DataSink.Factory {
                     private val cacheSinkFactory = CacheDataSink.Factory()
@@ -1281,6 +1283,10 @@ object ExoPlayerHelper {
                     }
                 })
         }
+        // fix-live-hls-manifest-cache：清单（.m3u8/.m3u/.mpd）绕过 SimpleCache。
+        // 直播清单若被缓存，滑动窗口冻结 ⇒ Media3 约 7 秒抛 PlaylistStuckException ⇒ 播放 6 秒即停。
+        // 分片仍走 cachedFactory，点播回看/拖动缓存行为不变。
+        ManifestBypassDataSourceFactory(cachedFactory, directFactory)
     }
 
     /**
