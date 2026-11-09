@@ -2166,6 +2166,16 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.ttsTimer, value)
         }
 
+    /** 离线听书首次配置引导是否已完成（只影响是否自动弹引导，不影响可用性） */
+    var offlineTtsOnboarded: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.offlineTtsOnboarded, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.offlineTtsOnboarded, value)
+
+    /** 引导跳过次数（达到 OfflineTtsOnboardingState.MAX_SKIP 后不再自动弹） */
+    var offlineTtsOnboardSkipCount: Int
+        get() = appCtx.getPrefInt(PreferKey.offlineTtsOnboardSkipCount, 0).coerceAtLeast(0)
+        set(value) = appCtx.putPrefInt(PreferKey.offlineTtsOnboardSkipCount, value.coerceAtLeast(0))
+
     val speechRatePlay: Int get() = if (ttsFlowSys) defaultSpeechRate else ttsSpeechRate
 
     var chineseConverterType: Int

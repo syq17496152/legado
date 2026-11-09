@@ -943,6 +943,11 @@
             android:name=".ui.book.read.config.CastSceneActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false" />
+        <!-- 离线听书首次配置引导（offline-tts-ux-consolidation 4）：仅应用内部拉起 -->
+        <activity
+            android:name=".ui.book.read.config.OfflineTtsOnboardingActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
         <!-- 高级标题管理 -->
         <activity
             android:name=".ui.config.AdvancedTitleManageActivity"

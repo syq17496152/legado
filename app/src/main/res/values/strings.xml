@@ -1551,11 +1551,11 @@
     <string name="beta_releaseS_version" translatable="false">正式版</string>
     <string name="stream_read_aloud_audio">流式播放音频</string>
     <string name="stream_read_aloud_audio_summary">即边下边播，网络不好时播放会断断续续，仅TTS源有效</string>
-    <string name="pause_read_aloud_while_phone_calls_title">来电期间暂停朗读</string>
-    <string name="pause_read_aloud_while_phone_calls_summary">在通话期间暂停朗读，需要读取手机状态权限</string>
-    <string name="read_aloud_read_phone_state_permission_rationale">阅读需要读取手机状态实现来电期间暂停朗读功能</string>
-    <string name="read_aloud_by_media_button_title">耳机按键启动朗读</string>
-    <string name="read_aloud_by_media_button_summary">通过耳机按键来启动朗读</string>
+    <string name="pause_read_aloud_while_phone_calls_title">来电期间暂停听书</string>
+    <string name="pause_read_aloud_while_phone_calls_summary">在通话期间暂停听书，需要读取手机状态权限</string>
+    <string name="read_aloud_read_phone_state_permission_rationale">阅读需要读取手机状态实现来电期间暂停听书功能</string>
+    <string name="read_aloud_by_media_button_title">耳机按键启动听书</string>
+    <string name="read_aloud_by_media_button_summary">通过耳机按键来启动听书</string>
     <string name="group_sources_by_domain">按域名分组显示</string>
     <string name="theme_config">主题配置</string>
     <string name="show_manga_ui">漫画浏览</string>
@@ -1959,7 +1959,7 @@
     <string name="highlight_rule_invalid">规则无效: %1$s</string>
     <string name="highlight_rule_literal_match_hint">提示：当前为字面量匹配（正则开关未开启），规则中的正则符号不会生效</string>
     <string name="tts_casting_builtin_readonly_error">内置模板不可直接编辑，请先"复制为自定义"后修改</string>
-    <string name="tts_casting_voice_bind_guide">绑定音色：系统引擎（含 CloneTTS 等多音色引擎）展开后可选具体音色；HTTP/脚本声源暂不支持逐段多人朗读，将自动降级为引擎默认音</string>
+    <string name="tts_casting_voice_bind_guide">绑定音色：系统引擎（含 CloneTTS 等多音色引擎）展开后可选具体音色；HTTP/脚本声源暂不支持逐段多人听书，将自动降级为引擎默认音</string>
     <string name="highlight_rule_pattern">匹配模式</string>
     <string name="highlight_rule_replacement">替换模板（可选，为捕获组套用样式标签，如 &lt;b&gt;&lt;font color=\"red\"&gt;$1&lt;/font&gt;&lt;/b&gt;&lt;i&gt;$2&lt;/i&gt;）</string>
     <string name="highlight_rule_dot_all">点号匹配换行</string>
@@ -3177,7 +3177,7 @@ Selected text or question:
     <string name="video_ratio_playing">画面比例: %1$s</string>
     <string name="video_audio_track_playing">音轨: %1$s</string>
     <string name="manage_bg_alpha">Management page background transparency</string>
-    <string name="manage_bg_alpha_summary">0 = opaque (default), 100 = fully transparent (shows background image); applies to all management &amp; settings pages</string>    <string name="tts_preview_default_text">你好，这是一段朗读试听示例文本。</string>
+    <string name="manage_bg_alpha_summary">0 = opaque (default), 100 = fully transparent (shows background image); applies to all management &amp; settings pages</string>    <string name="tts_preview_default_text">你好，这是一段听书试听示例文本。</string>
     <string name="tts_preview_action">试听</string>
     <string name="tts_preview_stop">停止</string>
     <string name="tts_preview_loading">合成中</string>
@@ -3233,10 +3233,10 @@ Selected text or question:
     <string name="tts_casting_manage_entry">管理模板</string>
     <string name="tts_casting_list_title">选择多人听书模板</string>
     <string name="tts_casting_active_source_book">实际生效=本书覆盖</string>
-    <string name="tts_casting_prebuild_menu">批量预合成</string>
+    <string name="tts_casting_prebuild_menu">提前生成音频</string>
     <string name="script_generation_title">AI 剧本生成</string>
     <string name="script_generation_stop">停止</string>
-    <string name="tts_casting_prebuild_start">开始预合成</string>
+    <string name="tts_casting_prebuild_start">开始提前生成</string>
     <string name="tts_casting_prebuild_scanning">统计中…</string>
     <string name="tts_casting_prebuild_flow_hint">按章节范围后台合成音频，播放时命中缓存零等待；将消耗网络流量</string>
     <string name="tts_casting_prebuild_flow_hint_offline">按章节范围后台合成音频，播放时命中缓存零等待；离线引擎合成，不消耗流量</string>
@@ -3245,16 +3245,16 @@ Selected text or question:
     <string name="tts_casting_prebuild_chapter_count">本书共 %1$d 章</string>
     <string name="tts_casting_prebuild_chapter_invalid">章节范围无效，请检查起止章节号</string>
     <string name="tts_casting_prebuild_no_net">当前无网络连接，请检查网络后重试</string>
-    <string name="tts_casting_prebuild_gate_system">当前为系统朗读引擎，不支持批量预合成（仅在线/脚本引擎支持）</string>
-    <string name="tts_casting_prebuild_gate_stream">流式朗读模式已开启，批量预合成不可用</string>
-    <string name="tts_casting_prebuild_gate_multi_role">多人听书模板激活时不支持批量预合成</string>
+    <string name="tts_casting_prebuild_gate_system">当前为系统语音引擎，不支持提前生成音频（仅在线/脚本引擎支持）</string>
+    <string name="tts_casting_prebuild_gate_stream">流式听书模式已开启，提前生成音频不可用</string>
+    <string name="tts_casting_prebuild_gate_multi_role">多人听书模板激活时不支持提前生成音频</string>
     <string name="tts_casting_prebuild_duplicate">已有同书任务进行中</string>
     <string name="tts_casting_prebuild_too_many">章节过多，请分批发起（单批不超过 200 章）</string>
-    <string name="tts_casting_prebuild_done">预合成完成</string>
-    <string name="tts_casting_prebuild_failed">预合成失败</string>
-    <string name="tts_casting_prebuild_cancelled">预合成已取消</string>
+    <string name="tts_casting_prebuild_done">提前生成完成</string>
+    <string name="tts_casting_prebuild_failed">提前生成失败</string>
+    <string name="tts_casting_prebuild_cancelled">提前生成已取消</string>
     <string name="tts_casting_prebuild_progress">%1$d/%2$d</string>
-    <string name="tts_casting_active_none">未启用（单声朗读）</string>
+    <string name="tts_casting_active_none">未启用（单声听书）</string>
     <string name="tts_casting_active_book_format">实际生效：本书覆盖（%1$s · %2$s）</string>
     <string name="tts_casting_active_global_format">实际生效：全局模板（%1$s）</string>
 
@@ -3366,7 +3366,7 @@ Selected text or question:
     <string name="rss_read_menu_group_content">内容</string>
     <string name="rss_read_menu_group_reading">阅读工具</string>
     <string name="rss_read_menu_group_source">源</string>
-    <string name="rss_read_tts_running">朗读中</string>
+    <string name="rss_read_tts_running">听书中</string>
     <string name="source_required_hint">必填项，不能为空</string>
     <!-- main/settings-search 页面优化（M4） -->
     <string name="settings_search_exact_group">精确匹配</string>

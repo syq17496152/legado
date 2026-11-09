@@ -4,17 +4,9 @@
     tools:context=".ui.main.MainActivity"
     tools:ignore="AlwaysShowAction">
 
-    <!-- 听书入口收敛（offline-tts-llm-productization 4.3 / spec R1）：
-         阅读菜单**只保留一个**「听书」入口 ⇒「批量预合成 / 离线引擎管理 / 自定义模板」全部移入
-         听书中心页内的「高级」区（`CastSceneActivity` 快捷设置），不再并列暴露。
-         独立分组（无 groupId 可见性规则）⇒ 本地书（isLocal=true）同样可见（2026-11-01 真机铁证）。 -->
-    <group android:id="@+id/menu_group_tts_tools">
-        <item
-            android:id="@+id/menu_cast_scene"
-            android:icon="@drawable/ic_volume_up"
-            android:title="@string/cast_scene_menu_entry"
-            app:showAsAction="never" />
-    </group>
+    <!-- 听书入口唯一化（offline-tts-ux-consolidation AD-01）：
+         ⋮ 菜单不再有「听书」——统一从阅读页「朗读」按钮进入（面板底部 → 「听书设置」）。
+         保留本注释是给后来者：不要为了"方便"再往菜单里加第二个听书入口。 -->
 
     <group android:id="@+id/menu_group_on_line">
         <item

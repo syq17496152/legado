@@ -5,6 +5,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefInt
+import io.legado.app.utils.putPrefString
 import splitties.init.appCtx
 
 /**
@@ -113,6 +114,16 @@ object EffectiveReadAloudConfig {
 
     fun setBookSpeechRate(bookKey: String, rate: Int?) {
         appCtx.putPrefInt(BOOK_SPEECH_RATE_PREFIX + bookKey, rate ?: -1)
+    }
+
+    /**
+     * 清掉本书的全部覆盖（模板 + 语速）⇒ 回到「跟随全局」（J4 恢复全局）。
+     * 只删 L2 层，不动全局与段级：用户改的是「这本书」，不该误伤其它书或本章。
+     */
+    fun clearBookOverride(bookKey: String) {
+        if (bookKey.isBlank()) return
+        appCtx.putPrefString(PreferKey.ttsCastingBookOverridePrefix + bookKey, "")
+        setBookSpeechRate(bookKey, null)
     }
 
     /** 设置页摘要用：把来源层翻译成用户能看懂的一句话（"跟随全局" = 清掉本书覆盖） */

@@ -102,12 +102,20 @@ private const val KEY_SYS_TTS_CONFIG = "sysTtsConfig"
 private const val KEY_VOICE_ASSET_CENTER = "voiceAssetCenter"
 private const val KEY_LOCAL_LLM = "localLlmSettings"
 private const val SPEAKER_MANAGE_SUMMARY =
-    "管理多角色可用发言人；未绑定或失效时朗读会自动回退到默认配音，不在正文里反复提示"
+    "管理多角色可用音色；未绑定或失效时会自动回退到默认音色，不在正文里反复提示"
 
 enum class ReadAloudConfigGroup(
     val title: String,
     val preferenceKeys: Set<String>
 ) {
+    /** 常用（AD-06）：默认组，只放高频 4 件事；原四组内容零改动，仍可切过去 */
+    Common(
+        "\u5e38\u7528",
+        setOf(
+            PreferKey.ttsSpeechRate,
+            PreferKey.ttsTimer
+        )
+    ),
     Base(
         "\u57fa\u7840",
         setOf(
@@ -190,7 +198,7 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
     SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val refreshTick = mutableIntStateOf(0)
-    private var selectedGroup by mutableStateOf(ReadAloudConfigGroup.Base)
+    private var selectedGroup by mutableStateOf(ReadAloudConfigGroup.Common)
 
     /** 选角模板快照（P1-24 修复：observeAll Flow 异步加载，替代组合期/点击回调 runBlocking 同步等 DB） */
     private var castingTemplates by mutableStateOf<List<io.legado.app.data.entities.TtsCastingTemplate>>(emptyList())
@@ -280,11 +288,55 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
 
     private fun itemsForGroup(group: ReadAloudConfigGroup): List<SettingItemSpec> {
         return when (group) {
+            ReadAloudConfigGroup.Common -> commonItems()
             ReadAloudConfigGroup.Base -> baseItems()
             ReadAloudConfigGroup.Reading -> readingItems()
             ReadAloudConfigGroup.AiRole -> aiRoleItems()
             ReadAloudConfigGroup.Engine -> engineItems()
         }
+    }
+
+    /**
+     * 「常用」组（AD-06）：语速 / 音色 / 演播方式 / 定时。
+     * 只做**第二入口**，不新增设置项：语速与定时复用既有偏好，音色与演播方式是跳转。
+     * 顺序与 [ReadAloudCommonItems.orderedKeys] 一致（单测锁死，防止两个入口排序漂移）。
+     */
+    private fun commonItems(): List<SettingItemSpec> {
+        return listOf(
+            slider(
+                key = ReadAloudCommonItems.KEY_RATE,
+                title = getString(R.string.read_aloud_speed),
+                summary = speechRateSummary(),
+                value = AppConfig.ttsSpeechRate.coerceIn(0, 45),
+                range = 0..45,
+                enabled = !AppConfig.ttsFlowSys
+            ),
+            action(
+                key = ReadAloudCommonItems.KEY_VOICE,
+                title = "音色与音质档",
+                summary = "挑一个离线音色；没下载过就先去下语音包"
+            ) {
+                requireContext().startActivity<BuiltinTtsActivity> {
+                    putExtra(BuiltinTtsActivity.EXTRA_TAB, PageTab.VOICES.key)
+                }
+            },
+            action(
+                key = ReadAloudCommonItems.KEY_CASTING,
+                title = "演播方式",
+                summary = "普通朗读 / 双声对读 / 沉浸多角色"
+            ) {
+                requireContext().startActivity<CastSceneActivity> {
+                    putExtra(CastSceneActivity.EXTRA_FROM, CastSceneActivity.FROM_READ_DIALOG)
+                }
+            },
+            slider(
+                key = PreferKey.ttsTimer,
+                title = "定时关闭（分钟）",
+                summary = "0 = 不定时；下次开始听书时生效",
+                value = AppConfig.ttsTimer.coerceIn(0, 120),
+                range = 0..120
+            )
+        )
     }
 
     private fun onSettingPreferenceChanged(key: String) {
@@ -538,13 +590,13 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             ),
             action(
                 key = KEY_TTS_CASTING_TEMPLATE,
-                title = "多人听书模板",
+                title = "演播模板",
                 summary = "点击循环切换（兼容期 1 操作习惯，与选择器双向同步）",
                 onClick = ::cycleTtsCastingTemplate
             ),
             switch(
                 key = PreferKey.aiReadAloudRoleEnabled,
-                title = "AI 分镜选角",
+                title = "AI 分段选角",
                 // F8/2.28 入口正名：该开关=AI 分镜链，与选角模板路由完全解耦（TTSReadAloudService 只看模板 ruleSet），
                 // 原名"多角色"误导用户以为开了就有多声音
                 summary = if (hasModel) {
@@ -565,11 +617,11 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             ),
             switch(
                 key = PreferKey.aiReadAloudAutoCreateCharacters,
-                title = "自动创建角色并分配发言人",
+                title = "自动创建角色并分配音色",
                 summary = if (AppConfig.aiReadAloudAutoCreateCharacters) {
-                    "新角色会自动建卡，未配置发言人时会从可用目录稳定分配"
+                    "新角色会自动建卡，未配置音色时会从可用目录稳定分配"
                 } else {
-                    "只使用已有角色卡，不自动创建或分配发言人"
+                    "只使用已有角色卡，不自动创建或分配音色"
                 },
                 checked = AppConfig.aiReadAloudAutoCreateCharacters,
                 enabled = enabled,
@@ -599,7 +651,7 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             ),
             action(
                 key = KEY_READ_ALOUD_SPEAKER_MANAGE,
-                title = "发言人管理",
+                title = "角色音色管理",
                 summary = SPEAKER_MANAGE_SUMMARY,
                 onClick = { startActivity<SpeakerGroupManageActivity>() }
             ),
@@ -736,11 +788,11 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             ),
             switch(
                 key = PreferKey.readAloudSpeakerLoudnessEnabled,
-                title = "发言人响度均衡",
+                title = "音色响度均衡",
                 summary = if (AppConfig.readAloudSpeakerLoudnessEnabled) {
                     "自动平衡旁白和角色响度"
                 } else {
-                    "关闭后所有朗读音频按原始音量播放"
+                    "关闭后所有听书音频按原始音量播放"
                 },
                 checked = AppConfig.readAloudSpeakerLoudnessEnabled,
                 onCheckedChange = { AppConfig.readAloudSpeakerLoudnessEnabled = it }
@@ -748,13 +800,13 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             action(
                 key = KEY_READ_ALOUD_LOUDNESS_RESET,
                 title = "重置响度学习",
-                summary = if (loudnessCount > 0) "已学习 $loudnessCount 个发言人" else "暂无学习数据",
+                summary = if (loudnessCount > 0) "已学习 $loudnessCount 个音色" else "暂无学习数据",
                 enabled = loudnessCount > 0
             ) {
                 ReadAloudSpeakerLoudnessManager.reset()
                 updateAiRolePreferences()
                 postReadAloudConfigChanged(EventBus.READ_ALOUD_CONFIG_SCOPE_AUDIO)
-                toastOnUi("已重置发言人响度学习数据")
+                toastOnUi("已重置音色响度学习数据")
             }
         )
     }
@@ -769,7 +821,7 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             ),
             action(
                 key = KEY_READ_ALOUD_SPEAKER_MANAGE,
-                title = "发言人管理",
+                title = "角色音色管理",
                 summary = SPEAKER_MANAGE_SUMMARY,
                 onClick = { startActivity<SpeakerGroupManageActivity>() }
             ),
@@ -797,7 +849,7 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             action(
                 key = KEY_READ_ALOUD_TUNING_RESET,
                 title = "恢复默认参数",
-                summary = "重置语速、停顿、引擎语调音量与响度学习；引擎、密钥、音色、发言人分组保持不变",
+                summary = "重置语速、停顿、引擎语调音量与响度学习；引擎、密钥、音色与分组保持不变",
                 onClick = ::confirmResetTuning
             )
         )
@@ -807,7 +859,7 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         showComposeConfirmDialog(
             title = "恢复默认参数",
             message = "将重置语速、段间停顿、引擎语调/音量与响度均衡学习数据。" +
-                "引擎选择、HttpTTS 密钥/请求头/音色、发言人分组与定时关闭设置保持不变。",
+                "引擎选择、HttpTTS 密钥/请求头/音色、分组与定时关闭设置保持不变。",
             onPositive = {
                 TtsTuningDefaults.reset(requireContext())
                 refreshSettings()

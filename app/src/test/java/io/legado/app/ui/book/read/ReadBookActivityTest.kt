@@ -13,10 +13,11 @@ import org.junit.Test
 class ReadBookActivityTest {
 
     @Test
-    fun `阅读菜单只剩一个听书入口`() {
-        // 4.3 / spec R1：menu_cast_scene 是唯一朗读入口；平行入口（预合成/引擎）已移入听书中心
-        assertTrue("菜单 id 缺失：menu_cast_scene", R.id.menu_cast_scene > 0)
-        assertTrue("菜单标题资源缺失", R.string.cast_scene_menu_entry > 0)
+    fun `阅读菜单不再提供听书入口`() {
+        // offline-tts-ux-consolidation AD-01：菜单入口已移除，唯一入口是阅读页「朗读」按钮
+        val menu = io.legado.app.testkit.SourceFileProbe.sourceTextByPath("src/main/res/menu/book_read.xml")
+        org.junit.Assert.assertFalse("menu_cast_scene 不应再出现在菜单", menu.contains("menu_cast_scene"))
+        assertTrue("入口文案资源保留（面板/引导仍可复用）", R.string.cast_scene_menu_entry > 0)
     }
 
     @Test

@@ -4,6 +4,7 @@ import android.content.Context
 import io.legado.app.utils.LogUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -142,8 +143,15 @@ class BuiltinModelManager(
     /**
      * 在线下载（OkHttp）：先落 `.part`，成功后校验 sha256 再解包。
      * 允许无网失败（返回 false，保留 .part 供重试）。
+     *
+     * @param onCallCreated 把当前 Call 交给调用方，用于「暂停」：cancel 后阻塞读抛 IOException，
+     *   已写入的 `.part` 与 `.part.url` 保留（同源可续传），重新调用即从断点继续。
      */
-    suspend fun download(profile: BuiltinModelProfile, onProgress: (Progress) -> Unit = {}): Boolean =
+    suspend fun download(
+        profile: BuiltinModelProfile,
+        onCallCreated: ((Call) -> Unit)? = null,
+        onProgress: (Progress) -> Unit = {}
+    ): Boolean =
         withContext(Dispatchers.IO) {
             if (profile.sources.isEmpty()) return@withContext false
             val workDir = File(paths.cacheDir, "download").apply { mkdirs() }
@@ -161,7 +169,9 @@ class BuiltinModelManager(
                 val result = runCatching {
                     val builder = Request.Builder().url(url)
                     if (offset > 0) builder.header("Range", "bytes=$offset-")
-                    OkHttpClient().newCall(builder.build()).execute().use { response ->
+                    val call = OkHttpClient().newCall(builder.build())
+                    onCallCreated?.invoke(call)
+                    call.execute().use { response ->
                         // 416 = 残片已超出服务端长度（多半源变短）⇒ 残片作废，整档重来
                         if (response.code == 416) {
                             part.delete()

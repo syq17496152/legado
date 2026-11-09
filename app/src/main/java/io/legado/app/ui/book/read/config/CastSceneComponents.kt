@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,7 +53,10 @@ internal fun SceneStat(value: String, label: String, modifier: Modifier = Modifi
     }
 }
 
-/** 单张场景卡：A/B/C/D 圆标 + 标题 + 两行副文案；选中显示对勾，推荐显示胶囊 */
+/**
+ * 单张场景卡：A/B/C/D 圆标 + 标题 + 两行副文案；选中显示对勾，推荐显示胶囊。
+ * 无障碍（R24）：整卡朗读「标题 + 副文案 + 选中/推荐」，避免 TalkBack 逐字读 A/B/C/D。
+ */
 @Composable
 internal fun SceneCard(
     card: SceneCardRow,
@@ -59,7 +64,17 @@ internal fun SceneCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    AppCard(modifier = modifier, selected = card.selected, onClick = onClick) {
+    val description = buildString {
+        append(card.title)
+        if (card.subtitle.isNotBlank()) append("，").append(card.subtitle)
+        if (card.selected) append("，当前使用")
+        if (card.recommended) append("，推荐")
+    }
+    AppCard(
+        modifier = modifier.semantics { contentDescription = description },
+        selected = card.selected,
+        onClick = onClick
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier

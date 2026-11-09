@@ -45,6 +45,7 @@ import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
 import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
+import io.legado.app.utils.startActivity
 
 data class ProfileRow(
     val id: String,
@@ -290,7 +291,7 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
         } else {
             AppCard {
                 Text(
-                    "还没有角色卡：先点「识别当前章角色」或到「开书向导」一键开书。",
+                    "还没有角色卡：先点「识别当前章角色」或到「首次配置向导」一键开书。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -404,33 +405,29 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
 
 @Composable
 private fun WizardPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Unit) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 首次启用一键卡（T4.1）：模型就绪后一次点击完成「切引擎 + 多角色 + 自检」
-        Button(onClick = { onAction(PageAction.QuickEnable) }, modifier = Modifier.fillMaxWidth()) {
-            Text("一键启用（引擎 + 多角色 + 自检）")
-        }
-        AppCard {
-            SectionTitle(LocalContext.current.getString(R.string.builtin_tts_wizard_step1))
-            TextButton(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
-                Text(LocalContext.current.getString(R.string.builtin_tts_wizard_run))
-            }
-            SectionTitle(LocalContext.current.getString(R.string.builtin_tts_wizard_step2))
-            TextButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
-                Text(LocalContext.current.getString(R.string.builtin_tts_wizard_run))
-            }
-            SectionTitle(LocalContext.current.getString(R.string.builtin_tts_wizard_step3))
-            Text(
-                "回到阅读页点「听书」即可；未识别段会用模板对白音色（并在分镜里标红）。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        // 引导入口唯一化（4.12）：本页只留两个按钮 —— 「首次配置向导」与「一键开书」。
+        // 首次配置（选档/下载/选音色）统一由引导页承担，避免本页再拼一套步骤卡。
+        Button(
+            onClick = {
+                context.startActivity<OfflineTtsOnboardingActivity> {
+                    putExtra(
+                        OfflineTtsOnboardingActivity.EXTRA_FROM,
+                        CastSceneActivity.FROM_GUIDE
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("首次配置向导")
         }
         // 一键开书（T5.3）：角色发现 + 配声 + 激活多角色模板，缺任一步都会退化成单声
         Button(onClick = { onAction(PageAction.EnableMultiRole) }, enabled = state.hasBook) {
-            Text("一键开书（识别 + 配声 + 启用多角色）")
+            Text("一键开书（识别 + 配音 + 启用多角色）")
         }
         if (state.roleSummary.isNotBlank()) {
             Text(

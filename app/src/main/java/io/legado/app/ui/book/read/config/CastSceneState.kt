@@ -312,6 +312,87 @@ object CastSceneState {
     fun bookOverrideBadge(hasBookOverride: Boolean): String? =
         if (hasBookOverride) "本书已覆盖" else null
 
+    // ---------------------------------------------------------------
+    // 首屏 4 段 / 状态条五态 / 更多设置 6 行（AD-02 / AD-11 / R4 / R14）
+    // ---------------------------------------------------------------
+
+    /** 首屏段 id（顺序固定，UI 不得新增第 5 段） */
+    const val SECTION_STATUS = "status"
+    const val SECTION_CARDS = "cards"
+    const val SECTION_PRIMARY = "primary"
+    const val SECTION_FOLD = "fold"
+
+    fun homeSections(): List<String> =
+        listOf(SECTION_STATUS, SECTION_CARDS, SECTION_PRIMARY, SECTION_FOLD)
+
+    /** 状态条 CTA 的去向 */
+    enum class StatusTarget {
+        NONE, BOOKSHELF, ONBOARDING, ONE_TAP, VOICES, ENGINE
+    }
+
+    data class StatusAction(
+        val text: String,
+        val cta: String,
+        val target: StatusTarget
+    )
+
+    /**
+     * L1 状态条（design §1.14 五态）：文案与 CTA 的单源。
+     *
+     * 之所以放在状态机而不是 UI 里拼字符串：同一句话在引导、面板、状态条三处出现，
+     * 分散拼接必然漂移（历史已发生过"文案说识别、点击却直接起播"）。
+     *
+     * @param modelCorrupt 模型目录存在但不完整（`.importing` / 缺文件）
+     * @param listenMode 当前收听方式（如「边听边看」「后台」；空串表示默认）
+     */
+    fun statusActionOf(
+        hasBook: Boolean,
+        engineReady: Boolean,
+        modelCorrupt: Boolean,
+        selectedCard: String,
+        assignedCount: Int,
+        profileTitle: String,
+        listenMode: String = ""
+    ): StatusAction = when {
+        !hasBook -> StatusAction("还没打开书", "去书架选一本", StatusTarget.BOOKSHELF)
+        modelCorrupt -> StatusAction("语音包不完整", "修复语音包", StatusTarget.ONBOARDING)
+        !engineReady -> StatusAction(
+            "离线语音未启用 · 用系统语音也能听", "启用离线语音", StatusTarget.ONBOARDING
+        )
+        selectedCard == CARD_MULTI && assignedCount <= 0 -> StatusAction(
+            "已就绪 · 本书还没分配角色音色", "识别角色并开始", StatusTarget.ONE_TAP
+        )
+        else -> StatusAction(
+            text = buildString {
+                append("已就绪")
+                if (profileTitle.isNotBlank()) append(" · ").append(profileTitle)
+                if (listenMode.isNotBlank()) append(" · ").append(listenMode)
+            },
+            cta = "换声音",
+            target = StatusTarget.VOICES
+        )
+    }
+
+    /**
+     * 「更多设置」6 行（AD-11）：直接复用 [TtsSettingsOwnership] 的目录，避免两处定义漂移。
+     * `engineReady` 仅用于诊断行排序语义（未就绪时诊断更需要被看到），不改变可见性。
+     */
+    fun foldGroupsOf(
+        hasBook: Boolean,
+        lowEndDevice: Boolean,
+        localAiVisible: Boolean,
+        engineReady: Boolean
+    ): List<SceneAdvancedEntry> {
+        val groups = TtsSettingsOwnership.groups(
+            hasBook = hasBook,
+            lowEndDevice = lowEndDevice,
+            localAiVisible = localAiVisible
+        )
+        val ordered = if (engineReady) groups else groups.sortedBy { it.id != TtsSettingsOwnership.ID_DIAGNOSTICS }
+        return ordered.map { SceneAdvancedEntry(it.id, it.label) }
+    }
+
+
     /** 状态行里的剧本提示（3.7）：只在多角色卡展示，避免单声/双声用户被无关状态干扰 */
     private fun scriptStatusHint(label: String): String =
         if (label.isBlank()) "" else " · 本章剧本：$label"

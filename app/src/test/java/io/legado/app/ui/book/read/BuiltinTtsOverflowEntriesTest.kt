@@ -1,32 +1,60 @@
 package io.legado.app.ui.book.read
 
 import io.legado.app.testkit.SourceFileProbe
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 听书入口收敛（4.3 / spec R1）：
- * 阅读页「更多选项」是 Compose 硬编码列表（不读 R.menu.book_read），听书入口必须由
- * [builtinTtsOverflowEntries] 显式产出（否则本地书整组不可达，IF-14-C）；
- * 且**只能有一项** —— 预合成/引擎管理已移入听书中心「高级」，再并列就是入口回潮。
+ * 听书入口唯一化（offline-tts-ux-consolidation AD-01）：
+ * 阅读页 ⋮ 菜单不再有「听书」，唯一入口是朗读面板底部 →「听书设置」。
+ *
+ * 本类只做回归锁：断言"菜单入口已移除 + 面板入口已接线"，防止后续为图方便再挂回第二个入口。
+ * 2026-11-08 真机 FATAL 回归锁（compose-page-regression-sweep）同目录配对（G-01）保留在本文件。
  */
 class BuiltinTtsOverflowEntriesTest {
 
     @Test
-    fun `只产出一个听书入口`() {
-        val actions = builtinTtsOverflowEntries({})
-        assertEquals(1, actions.size)
-        assertEquals("听书", actions[0].title)
+    fun `阅读菜单不再声明听书项`() {
+        val menu = SourceFileProbe.sourceTextByPath("src/main/res/menu/book_read.xml")
+        assertFalse(
+            "menu_cast_scene 已移除（入口收敛到朗读面板）",
+            menu.contains("menu_cast_scene")
+        )
+        assertFalse(
+            "menu_group_tts_tools 已移除",
+            menu.contains("menu_group_tts_tools")
+        )
     }
 
     @Test
-    fun `点击听书入口触发打开听书中心`() {
-        var scene = 0
-        val actions = builtinTtsOverflowEntries(onOpenScene = { scene++ })
-        actions[0].invoke()
-        assertEquals(1, scene)
+    fun `溢出菜单不再产出听书入口`() {
+        val source = SourceFileProbe.sourceText("ui/book/read/ReadMenuComposeComponents.kt")
+        assertFalse(
+            "builtinTtsOverflowEntries 已删除，禁止回潮",
+            source.contains("builtinTtsOverflowEntries")
+        )
+        assertFalse(
+            "buildOverflowActions 不再接收 onCastSceneClick",
+            source.contains("onCastSceneClick")
+        )
+    }
+
+    @Test
+    fun `朗读面板设置动作跳听书设置`() {
+        val source = SourceFileProbe.sourceText("ui/book/read/config/ReadAloudDialog.kt")
+        assertTrue(
+            "面板底部动作已改为「听书设置」",
+            source.contains("听书设置")
+        )
+        assertTrue(
+            "必须跳 CastSceneActivity 并带来源",
+            source.contains("CastSceneActivity") && source.contains("FROM_READ_DIALOG")
+        )
+        assertFalse(
+            "面板内不得再叠一层配置对话框",
+            source.contains("readAloudConfigDialog")
+        )
     }
 
     /**

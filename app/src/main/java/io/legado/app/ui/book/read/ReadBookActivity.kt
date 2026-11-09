@@ -1043,10 +1043,6 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_download -> showDownloadDialog()
-            // 听书唯一入口（4.3）：预合成/引擎管理已移入听书中心
-            // 引擎管理入口保留在听书中心「高级」区（CastSceneActivity → 引擎与音色）
-            // 听书中心：三卡选演播方式 + 一键开始（4.4 把「自定义」移入高级）
-            R.id.menu_cast_scene -> startActivity<CastSceneActivity>()
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_add_scene_bookmark -> addSceneBookmarkFromReadMenu()
             R.id.menu_scene_bookmark_list -> openSceneBookmarkLibrary()
@@ -6387,11 +6383,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun showEpubCoreScheduleMode() {
         showEpubCoreScheduleModeDialog()
-    }
-
-    // 听书唯一入口（4.3 / spec R1）：预合成与引擎管理都在听书中心内，读菜单不再分发
-    override fun openCastScene() {
-        startActivity<CastSceneActivity>()
     }
 
     private fun toggleDelTag(tag: Long, reason: String) {

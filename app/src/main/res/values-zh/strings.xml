@@ -2966,12 +2966,12 @@ bookUrl：%7$s
     <string name="cast_scene_menu_entry">听书</string>
     <string name="builtin_tts_channel_name">离线语音合成</string>
     <string name="builtin_tts_foreground_text">正在离线合成语音…</string>
-    <string name="builtin_tts_title">离线多角色朗读</string>
+    <string name="builtin_tts_title">离线听书</string>
     <string name="builtin_tts_tab_engine">引擎</string>
-    <string name="builtin_tts_tab_storyboard">分镜</string>
+    <string name="builtin_tts_tab_storyboard">分段</string>
     <string name="builtin_tts_tab_voices">音色</string>
-    <string name="builtin_tts_tab_roles">角色配音</string>
-    <string name="builtin_tts_tab_wizard">开书向导</string>
+    <string name="builtin_tts_tab_roles">角色音色</string>
+    <string name="builtin_tts_tab_wizard">首次配置向导</string>
     <string name="builtin_tts_model_ready">已就绪</string>
     <string name="builtin_tts_model_missing">未下载</string>
     <string name="builtin_tts_model_corrupt">已损坏</string>

@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,9 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.TtsUxTrace
+import io.legado.app.help.tts.builtin.BuiltinEngineState
+import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
@@ -57,6 +61,7 @@ import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.observeEvent
+import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 
 /**
@@ -381,6 +386,36 @@ class ReadAloudDialog() : ComposeDialogFragment() {
                                     }
                             )
                         }
+                        // 轻提示（R20 / AD-14）：失败/降档只在面板说一句，不弹窗、不打断播放；
+                        // 点击去「听书设置」看原因，控制键位置不受影响。
+                        val engineHint = remember {
+                            runCatching {
+                                when (BuiltinTtsRuntime.state()) {
+                                    BuiltinEngineState.CORRUPT -> "语音包不完整，可能会没声音 · 点此修复"
+                                    BuiltinEngineState.LOW_MEM -> "内存不足已降级 · 点此查看"
+                                    else -> ""
+                                }
+                            }.getOrDefault("")
+                        }
+                        if (engineHint.isNotBlank()) {
+                            Text(
+                                text = engineHint,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        requireContext().startActivity<CastSceneActivity> {
+                                            putExtra(
+                                                CastSceneActivity.EXTRA_FROM,
+                                                CastSceneActivity.FROM_READ_DIALOG
+                                            )
+                                        }
+                                        dismissAllowingStateLoss()
+                                    }
+                                    .padding(vertical = 6.dp)
+                            )
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -407,10 +442,18 @@ class ReadAloudDialog() : ComposeDialogFragment() {
                             )
                             ReadAloudAction(
                                 iconRes = R.drawable.ic_settings,
-                                text = stringResource(R.string.setting),
+                                // 入口收敛（AD-01/AD-05）：朗读面板只留「听书设置」跳转，
+                                // 不再在面板里叠一层配置对话框（两处配置是"懵"的根源）
+                                text = "听书设置",
                                 onClick = {
-                                    ReadAloudConfigDialog()
-                                        .show(childFragmentManager, "readAloudConfigDialog")
+                                    TtsUxTrace.action("read_dialog_settings", "cast_scene")
+                                    requireContext().startActivity<CastSceneActivity> {
+                                        putExtra(
+                                            CastSceneActivity.EXTRA_FROM,
+                                            CastSceneActivity.FROM_READ_DIALOG
+                                        )
+                                    }
+                                    dismissAllowingStateLoss()
                                 }
                             )
                         }

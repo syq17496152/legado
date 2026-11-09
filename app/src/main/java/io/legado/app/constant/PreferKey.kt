@@ -593,6 +593,10 @@ object PreferKey {
     const val bookshelfReturnToTopAfterRead = "bookshelfReturnToTopAfterRead"
     const val loadCoverHighQuality = "loadCoverHighQuality"
     const val showReadAloudFloatingBall = "showReadAloudFloatingBall"
+    /** 离线听书首次配置引导是否已完成（UI 状态，不属于用户资产，不参与资源页统计） */
+    const val offlineTtsOnboarded = "offlineTtsOnboarded"
+    /** 引导被跳过的累计次数（达到上限后不再自动弹出，仍可手动进入） */
+    const val offlineTtsOnboardSkipCount = "offlineTtsOnboardSkipCount"
     const val readAloudFloatingFontSize = "readAloudFloatingFontSize"
     const val readAloudFloatingBackgroundAlpha = "readAloudFloatingBackgroundAlpha"
     const val readAloudFloatingHeightPercent = "readAloudFloatingHeightPercent"
