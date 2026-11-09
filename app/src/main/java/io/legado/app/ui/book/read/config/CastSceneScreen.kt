@@ -149,6 +149,28 @@ internal fun CastSceneScreen(
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
+            // 方式 × 音色来源说明（R19）：换演播方式后声音怎么变，直接写清楚，减少"为什么换人了"的困惑
+            Text(
+                text = "普通朗读 = 一个声音念全书；双声对读 = 旁白与对白分开；沉浸多角色 = 每个角色绑定自己的音色。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // 自定义模板直达（R23）：当前选中不是三张内置卡时，给一个能立刻打开模板的入口
+            if (snapshot.selectedCard == CastSceneState.CARD_CUSTOM) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = snapshot.statusLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AssistChip(onClick = onOpenTemplates, label = { Text("打开模板") })
+                }
+            }
 
             // ---------- L4 更多设置：本章准备 + 6 行分组 ----------
             AppCard {

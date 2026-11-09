@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
+import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.help.book.characterBookKey
@@ -37,6 +38,7 @@ import io.legado.app.service.ScriptGenerationPlan
 import io.legado.app.service.ScriptGenerationService
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.LogUtils
+import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -211,6 +213,10 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
         }
     }
 
+    /** 收听方式（R19）：复用既有三态里最常用的两态，不新增第四套播放模式（AD-13） */
+    private fun listenMode(): String =
+        if (getPrefBoolean(PreferKey.readAloudByPage)) "边听边看" else "沉浸听书"
+
     /** 本书改过模板/语速时给「恢复全局」：清掉书级覆盖后回到全局配置（J4） */
     private fun restoreBookOverride() {
         val bookKey = ReadBook.book?.characterBookKey() ?: return
@@ -306,7 +312,8 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
             modelCorrupt = facts.modelCorrupt,
             selectedCard = snapshot.selectedCard,
             assignedCount = snapshot.assignedCount,
-            profileTitle = facts.engineTitle
+            profileTitle = facts.engineTitle,
+            listenMode = listenMode()
         )
         val localAiVisible = !lowEndDevice && AppConfig.localLlmEnabled
         foldGroups = CastSceneState.foldGroupsOf(

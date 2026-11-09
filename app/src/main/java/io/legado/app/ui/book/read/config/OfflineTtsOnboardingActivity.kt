@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
+import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.exoplayer.DeviceInfoHelper
 import io.legado.app.help.readaloud.TtsUxTrace
@@ -64,7 +65,7 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
                     OfflineTtsOnboardingScreen(
                         ui = ui,
                         onSelectProfile = ::selectProfile,
-                        onDownload = ::startDownload,
+                        onDownload = { startDownload() },
                         onPause = ::pauseDownload,
                         onImportModel = ::importModelFile,
                         onImportVoicePack = { pickVoicePack.launch(arrayOf("application/zip", "*/*")) },
@@ -73,6 +74,9 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
                         onShuffleVoices = ::shuffleVoices,
                         onOpenAllVoices = ::openAllVoices,
                         onSelectCard = ::selectCard,
+                        onHealthAction = ::handleHealthAction,
+                        onConfirmMobileDownload = ::confirmMobileDownload,
+                        onDismissMobileConfirm = ::dismissMobileConfirm,
                         onNext = ::next,
                         onBack = ::previous,
                         onSkip = { skip(silent = false) }
@@ -112,7 +116,51 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
             cardId = defaultCard(capabilities.firstOrNull { it.profileId == defaultId }),
             resumePercent = resumePercent(defaultId)
         )
+        refreshHealth()
         TtsUxTrace.onboardingStep(1, "enter", defaultId)
+    }
+
+    /**
+     * 完成前体检（R21）：通知 / 电池优化 / 系统语音引擎。
+     * 在 onResume 也刷一次 —— 用户去系统设置回来要立刻看到状态变化，不用重进页面。
+     */
+    override fun onResume() {
+        super.onResume()
+        if (ui.capabilities.isNotEmpty()) refreshHealth()
+    }
+
+    private fun refreshHealth() {
+        val notificationsOk = runCatching {
+            androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+        }.getOrDefault(true)
+        val batteryOk = runCatching {
+            val pm = getSystemService(android.os.PowerManager::class.java)
+            pm?.isIgnoringBatteryOptimizations(packageName) == true
+        }.getOrDefault(true)
+        val engineOk = runCatching {
+            BuiltinTtsRuntime.isActiveEngine(this, AppConfig.ttsEngine.orEmpty())
+        }.getOrDefault(false)
+        ui = ui.copy(
+            health = OnboardingHealthCheck.items(notificationsOk, batteryOk, engineOk)
+        )
+    }
+
+    /** 体检项点击：只跳系统设置，不在应用内伪造"已开" */
+    private fun handleHealthAction(id: String) {
+        TtsUxTrace.action("health_$id", "system_settings")
+        runCatching {
+            when (id) {
+                OnboardingHealthCheck.ID_NOTIFICATION -> startActivity(
+                    Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                )
+                OnboardingHealthCheck.ID_BATTERY -> startActivity(
+                    Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                        .setData(Uri.parse("package:$packageName"))
+                )
+                OnboardingHealthCheck.ID_ENGINE -> IntentHelp.openTTSSetting()
+            }
+        }.onFailure { toastOnUi("打不开系统设置，可稍后手动开启") }
     }
 
     // ---------------------------------------------------------------
@@ -162,7 +210,12 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
         return (part.length() * 100 / profile.sizeBytes).toInt().coerceIn(0, 99)
     }
 
-    private fun startDownload() {
+    private fun startDownload(force: Boolean = false) {
+        // S18 移动网络确认：蜂窝下不直接吃流量，先弹一次确认（用户确认后本次不再拦）
+        if (!force && OnboardingHealthCheck.needsMobileConfirm(isCellular())) {
+            ui = ui.copy(showMobileConfirm = true)
+            return
+        }
         val profile = profileOf(ui.profileId) ?: return
         val engineReady = runCatching {
             BuiltinTtsRuntime.state() == BuiltinEngineState.READY
@@ -215,6 +268,24 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
         userPaused = true
         runCatching { activeCall?.cancel() }
     }
+
+    /** 移动网络确认：确认后本次直接下载 */
+    private fun confirmMobileDownload() {
+        ui = ui.copy(showMobileConfirm = false)
+        startDownload(force = true)
+    }
+
+    private fun dismissMobileConfirm() {
+        ui = ui.copy(showMobileConfirm = false, message = "已取消下载：可连 Wi-Fi 后再下")
+    }
+
+    private fun isCellular(): Boolean = runCatching {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return@runCatching false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return@runCatching false
+        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) &&
+            !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+    }.getOrDefault(false)
 
     private fun importModelFile() {
         pickModelFile.launch(arrayOf("application/zip", "application/x-bzip2", "application/octet-stream", "*/*"))
@@ -492,5 +563,9 @@ data class OnboardingUi(
     val error: String = "",
     val busy: Boolean = false,
     val message: String = "",
-    val lowEnd: Boolean = false
+    val lowEnd: Boolean = false,
+    /** 完成前体检三项（design §1.17 第 4 维）；空列表 = 尚未计算 */
+    val health: List<OnboardingHealthCheck.Item> = emptyList(),
+    /** 移动网络下载确认弹窗（S18） */
+    val showMobileConfirm: Boolean = false
 )

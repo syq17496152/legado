@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,6 +45,9 @@ internal fun OfflineTtsOnboardingScreen(
     onShuffleVoices: () -> Unit,
     onOpenAllVoices: () -> Unit,
     onSelectCard: (String) -> Unit,
+    onHealthAction: (String) -> Unit,
+    onConfirmMobileDownload: () -> Unit,
+    onDismissMobileConfirm: () -> Unit,
     onNext: () -> Unit,
     onBack: () -> Unit,
     onSkip: () -> Unit
@@ -96,7 +100,7 @@ internal fun OfflineTtsOnboardingScreen(
                     onOpenAllVoices = onOpenAllVoices,
                     onImportVoicePack = onImportVoicePack
                 )
-                else -> Step3Cards(ui = ui, onSelectCard = onSelectCard)
+                else -> Step3Cards(ui = ui, onSelectCard = onSelectCard, onHealthAction = onHealthAction)
             }
             if (ui.busy) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -105,6 +109,16 @@ internal fun OfflineTtsOnboardingScreen(
         }
         BottomBar(ui = ui, onDownload = onDownload, onPause = onPause, onImportModel = onImportModel,
             onOpenAllVoices = onOpenAllVoices, onNext = onNext, onBack = onBack, onSkip = onSkip)
+    }
+    // S18：蜂窝网络下载前确认（取消不下载，绝不吃用户流量）
+    if (ui.showMobileConfirm) {
+        AlertDialog(
+            onDismissRequest = onDismissMobileConfirm,
+            title = { Text("正在使用移动网络") },
+            text = { Text("语音包体积较大，建议连 Wi-Fi 下载。仍要用流量继续吗？") },
+            confirmButton = { TextButton(onClick = onConfirmMobileDownload) { Text("仍要下载") } },
+            dismissButton = { TextButton(onClick = onDismissMobileConfirm) { Text("取消") } }
+        )
     }
 }
 
@@ -323,7 +337,11 @@ private fun Step2Voices(
 // ---------------------------------------------------------------
 
 @Composable
-private fun Step3Cards(ui: OnboardingUi, onSelectCard: (String) -> Unit) {
+private fun Step3Cards(
+    ui: OnboardingUi,
+    onSelectCard: (String) -> Unit,
+    onHealthAction: (String) -> Unit
+) {
     val capability = ui.capabilities.firstOrNull { it.profileId == ui.profileId }
     Text(
         text = "选一种演播方式，之后随时能换。",
@@ -365,6 +383,46 @@ private fun Step3Cards(ui: OnboardingUi, onSelectCard: (String) -> Unit) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+    // 完成前体检（R21）：只提示、可跳过；未完成项给一个能点的动作
+    if (ui.health.isNotEmpty()) {
+        AppCard {
+            SectionTitle("开始前检查（可跳过）")
+            val pending = ui.health.count { !it.ok }
+            if (pending == 0) {
+                Text(
+                    text = "都准备好了，直接开始听书吧。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            ui.health.forEach { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatusDot(
+                        if (item.ok) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        size = 7
+                    )
+                    Text(
+                        text = item.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
+                    )
+                    if (item.action.isNotBlank()) {
+                        TextButton(onClick = { onHealthAction(item.id) }) { Text(item.action) }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun sceneCards(capability: OnboardingCapability?): List<Triple<String, String, String>> = listOf(
