@@ -37,7 +37,7 @@ object TtsSettingsOwnership {
                 add(TtsSettingsGroup(ID_ROLES, "角色音色", "谁的声音不对就换谁"))
                 add(TtsSettingsGroup(ID_SEGMENT, "分段与提前生成", "看这句归谁，提前生成减少等待"))
             }
-            add(TtsSettingsGroup(ID_BEHAVIOR, "朗读行为", "语速、定时、收听方式、配乐"))
+            add(TtsSettingsGroup(ID_BEHAVIOR, "朗读行为", "语速、定时、收听方式（边听边看/悬浮球/后台）、配乐"))
             if (localAiVisible) {
                 add(TtsSettingsGroup(ID_AI, "本地 AI", "剧本生成模型（可选）"))
             }

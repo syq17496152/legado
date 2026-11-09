@@ -50,4 +50,14 @@ class TtsSettingsOwnershipTest {
         assertFalse(TtsSettingsOwnership.isValid(""))
         assertFalse(TtsSettingsOwnership.isValid("templates"))
     }
+
+    @Test
+    fun `朗读行为说明显式列出三种收听方式`() {
+        val summary = TtsSettingsOwnership.groups(true, false, true)
+            .first { it.id == TtsSettingsOwnership.ID_BEHAVIOR }
+            .summary
+        listOf("边听边看", "悬浮球", "后台").forEach {
+            assertTrue("收听方式缺少「$it」：$summary", summary.contains(it))
+        }
+    }
 }

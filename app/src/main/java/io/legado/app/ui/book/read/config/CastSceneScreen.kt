@@ -65,6 +65,8 @@ internal fun CastSceneScreen(
     onOpenPage: (String) -> Unit,
     /** 本地 AI（低端机不出现这一行） */
     onOpenAi: () -> Unit,
+    /** 手动进入首次配置向导（R2：跳过 3 次后仍可从更多设置进入） */
+    onOpenGuide: () -> Unit,
     /** 3.5：本地 AI 可用时的「生成本章剧本」（手动重算） */
     onGenerateScript: () -> Unit,
     onPrimary: () -> Unit
@@ -294,6 +296,11 @@ internal fun CastSceneScreen(
                         ) { Text("演播模板") }
                     }
                 }
+                // R2：跳过满次数后自动弹窗静默，但手动入口必须一直保留
+                TextButton(
+                    onClick = onOpenGuide,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) { Text("首次配置向导") }
             }
             if (busy) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())

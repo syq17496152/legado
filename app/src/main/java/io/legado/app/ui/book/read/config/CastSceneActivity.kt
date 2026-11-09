@@ -128,6 +128,7 @@ class CastSceneActivity : BaseActivity<ViewBinding>() {
                             }
                         },
                         onOpenAi = { startActivity<LlmSettingsActivity>() },
+                        onOpenGuide = { openOnboarding(finishSelf = false) },
                         onGenerateScript = { requestScript(force = true) },
                         onPrimary = ::primaryAction
                     )

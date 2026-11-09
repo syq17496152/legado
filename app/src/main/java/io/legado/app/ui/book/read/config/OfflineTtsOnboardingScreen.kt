@@ -186,7 +186,13 @@ private fun Step1Profiles(
                         modifier = Modifier.padding(top = 2.dp)
                     )
                     Text(
-                        text = suitableFor(capability),
+                        text = suitableFor(capability) + if (
+                            ui.lowEnd && capability.profileId == OnboardingCapability.PROFILE_HQ
+                        ) {
+                            "（本机可能较慢，推荐极速档）"
+                        } else {
+                            ""
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp)
