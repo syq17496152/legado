@@ -150,6 +150,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 busy = false,
                 message = if (ok) "模型已导入" else "模型导入失败（请确认包内容完整）"
             )
+            // 导入同样会让多音色档刚就绪，补播内置 sid 音色（与下载完成同一条兜底）
+            if (ok) withContext(Dispatchers.IO) {
+                BuiltinTtsRuntime.ensureSpeakersReady(profileId)
+            }
             reload()
         }
     }
@@ -351,6 +355,10 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                         pageState.value = pageState.value.copy(progress = progress.percent)
                     }
                     pageState.value = pageState.value.copy(busy = false, message = if (ok) "模型下载完成" else "下载失败（可改用导入）")
+                    // 多音色档下载完即补播内置 sid 音色：否则切到该档会显示「本档可用 0」（真机铁证 2026-11-09）
+                    if (ok) withContext(Dispatchers.IO) {
+                        BuiltinTtsRuntime.ensureSpeakersReady(action.profileId)
+                    }
                 }
                 is PageAction.DeleteModel -> {
                     BuiltinTtsRuntime.modelManager().delete(action.profileId)

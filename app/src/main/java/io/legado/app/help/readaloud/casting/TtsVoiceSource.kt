@@ -144,6 +144,12 @@ class SystemEngineSource(
                             if (!voice?.roleName.isNullOrBlank()) {
                                 putString(TtsVoiceRef.EXTRA_ROLE_NAME, voice?.roleName)
                             }
+                            // 逐段音色键：framework 的 setVoice 在「刚初始化 / 音色名不在框架缓存」时会**静默
+                            // 不生效**（真机铁证 2026-11-09：多角色朗读各段合成都落到引擎默认音 b6_m_teen，
+                            // 声源显示艾舍尔 1 却发出同一个声音）。Bundle 通道是引擎侧首选，其他引擎忽略该键。
+                            if (!voice?.voiceId.isNullOrBlank()) {
+                                putString(TtsVoiceRef.EXTRA_VOICE_NAME, voice?.voiceId)
+                            }
                         }
                         val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, utteranceId)
                         if (result == TextToSpeech.ERROR) {

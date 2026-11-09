@@ -271,10 +271,18 @@ class BuiltinTtsActivityTest {
     // ===== 第三轮视觉重做（卡片化/状态胶囊）新增纯文案口径 =====
 
     @Test
-    fun `语音包档位标题按 id 区分两档`() {
+    fun `语音包档位标题按 id 区分四档`() {
         assertEquals("极速单声档", BuiltinTtsUiSupport.profileTitle("fast"))
-        // 非 fast 一律按高质量克隆档（导入的 ZipVoice/vocos 都落这一档）
         assertEquals("高质量克隆档", BuiltinTtsUiSupport.profileTitle("clone"))
+        // 多音色两档必须各自有名字（真机铁证：两档曾同时显示「高质量克隆档」，用户无法区分）
+        assertEquals("多音色快速档", BuiltinTtsUiSupport.profileTitle("multi"))
+        assertEquals("多音色高质量档", BuiltinTtsUiSupport.profileTitle("hq"))
+        assertEquals(
+            "四档标题必须互不相同",
+            4,
+            setOf("fast", "clone", "multi", "hq").map { BuiltinTtsUiSupport.profileTitle(it) }.distinct().size
+        )
+        // 未知 id 回落克隆档
         assertEquals("高质量克隆档", BuiltinTtsUiSupport.profileTitle("unknown"))
     }
 

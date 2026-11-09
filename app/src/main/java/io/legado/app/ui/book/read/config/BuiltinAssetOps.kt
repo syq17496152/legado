@@ -26,7 +26,11 @@ internal object BuiltinAssetOps {
                     }
                 }.getOrDefault(false)
             }
-            if (ok) imported++
+            if (ok) {
+                imported++
+                // 导入到多音色档同样要补播内置 sid 音色（与下载完成同一条兜底）
+                BuiltinTtsRuntime.ensureSpeakersReady(profileId)
+            }
         }
         return "发现 ${found.size} 项，导入成功 $imported"
     }

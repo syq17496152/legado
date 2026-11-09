@@ -166,19 +166,35 @@ object BuiltinTtsRuntime {
             runCatching {
                 modelManager.profiles()
                     .filter { it.multiSpeaker && modelManager.state(it) == BuiltinEngineState.READY }
-                    .forEach { profile ->
-                        voiceStore.ensureSpeakers(
-                            profileId = profile.id,
-                            engine = profile.engine,
-                            count = profile.speakerCount,
-                            namePrefix = profile.speakerNamePrefix.ifBlank { profile.title },
-                            sidStart = profile.speakerSidStart,
-                            genderOf = profile::genderOfSid
-                        )
-                    }
+                    .forEach { profile -> seedSpeakers(profile) }
             }.onFailure { LogUtils.e(TAG, "内置多音色播种失败：${it.message}") }
             seeded = true
         }
+    }
+
+    /**
+     * 按档位补播内置多音色索引（幂等）。
+     * 下载完成 / 导入完成时模型刚就绪，`ensureSeeded()` 的一次性标记早已置位 ⇒ 必须显式再播一次，
+     * 否则多音色档会出现「本档可用 0」（真机铁证 2026-11-09：multi 下载完成后音色页显示可用 0）。
+     */
+    fun ensureSpeakersReady(profileId: String) {
+        if (!initialized) return
+        val profile = modelManager.profile(profileId) ?: return
+        if (!profile.multiSpeaker) return
+        if (modelManager.state(profile) != BuiltinEngineState.READY) return
+        runCatching { seedSpeakers(profile) }
+            .onFailure { LogUtils.e(TAG, "补播多音色失败：${it.message}") }
+    }
+
+    private fun seedSpeakers(profile: BuiltinModelProfile) {
+        voiceStore.ensureSpeakers(
+            profileId = profile.id,
+            engine = profile.engine,
+            count = profile.speakerCount,
+            namePrefix = profile.speakerNamePrefix.ifBlank { profile.title },
+            sidStart = profile.speakerSidStart,
+            genderOf = profile::genderOfSid
+        )
     }
 
     fun profiles(): List<BuiltinModelProfile> {
@@ -237,20 +253,7 @@ object BuiltinTtsRuntime {
             )
         }.onFailure { LogUtils.e(TAG, "写入激活档失败：${it.message}") }
         // 切到多说话人档时补播 sid 音色：模型可能是在本会话内刚下载完成的（首次 init 时还没就绪）
-        runCatching {
-            modelManager.profile(profileId)
-                ?.takeIf { it.multiSpeaker && modelManager.state(it) == BuiltinEngineState.READY }
-                ?.let { profile ->
-                    voiceStore.ensureSpeakers(
-                        profileId = profile.id,
-                        engine = profile.engine,
-                        count = profile.speakerCount,
-                        namePrefix = profile.speakerNamePrefix.ifBlank { profile.title },
-                        sidStart = profile.speakerSidStart,
-                        genderOf = profile::genderOfSid
-                    )
-                }
-        }.onFailure { LogUtils.e(TAG, "切换档位时播种多音色失败：${it.message}") }
+        ensureSpeakersReady(profileId)
     }
 
     fun voices(): List<BuiltinVoice> {

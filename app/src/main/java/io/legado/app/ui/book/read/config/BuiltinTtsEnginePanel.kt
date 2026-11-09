@@ -132,7 +132,10 @@ private fun ProfileCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = BuiltinTtsUiSupport.profileTitle(profile.id),
+                        // 模型档案自带 title 是唯一真源（多音色两档的名称不同）；缺失才走 id 兜底
+                        text = profile.title.ifBlank {
+                            BuiltinTtsUiSupport.profileTitle(profile.id)
+                        },
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )

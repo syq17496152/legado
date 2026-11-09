@@ -161,6 +161,8 @@ private fun Step1Profiles(
     )
     ui.capabilities.forEach { capability ->
         val selected = capability.profileId == ui.profileId
+        // 已就绪的档位直接标「已下载」：真机铁证 2026-11-09，用户会以为必须再下一遍
+        val downloaded = capability.profileId in ui.readyProfileIds
         AppCard(selected = selected, onClick = { onSelectProfile(capability.profileId) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -168,6 +170,9 @@ private fun Step1Profiles(
                         SectionTitle(capability.label)
                         if (capability.recommended) {
                             StatusPill("推荐", StatusTone.POSITIVE, Modifier.padding(start = 8.dp))
+                        }
+                        if (downloaded) {
+                            StatusPill("已下载", StatusTone.POSITIVE, Modifier.padding(start = 6.dp))
                         }
                         if (capability.profileId == ui.profileId) {
                             StatusPill("已选择", StatusTone.NEUTRAL, Modifier.padding(start = 6.dp))
@@ -210,12 +215,16 @@ private fun Step1Profiles(
                         color = MaterialTheme.colorScheme.primary
                     )
                     else -> Text(
-                        text = if (ui.paused) "已暂停" else "点底部按钮开始",
+                        text = when {
+                            ui.paused -> "已暂停"
+                            downloaded -> "已下载，点底部按钮启用"
+                            else -> "点底部按钮开始"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (selected && ui.resumePercent > 0 && !ui.downloading) {
+                if (selected && !downloaded && ui.resumePercent > 0 && !ui.downloading) {
                     Text(
                         text = "已下载 ${ui.resumePercent}%，可继续",
                         style = MaterialTheme.typography.bodySmall,
@@ -458,12 +467,13 @@ private fun BottomBar(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         val primaryText = when (ui.step) {
-            1 -> when {
-                ui.downloading -> "下载中 ${ui.progress}%（点此暂停）"
-                capability?.needsVoicePack == true -> "导入音色包"
-                ui.resumePercent > 0 -> "继续下载（已下载 ${ui.resumePercent}%）"
-                else -> "下载并启用"
-            }
+            1 -> OfflineTtsOnboardingState.step1PrimaryLabel(
+                profileReady = ui.profileId in ui.readyProfileIds,
+                needsVoicePack = capability?.needsVoicePack == true,
+                downloading = ui.downloading,
+                progress = ui.progress,
+                resumePercent = ui.resumePercent
+            )
             2 -> "下一步"
             else -> "开始听书"
         }

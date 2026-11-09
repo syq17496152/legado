@@ -29,5 +29,25 @@ class TtsVoiceSourceTest {
     fun `透传键名固定`() {
         // 键名是跨进程约定（朗读服务写 Bundle、引擎服务读 SynthesisRequest.params），改动即断链
         assertEquals("io.legado.builtin.roleName", TtsVoiceRef.EXTRA_ROLE_NAME)
+        assertEquals("io.legado.builtin.voiceName", TtsVoiceRef.EXTRA_VOICE_NAME)
+    }
+
+    /**
+     * 逐段音色必须走 Bundle 兜底（真机铁证 2026-11-09）：
+     * reading 链路只调 setVoice，框架静默不生效 ⇒ 多角色各段全落到引擎默认音（同一声音）。
+     * 源码断言：utterance 组装 Bundle 时必须写入 EXTRA_VOICE_NAME。
+     */
+    @Test
+    fun `朗读 utterance 必须把音色键写进 Bundle`() {
+        val src = io.legado.app.testkit.SourceFileProbe
+            .sourceText("help/readaloud/casting/TtsVoiceSource.kt")
+        assertTrue(
+            "Bundle 必须写 EXTRA_VOICE_NAME（否则多角色朗读各段同声）",
+            src.contains("putString(TtsVoiceRef.EXTRA_VOICE_NAME")
+        )
+        assertTrue(
+            "只在 voiceId 非空时写，避免空键覆盖引擎默认音",
+            src.contains("if (!voice?.voiceId.isNullOrBlank())")
+        )
     }
 }

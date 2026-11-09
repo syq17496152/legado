@@ -45,6 +45,17 @@ class BuiltinTtsRuntimeTest {
     }
 
     /**
+     * 下载完成后补播多音色索引（真机铁证 2026-11-09）：
+     * 未初始化时必须静默返回，不能因空态抛异常打断下载完成回调。
+     */
+    @Test
+    fun `未初始化时补播多音色静默返回`() {
+        assertFalse(BuiltinTtsRuntime.isInitialized())
+        BuiltinTtsRuntime.ensureSpeakersReady("multi")
+        BuiltinTtsRuntime.ensureSpeakersReady("")
+    }
+
+    /**
      * 3.6：剧本缓存必须落在 filesDir/scripts（可重建缓存，不进备份），
      * 且与用户手改/固定绑定目录 legado_rules 分离 —— 清缓存不能动用户数据。
      */

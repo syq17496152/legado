@@ -57,6 +57,21 @@ class BuiltinTtsOverflowEntriesTest {
         )
     }
 
+    @Test
+    fun `播放面板齿轮跳听书设置而非直叠配置对话框`() {
+        // 2026-11-09 真机铁证：朗读按钮打开的是 ReadAloudPlayerPanel，齿轮仍直接弹
+        // ReadAloudConfigDialog ⇒「听书设置」单入口在真实路径上不可达
+        val source = SourceFileProbe.sourceText("ui/book/read/ReadAloudPlayerPanel.kt")
+        assertTrue(
+            "面板齿轮必须跳 CastSceneActivity 并带来源",
+            source.contains("CastSceneActivity") && source.contains("FROM_READ_DIALOG")
+        )
+        assertFalse(
+            "面板齿轮不得再直接叠 ReadAloudConfigDialog",
+            Regex("""showDialogFragment\(ReadAloudConfigDialog\(\)\)""").containsMatchIn(source)
+        )
+    }
+
     /**
      * 2026-11-08 真机 FATAL 回归锁（compose-page-regression-sweep）：听书面板分段角色图标
      * 曾直接 `painterResource(R.drawable.ic_bottom_person)`，而它是 `<selector>` ⇒ 组合期崩溃。

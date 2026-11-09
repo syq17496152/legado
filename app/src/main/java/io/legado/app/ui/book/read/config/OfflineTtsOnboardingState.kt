@@ -55,6 +55,46 @@ object OfflineTtsOnboardingState {
         return SkipResult(newCount = next, silentFromNow = next >= MAX_SKIP)
     }
 
+    /**
+     * 引导结束后是否需要补开「听书设置」页。
+     * 只有从引擎页「首次配置向导」tab 进来的（from=guide）没有听书设置在栈下，
+     * 配完要落到听书设置首屏；从听书设置进来的直接 finish 回栈即可（避免重复实例）。
+     */
+    fun shouldOpenCastSceneAfterOnboarding(from: String): Boolean = from == "guide"
+
     /** 完成引导：写入 onboarded 并把跳过计数清零 */
     fun onCompleted(): CompletedMark = CompletedMark()
+
+    /**
+     * 第 1 步是否需要真的走下载链路。
+     * 档位已就绪 ⇒ 直接启用（不下载、不弹流量确认）：
+     * 真机铁证 2026-11-09，选了已下载的「轻量多音色」仍弹流量确认，用户会以为要重下 30MB。
+     */
+    fun step1NeedsDownload(profileReady: Boolean): Boolean = !profileReady
+
+    /**
+     * 第 2 步默认选中的音色：沿用仍可用的旧选择，否则取推荐列表首个。
+     * 首进第 2 步时必须有一个选中态，否则用户不知道"下一步"会用谁的声音。
+     */
+    fun defaultSelectedVoiceId(current: String, availableIds: List<String>): String =
+        current.takeIf { it.isNotBlank() && it in availableIds }
+            ?: availableIds.firstOrNull().orEmpty()
+
+    /**
+     * 第 1 步主按钮文案（纯函数）：与 [step1NeedsDownload] 同源，
+     * 避免"已下载却写下载并启用"这类文案与行为不一致。
+     */
+    fun step1PrimaryLabel(
+        profileReady: Boolean,
+        needsVoicePack: Boolean,
+        downloading: Boolean,
+        progress: Int,
+        resumePercent: Int
+    ): String = when {
+        downloading -> "下载中 $progress%（点此暂停）"
+        needsVoicePack -> "导入音色包"
+        profileReady -> "启用并继续"
+        resumePercent > 0 -> "继续下载（已下载 $resumePercent%）"
+        else -> "下载并启用"
+    }
 }

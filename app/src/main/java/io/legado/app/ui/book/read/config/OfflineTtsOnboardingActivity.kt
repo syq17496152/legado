@@ -27,6 +27,7 @@ import io.legado.app.help.tts.builtin.ClonettsVoiceImporter
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -114,7 +115,8 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
             capabilities = capabilities,
             profileId = defaultId,
             cardId = defaultCard(capabilities.firstOrNull { it.profileId == defaultId }),
-            resumePercent = resumePercent(defaultId)
+            resumePercent = resumePercent(defaultId),
+            readyProfileIds = readyProfileIds()
         )
         refreshHealth()
         TtsUxTrace.onboardingStep(1, "enter", defaultId)
@@ -185,6 +187,15 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
     private fun profileOf(id: String): BuiltinModelProfile? =
         runCatching { BuiltinTtsRuntime.modelManager().profile(id) }.getOrNull()
 
+    /** 已下载就绪的档位集合（第 1 步卡片显示「已下载」，避免用户以为还要再下一遍） */
+    private fun readyProfileIds(): Set<String> = runCatching {
+        val manager = BuiltinTtsRuntime.modelManager()
+        manager.profiles()
+            .filter { manager.state(it) == BuiltinEngineState.READY }
+            .map { it.id }
+            .toSet()
+    }.getOrDefault(emptySet())
+
     private fun capabilityOf(id: String): OnboardingCapability? =
         ui.capabilities.firstOrNull { it.profileId == id }
 
@@ -211,17 +222,19 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
     }
 
     private fun startDownload(force: Boolean = false) {
+        val profile = profileOf(ui.profileId) ?: return
+        // 已经下载就绪的档位直接启用，不走下载、也不弹流量确认
+        // （真机铁证 2026-11-09：选了已就绪的「轻量多音色」仍弹「正在使用移动网络」，用户会以为要重下 30MB）
+        val ready = runCatching {
+            BuiltinTtsRuntime.modelManager().state(profile) == BuiltinEngineState.READY
+        }.getOrDefault(false)
+        if (!OfflineTtsOnboardingState.step1NeedsDownload(ready)) {
+            activateAndEnterStep2(profile.id)
+            return
+        }
         // S18 移动网络确认：蜂窝下不直接吃流量，先弹一次确认（用户确认后本次不再拦）
         if (!force && OnboardingHealthCheck.needsMobileConfirm(isCellular())) {
             ui = ui.copy(showMobileConfirm = true)
-            return
-        }
-        val profile = profileOf(ui.profileId) ?: return
-        val engineReady = runCatching {
-            BuiltinTtsRuntime.state() == BuiltinEngineState.READY
-        }.getOrDefault(false)
-        if (engineReady && runCatching { BuiltinTtsRuntime.activeProfile()?.id }.getOrNull() == profile.id) {
-            enterStep2()
             return
         }
         downloadJob?.cancel()
@@ -240,9 +253,7 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
             ui = ui.copy(downloading = false)
             when {
                 ok -> {
-                    BuiltinTtsRuntime.setActiveProfile(profile.id)
-                    runCatching { BuiltinTtsRuntime.ensureSeeded() }
-                    enterStep2()
+                    activateAndEnterStep2(profile.id)
                 }
                 userPaused -> {
                     ui = ui.copy(
@@ -303,9 +314,7 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
             }.getOrDefault(false)
             ui = ui.copy(busy = false)
             if (ok) {
-                BuiltinTtsRuntime.setActiveProfile(profileId)
-                runCatching { BuiltinTtsRuntime.ensureSeeded() }
-                enterStep2()
+                activateAndEnterStep2(profileId)
             } else {
                 ui = ui.copy(error = "导入失败：文件不完整或格式不支持（支持 zip / tar.bz2）")
                 TtsUxTrace.onboardingStep(1, "fail", profileId)
@@ -316,6 +325,16 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
     // ---------------------------------------------------------------
     // 第 2 步：音色
     // ---------------------------------------------------------------
+
+    /**
+     * 启用某档并进入第 2 步：下载完成 / 本地导入 / 本来就已就绪 三条路径共用，
+     * 保证「激活档 + 补播内置音色（多音色档否则显示本档可用 0）+ 进第 2 步」三件事不遗漏。
+     */
+    private fun activateAndEnterStep2(profileId: String) {
+        runCatching { BuiltinTtsRuntime.setActiveProfile(profileId) }
+        runCatching { BuiltinTtsRuntime.ensureSpeakersReady(profileId) }
+        enterStep2()
+    }
 
     private fun enterStep2() {
         val capability = capabilityOf(ui.profileId)
@@ -332,7 +351,17 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
                 TtsUxTrace.onboardingStep(2, "enter", ui.profileId)
             }
             else -> {
-                ui = ui.copy(step = 2, voices = recommendVoices(voices, 0), message = "")
+                val recommended = recommendVoices(voices, 0)
+                ui = ui.copy(
+                    step = 2,
+                    voices = recommended,
+                    // 默认选中第一个推荐音色：卡片没有选中态时用户不知道"下一步"会用谁的声音
+                    selectedVoiceId = OfflineTtsOnboardingState.defaultSelectedVoiceId(
+                        current = ui.selectedVoiceId,
+                        availableIds = recommended.map { it.id }
+                    ),
+                    message = ""
+                )
                 TtsUxTrace.onboardingStep(2, "enter", ui.profileId)
             }
         }
@@ -509,7 +538,24 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
         AppConfig.offlineTtsOnboardSkipCount = result.newCount
         TtsUxTrace.onboardingStep(ui.step, "skip", ui.profileId)
         if (!silent) toastOnUi("已跳过：本次先用系统语音朗读")
+        returnToCastScene()
         finish()
+    }
+
+    /**
+     * 返回「听书设置」：从引导页（引擎页向导 tab / 其它入口）进来的，
+     * 配完不能把用户丢回"向导"页（那里只有两个按钮），要落到听书设置首屏；
+     * 从听书设置进来的直接 finish 回栈里那一层，避免重复实例。
+     */
+    private fun returnToCastScene() {
+        val from = intent.getStringExtra(EXTRA_FROM).orEmpty()
+        if (OfflineTtsOnboardingState.shouldOpenCastSceneAfterOnboarding(from)) {
+            runCatching {
+                startActivity<CastSceneActivity> {
+                    putExtra(CastSceneActivity.EXTRA_FROM, CastSceneActivity.FROM_GUIDE)
+                }
+            }
+        }
     }
 
     /** 完成：写 onboarded、清零跳过计数、激活演播方式，然后回阅读页起播（4.9） */
@@ -529,6 +575,7 @@ class OfflineTtsOnboardingActivity : BaseActivity<ViewBinding>() {
         if (startReading && ReadBook.book != null) {
             ReadAloud.play(this)
         }
+        returnToCastScene()
         finish()
     }
 
@@ -567,5 +614,7 @@ data class OnboardingUi(
     /** 完成前体检三项（design §1.17 第 4 维）；空列表 = 尚未计算 */
     val health: List<OnboardingHealthCheck.Item> = emptyList(),
     /** 移动网络下载确认弹窗（S18） */
-    val showMobileConfirm: Boolean = false
+    val showMobileConfirm: Boolean = false,
+    /** 已下载就绪的档位（第 1 步显示「已下载」，不再误导用户重复下载） */
+    val readyProfileIds: Set<String> = emptySet()
 )

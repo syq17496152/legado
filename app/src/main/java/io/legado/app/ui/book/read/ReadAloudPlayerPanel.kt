@@ -160,7 +160,8 @@ import io.legado.app.service.BaseReadAloudService
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composeActionShape
 import io.legado.app.lib.theme.composePanelShape
-import io.legado.app.ui.book.read.config.ReadAloudConfigDialog
+import io.legado.app.help.readaloud.TtsUxTrace
+import io.legado.app.ui.book.read.config.CastSceneActivity
 import io.legado.app.ui.book.read.config.ReaderSheetStyle
 import io.legado.app.ui.book.read.config.SpeechVoiceRoutePickerDialog
 import io.legado.app.ui.book.read.config.routeMatchesGroup
@@ -1042,8 +1043,16 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
         return super.dispatchTouchEvent(ev)
     }
 
+    /**
+     * 面板顶部齿轮 = 「听书设置」入口（AD-01/AD-05 入口收敛）：
+     * 播放面板不再直接叠「朗读设置」对话框（两处配置是用户"不知道从哪开始"的根源），
+     * 统一跳 [CastSceneActivity]；原 4 组工程设置仍可在其「更多设置 → 朗读高级设置」1 次点击内到达。
+     */
     private fun openReadAloudSetting() {
-        (context as? AppCompatActivity)?.showDialogFragment(ReadAloudConfigDialog())
+        TtsUxTrace.action("player_panel_settings", "cast_scene")
+        context.startActivity<CastSceneActivity> {
+            putExtra(CastSceneActivity.EXTRA_FROM, CastSceneActivity.FROM_READ_DIALOG)
+        }
     }
 
     private fun setTimer(minute: Int) {

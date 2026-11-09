@@ -112,9 +112,16 @@ internal object BuiltinTtsUiSupport {
     /** 管理页副标题（纯函数可单测）：一眼说明这套引擎的定位 */
     fun engineSubtitle(): String = "离线 · 断网可用 · 多角色逐段换声"
 
-    /** 档位标题（纯函数可单测）：fast/clone 两档的产品化叫法 */
-    fun profileTitle(profileId: String): String =
-        if (profileId == "fast") "极速单声档" else "高质量克隆档"
+    /**
+     * 档位标题兜底（纯函数可单测）：优先用模型档案里的 title；
+     * 档案缺失时才按 id 映射，四档叫法必须各不相同（多音色两档曾被统一显示成「高质量克隆档」）。
+     */
+    fun profileTitle(profileId: String): String = when (profileId) {
+        "fast" -> "极速单声档"
+        "multi" -> "多音色快速档"
+        "hq" -> "多音色高质量档"
+        else -> "高质量克隆档"
+    }
 
     /** 档位状态短标签（纯函数可单测）：给状态胶囊用，不堆 Hz/体积等技术细节 */
     fun profileStateText(state: BuiltinEngineState): String = when (state) {
