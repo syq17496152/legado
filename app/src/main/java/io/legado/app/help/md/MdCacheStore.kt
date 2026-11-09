@@ -66,7 +66,13 @@ internal class MdCacheStore(
             if (total <= maxBytes) return removed
             val size = file.length()
             val key = file.name.removeSuffix(Suffix)
-            if (delete(key) >= 0 && !file.exists()) {
+            delete(key)
+            // 兜底直删：Windows 上目标被短暂占用时 AtomicTextFileStore.delete() 会抛异常并被
+            // runCatching 吞掉，file 仍在磁盘上；只看返回值会把"没删掉"算成"已回收"，
+            // 于是 total 永远降不到阈值以下（真机/CI 铁证 2026-11-09：maxBytes=0 只回收了 2/3）。
+            // 以"文件是否真的消失"作为唯一判据，保证「超限必回收」契约不被静默破坏。
+            val gone = !file.exists() || runCatching { file.delete() }.getOrDefault(false)
+            if (gone) {
                 total -= size
                 removed++
             }

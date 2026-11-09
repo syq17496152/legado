@@ -65,11 +65,14 @@ import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinVoiceExporter
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
 import io.legado.app.help.tts.builtin.BuiltinVoicePools
+import io.legado.app.help.tts.builtin.BuiltinVoiceRouting
 import io.legado.app.help.tts.builtin.ClonettsVoiceImporter
 import io.legado.app.help.tts.builtin.ReferenceAudioProcessor
 import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
 import io.legado.app.help.tts.builtin.VoiceAutoTagger
+import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.character.BookCharacterEditActivity
 import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.theme.LegadoTheme
@@ -365,8 +368,24 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     pageState.value = pageState.value.copy(message = "已删除模型")
                 }
                 is PageAction.ActivateProfile -> {
+                    val previousId = BuiltinTtsRuntime.preferredProfileId()
+                    val stopReading = BuiltinVoiceRouting.mustStopReadingAfterProfileSwitch(
+                        previousProfileId = previousId,
+                        nextProfileId = action.profileId,
+                        isReading = BaseReadAloudService.isRun
+                    )
                     BuiltinTtsRuntime.setActiveProfile(action.profileId)
-                    pageState.value = pageState.value.copy(message = "已切换档位")
+                    pageState.value = pageState.value.copy(
+                        // 切档后旧档音色名对新引擎无效（真机铁证 2026-11-09：朗读仍用 multi 的
+                        // 「艾舍尔 1/3」送进 hq 引擎，静默回落成别的音色）。
+                        // 必须停下朗读，让用户重开一次走新档绑定，避免"切了档声音没变/变了个人"。
+                        message = if (stopReading) {
+                            ReadAloud.stop(this@BuiltinTtsActivity)
+                            BuiltinTtsUiSupport.profileSwitchNotice(stoppedReading = true)
+                        } else {
+                            BuiltinTtsUiSupport.profileSwitchNotice(stoppedReading = false)
+                        }
+                    )
                 }
                 PageAction.ActivateEngine -> pageState.value = pageState.value.copy(message = activateAsSystemEngine())
                 PageAction.SelfCheck -> runSelfCheck()

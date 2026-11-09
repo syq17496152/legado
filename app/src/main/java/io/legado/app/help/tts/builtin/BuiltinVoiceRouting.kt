@@ -34,6 +34,23 @@ object BuiltinVoiceRouting {
     }
 
     /**
+     * 切档后是否需要停下正在朗读的服务。
+     *
+     * 档位 id 变化即意味着已落库的 toneID（音色名，如 `multi-s1|艾舍尔 1`）对新档引擎无效：
+     * 多音色档只认 `profileId == 当前档` 的 sid 音色，跨档音色名会被引擎静默回落成默认音
+     * （真机铁证 2026-11-09：切到 hq 后朗读仍送 multi 音色名，声音与绑定不符）。
+     * 停一次并让用户重开，比"静默换声"可解释。
+     */
+    fun mustStopReadingAfterProfileSwitch(
+        previousProfileId: String,
+        nextProfileId: String,
+        isReading: Boolean
+    ): Boolean = isReading &&
+            previousProfileId.isNotBlank() &&
+            nextProfileId.isNotBlank() &&
+            previousProfileId != nextProfileId
+
+    /**
      * 合成缓存分键口径：
      * 克隆档按绑定键（Voice.name）分键；多说话人档按 `sid` 分键（否则换声会命中上一个音色的缓存）；
      * 单声档固定 `single`（避免同一段文字因音色差异产生多份音频）。

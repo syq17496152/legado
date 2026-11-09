@@ -141,6 +141,15 @@ internal object BuiltinTtsUiSupport {
     /** 首页就绪胶囊（纯函数可单测）：语音包齐备与否一眼可见 */
     fun readyPill(ready: Boolean): String = if (ready) "离线就绪" else "语音包未就绪"
 
+    /**
+     * 切档结果提示（纯函数可单测）。
+     *
+     * 切档时若正在朗读，必须显式告知「已停止」：旧档音色名对新档引擎无效（真机铁证 2026-11-09），
+     * 静默切换会让用户听到「没变化 / 换了个人」却不知原因。
+     */
+    fun profileSwitchNotice(stoppedReading: Boolean): String =
+        if (stoppedReading) "已切换档位，朗读已停止（请重新开始以使用新档音色）" else "已切换档位"
+
     /** NER 模型状态胶囊（AD-16，纯函数可单测）：就绪/未安装 */
     fun nerModelStatusText(ready: Boolean): String = if (ready) "已就绪" else "未安装"
 

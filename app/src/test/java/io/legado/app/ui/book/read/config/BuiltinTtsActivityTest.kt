@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -307,6 +308,23 @@ class BuiltinTtsActivityTest {
     fun `就绪胶囊两态文案`() {
         assertEquals("离线就绪", BuiltinTtsUiSupport.readyPill(true))
         assertEquals("语音包未就绪", BuiltinTtsUiSupport.readyPill(false))
+    }
+
+    /**
+     * 切档提示（真机铁证 2026-11-09）：切档时若正在朗读，旧档音色名对新档引擎无效，
+     * 必须停朗读并在提示里说清「已停止」，否则用户会以为切档没生效或声音凭空换人。
+     */
+    @Test
+    fun `切档提示区分是否停止朗读`() {
+        assertEquals(
+            "已切换档位，朗读已停止（请重新开始以使用新档音色）",
+            BuiltinTtsUiSupport.profileSwitchNotice(stoppedReading = true)
+        )
+        assertEquals("已切换档位", BuiltinTtsUiSupport.profileSwitchNotice(stoppedReading = false))
+        // 只有真正停过朗读才允许出现「已停止」，避免未朗读时误报打扰
+        assertFalse(
+            BuiltinTtsUiSupport.profileSwitchNotice(stoppedReading = false).contains("已停止")
+        )
     }
 
     @Test
