@@ -34,6 +34,16 @@ object BuiltinVoiceRouting {
     }
 
     /**
+     * 音色解析不到时是否需要打「音色不可用」诊断。
+     *
+     * 单声档（vits/matcha）本就不吃音色（[pick] 恒返回 null），此时每段都打这条 INFO
+     * 会把真正的跨档错配/参考音频缺失信号淹没（MEmu 实测 2026-11-09：fast 档逐段刷屏）。
+     * 只有「音色真正参与合成」的档位（多说话人 / 克隆）解析失败才值得告警。
+     */
+    fun shouldWarnUnresolvedVoice(profile: BuiltinModelProfile, voiceName: String): Boolean =
+        voiceName.isNotBlank() && (profile.multiSpeaker || profile.requiresReference)
+
+    /**
      * 切档后是否需要停下正在朗读的服务。
      *
      * 档位 id 变化即意味着已落库的 toneID（音色名，如 `multi-s1|艾舍尔 1`）对新档引擎无效：

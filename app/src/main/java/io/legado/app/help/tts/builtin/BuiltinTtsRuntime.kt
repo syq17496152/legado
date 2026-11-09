@@ -317,7 +317,7 @@ object BuiltinTtsRuntime {
             return null
         }
         val voice = resolveVoice(profile, voiceName)
-        if (voice == null && voiceName.isNotBlank()) {
+        if (voice == null && BuiltinVoiceRouting.shouldWarnUnresolvedVoice(profile, voiceName)) {
             // 诊断（保留）：请求了音色却解析不到 ⇒ 引擎只能落默认 speaker。
             // 这是"所有音色听起来一样"的唯一可查信号（跨档点音色 / 参考音频缺失时必现）。
             AppLog.putDebugWithTag(

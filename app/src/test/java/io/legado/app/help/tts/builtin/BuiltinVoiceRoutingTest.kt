@@ -151,6 +151,25 @@ class BuiltinVoiceRoutingTest {
         )
     }
 
+    /**
+     * 诊断噪声门禁（MEmu 实测 2026-11-09）：单声档不吃音色，逐段打「音色不可用」会把
+     * 真正的跨档错配/参考音频缺失信号淹没，因此只在音色参与合成的档位才告警。
+     */
+    @Test
+    fun `单声档不再告警音色不可用，多声与克隆档才告警`() {
+        assertFalse(
+            BuiltinVoiceRouting.shouldWarnUnresolvedVoice(singleProfile(), "b6_m_teen|内置·男·少年")
+        )
+        assertTrue(
+            BuiltinVoiceRouting.shouldWarnUnresolvedVoice(vitsMulti(), "hq-s9|别人的音色")
+        )
+        assertTrue(
+            BuiltinVoiceRouting.shouldWarnUnresolvedVoice(cloneProfile(), "clone-x|已删除的音色")
+        )
+        // 没有请求音色（旁白/默认音）不告警
+        assertFalse(BuiltinVoiceRouting.shouldWarnUnresolvedVoice(vitsMulti(), ""))
+    }
+
     @Test
     fun `多说话人缓存键按 sid 分键，换声不会命中旧缓存`() {
         val s1 = BuiltinVoice(
