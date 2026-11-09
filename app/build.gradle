@@ -75,6 +75,16 @@ def buildVersionCode = Math.max(
         10000 + releaseTime.replace(".", "").toInteger(),
         10000 + gitCommits
 )
+// 版本号显式覆盖（测试/应急：设备已装更高 versionCode 但构建机时钟回拨时，覆盖安装会报
+// INSTALL_FAILED_VERSION_DOWNGRADE）。用法：-PversionCodeOverride=26130000
+def versionCodeOverrideRaw = project.findProperty("versionCodeOverride")
+def versionCodeOverride = (versionCodeOverrideRaw != null &&
+        versionCodeOverrideRaw.toString().isInteger())
+        ? versionCodeOverrideRaw.toString().toInteger()
+        : null
+// 仅测试/排障：-PdebugNoMinify=true 跳过测试包 R8（构建更快、日志不混淆）。
+// 产物不得交付；默认仍走 optimize 裁剪，交付质量不变。
+def debugNoMinify = project.findProperty("debugNoMinify")?.toString()?.toBoolean() ?: false
 
 // cronet-dynamic-download（2026-09-15）：构建期下载 Cronet 官方 jar/so + ASM 改写注入自定义加载器
 apply from: 'download.gradle'       // downloadCronet 任务：7 jar + 5 ABI so + assets/cronet.json MD5 清单
@@ -124,7 +134,7 @@ android {
         println "=================================="
         minSdk 23
         targetSdk 36
-        versionCode buildVersionCode
+        versionCode versionCodeOverride ?: buildVersionCode
         versionName version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         project.ext.set("archivesBaseName", name + "_" + version)
@@ -225,8 +235,8 @@ android {
             // 调试日志铁律不受影响：BUILD_DEBUG=true 分支与 AppLog 保留（见 proguard-debug-rules.pro）。
             debuggable (project.findProperty("testDebuggable")?.toString()?.toBoolean() ?: false)
             buildConfigField "boolean", "BUILD_DEBUG", "true"
-            minifyEnabled true
-            shrinkResources = true
+            minifyEnabled !debugNoMinify
+            shrinkResources = !debugNoMinify
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-debug-rules.pro'
         }
     }

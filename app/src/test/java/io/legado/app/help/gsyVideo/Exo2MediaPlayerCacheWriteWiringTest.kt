@@ -1,6 +1,7 @@
 package io.legado.app.help.gsyVideo
 
 import io.legado.app.help.exoplayer.LONG_VIDEO_CACHE_THRESHOLD_MS
+import io.legado.app.help.exoplayer.LivePlaybackPolicy
 import io.legado.app.help.exoplayer.shouldWriteCache
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -39,6 +40,15 @@ class Exo2MediaPlayerCacheWriteWiringTest {
         assertTrue(shouldWriteCache(LONG_VIDEO_CACHE_THRESHOLD_MS - 1))
         // 时长未知（prepare 前/直播）：按短视频处理，宁多写不漏写
         assertEquals(true, shouldWriteCache(0L))
+    }
+
+    @Test
+    fun `直播优先于时长_一律不写缓存`() {
+        // 审计 B3：直播 duration<=0 不能当短视频写盘
+        assertFalse(LivePlaybackPolicy.shouldWriteCache(isLive = true, backCacheSec = 120, durationMs = 0L))
+        assertFalse(LivePlaybackPolicy.shouldWriteCache(isLive = true, backCacheSec = 0, durationMs = 5_000L))
+        // 非直播长视频启用回看窗口时写（受控写盘例外）
+        assertTrue(LivePlaybackPolicy.shouldWriteCache(isLive = false, backCacheSec = 120, durationMs = 40 * 60 * 1000L))
     }
 
     @Test

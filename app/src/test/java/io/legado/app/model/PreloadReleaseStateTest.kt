@@ -59,4 +59,13 @@ class PreloadReleaseStateTest {
         NextEpisodeResolver.clear()
         assertEquals(0, NextEpisodeResolver.size())
     }
+
+    @Test
+    fun `预取与回看默认值契约`() {
+        assertEquals(
+            true,
+            io.legado.app.model.VideoPlay.DEFAULT_SEGMENT_PREFETCH_ENABLED,
+        )
+        assertEquals(120, io.legado.app.model.VideoPlay.DEFAULT_LONG_VIDEO_BACK_CACHE_SEC)
+    }
 }

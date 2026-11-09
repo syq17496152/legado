@@ -38,7 +38,8 @@ import java.util.concurrent.ConcurrentHashMap
  *   videoPreloadCount（预填记录 LRU 容量）、playerFirstFramePreload（预加载总开关）。
  * - 上游 client 复用 videoStreamClient（强制 HTTP/1.1，与嗅探链路一致，规避 HTTP/2 协议错误）。
  *
- * 已知上限：预填 .m3u8 时仅预填清单本体首段（分片级预填属 Phase 4 M3u8Parser 消费范畴）。
+ * 已知上限：HLS 已改为「解析清单后预取真实分片 3 个」（video-buffer-prefetch-v2）；
+ * 分行级（BYTERANGE/LL-HLS/直播）仍不预取。
  */
 object VideoPrefiller {
 
@@ -101,6 +102,15 @@ object VideoPrefiller {
      * 全局 cronetDataFactory/okhttpDataFactory 的默认头不受影响，当前播放分片请求头零污染。
      */
     private suspend fun prefillSync(finalUrl: String, headers: Map<String, String>): Int {
+        // video-buffer-prefetch-v2 §1.6：HLS 清单不再只预填 97B 清单（且清单已被
+        // ManifestBypass 绕过缓存 ⇒ 永远读不到）；改为解析清单后预取真实分片 3 个。
+        if (isManifestUrl(finalUrl) || M3u8UrlShape.matches(finalUrl)) {
+            val bytes = VideoSegmentPrefetcher.prefillSegments(finalUrl, headers, count = 3)
+            AppLog.put(
+                "VideoPrefiller: hls prefill segs, bytes=$bytes, urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}"
+            )
+            return bytes
+        }
         val prefillBytes = getPrefillBytes()
         // 独立 DataSource 工厂实例（per-prefill 局部），per-request 头注入不触碰全局工厂（F-04/Z2）
         val localUpstreamFactory = OkHttpDataSource.Factory(videoStreamClient)
@@ -196,6 +206,8 @@ object VideoPrefiller {
         prefillJobs.values.forEach { it.cancel() }
         prefillJobs.clear()
         prefillRecords.clear()
+        // 当前集分片预取同样必须随会话结束清理（video-buffer-prefetch-v2）
+        VideoSegmentPrefetcher.clearAll()
         AppLog.putDebug("VideoPrefiller: prefill records cleared")
     }
 }

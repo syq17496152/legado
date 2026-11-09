@@ -17,6 +17,16 @@ internal fun shouldWriteCache(durationMs: Long): Boolean =
     durationMs <= 0L || durationMs < LONG_VIDEO_CACHE_THRESHOLD_MS
 
 /**
+ * video-buffer-prefetch-v2：带直播/回看维度的写缓存判据。
+ *
+ * - 直播：一律不写（审计 B3：`duration<=0` 会被误当短视频写盘）；
+ * - 长视频启用回看窗口（backCacheSec>0）：写（用于回拖）；
+ * - 其余沿用基线（1 参重载）。
+ */
+internal fun shouldWriteCache(isLive: Boolean, backCacheSec: Int, durationMs: Long): Boolean =
+    LivePlaybackPolicy.shouldWriteCache(isLive, backCacheSec, durationMs)
+
+/**
  * tasks §13.3：缓存写决策日志的打点判据（纯函数，便于单测）。
  *
  * 为什么不是简单限频：真机取证（2026-11-08 04:12）表明 `createDataSink()` 并不按请求调用
@@ -47,14 +57,15 @@ internal fun shouldLogCacheWriteDecision(
 internal class PolicySwitchDataSink(
     private val cacheSinkFactory: DataSink.Factory,
     private val durationProvider: () -> Long,
-    private val onDecision: (write: Boolean, durationMs: Long) -> Unit = { _, _ -> }
+    private val onDecision: (write: Boolean, durationMs: Long) -> Unit = { _, _ -> },
+    private val writeDecider: (durationMs: Long) -> Boolean = ::shouldWriteCache,
 ) : DataSink {
 
     private var delegate: DataSink? = null
 
     override fun open(dataSpec: DataSpec) {
         val durationMs = durationProvider()
-        val write = shouldWriteCache(durationMs)
+        val write = writeDecider(durationMs)
         onDecision(write, durationMs)
         val sink = if (write) cacheSinkFactory.createDataSink() else null
         delegate = sink

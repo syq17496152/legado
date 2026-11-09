@@ -2838,6 +2838,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
         }
 
+        observeEvent<String>(EventBus.VIDEO_PLAY_TIP) { tip ->
+            // video-buffer-prefetch-v2：解码过重等非阻断提示（浮层，不弹错误框）
+            kotlin.runCatching {
+                currentFragment?.playerView?.currentPlayer?.showOverlayTip(tip, 3_000L)
+            }
+        }
+
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
             // 失败必须收起加载反馈，避免遮罩残留（spec Drawbacks 兜底闭环之一）
             binding.switchLoading.gone()

@@ -8,6 +8,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
@@ -32,7 +33,18 @@ import io.legado.app.help.exoplayer.CencKeyStore
 import io.legado.app.help.exoplayer.CencLocalFallback
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.exoplayer.HlsKeyDataSourceFactory
+import io.legado.app.help.exoplayer.BufferTierPolicy
+import io.legado.app.help.exoplayer.CacheSizePolicy
+import io.legado.app.help.exoplayer.DecodeHintPolicy
+import io.legado.app.help.exoplayer.LONG_VIDEO_CACHE_THRESHOLD_MS
+import io.legado.app.help.exoplayer.LivePlaybackPolicy
+import io.legado.app.help.exoplayer.ManifestObserver
+import io.legado.app.help.exoplayer.NetworkGate
 import io.legado.app.help.exoplayer.PlayerInstancePool
+import io.legado.app.help.exoplayer.PrebuiltPlayerHolder
+import io.legado.app.help.exoplayer.SegmentPrefetchPolicy
+import io.legado.app.help.exoplayer.ThroughputEstimator
+import io.legado.app.help.exoplayer.VideoSegmentPrefetcher
 import io.legado.app.help.exoplayer.shouldWriteCache
 import io.legado.app.help.player.PlaybackErrorAction
 import io.legado.app.help.player.PlaybackErrorPolicy
@@ -276,6 +288,54 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     @Volatile
     private var knownDurationMs = 0L
+
+    /** video-buffer-prefetch-v2：当前视频码率（bps，READY 时从 Format 读取） */
+    private var knownBitrateBps = 0L
+
+    /** 当前预取会话号（每次 prepare 递增并同步给 VideoSegmentPrefetcher） */
+    private var prefetchSessionId = 0L
+
+    /** 近 30s 的 rebuffer 时间戳（档位裁决用） */
+    private val recentRebufferAt = ArrayDeque<Long>()
+
+    /** 上次档位切换时间 */
+    private var lastTierSwitchAt = 0L
+
+    /** 解码提示采样 */
+    private var decodeSampleStartAt = 0L
+    private var droppedSinceDecodeSample = 0
+    private var decodeHinted = false
+
+    /** 直播 offset 归因日志只打一次 */
+    private var liveLogged = false
+
+    /**
+     * video-buffer-prefetch-v2 §1.19：per-load 实测吞吐 EMA（bps）。
+     *
+     * 带宽计的 bitrateEstimate 在高带宽下更新滞后（真机/模拟器实测长期停在初始值），
+     * 故用 onLoadCompleted 的真实吞吐补位，取值见 [effectiveBandwidthBps]。
+     */
+    private var observedThroughputBps = 0L
+
+    /** 最近一次有效吞吐样本时间（elapsedRealtime，过期后不采信） */
+    private var observedThroughputAt = 0L
+
+    /** 回看清理节流 */
+    private var lastBackCacheTrimAt = 0L
+
+    /** 预取补水定时器（5s；READY 期间运行） */
+    private val prefetchTickHandler = Handler(Looper.getMainLooper())
+    private val prefetchTickRunnable = object : Runnable {
+        override fun run() {
+            if (isReleased || isScopeCancelled.get()) return
+            val player = mInternalPlayer ?: return
+            if (player.playbackState != Player.STATE_READY) return
+            updatePrefetchSnapshot()
+            VideoSegmentPrefetcher.topUp(force = false)
+            maybeTrimBackCache()
+            prefetchTickHandler.postDelayed(this, 5_000L)
+        }
+    }
 
     /**
      * R4-T8: 构建降级链类型列表
@@ -577,6 +637,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         }
         // T2.3: 清除 BUFFERING 超时回调，避免 onDestroy 后误触发 tryNextFallback 操作已 release 的 mInternalPlayer
         bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
+        // video-buffer-prefetch-v2：停止预取补水与在途任务
+        prefetchTickHandler.removeCallbacks(prefetchTickRunnable)
+        VideoSegmentPrefetcher.stop()
         AppLog.put("ExoPlayer scope cancelled, isReleased=true, isScopeCancelled=true, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
     }
 
@@ -593,6 +656,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // **不得在此 lambda 内读 player**（sink 在加载线程创建 ⇒ 跨线程访问播放器会抛 1004），
         // 只读应用线程写入的时长快照。
         ExoPlayerHelper.currentDurationProvider = { knownDurationMs }
+        // video-buffer-prefetch-v2：写缓存 gate 快照（直播判定在 READY 后更新）
+        ExoPlayerHelper.currentIsLiveSnapshot = false
+        ExoPlayerHelper.currentBackCacheSecSnapshot = VideoPlay.longVideoBackCacheSec
     }
 
     /**
@@ -609,6 +675,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // tasks §13.1：解绑缓存指标出口，避免写入已释放实例
             ExoPlayerHelper.cacheMetricsSink = null
             ExoPlayerHelper.currentDurationProvider = null
+            ExoPlayerHelper.currentIsLiveSnapshot = false
+            ExoPlayerHelper.currentBackCacheSecSnapshot = 0
+            prefetchTickHandler.removeCallbacks(prefetchTickRunnable)
         }.onFailure {
             AppLog.put("detachFromPlayer failed", it)
         }
@@ -715,6 +784,26 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             playbackStartTime = System.currentTimeMillis()
             // tasks §13.3/§13.4：新会话未知时长先归零（按短视频处理，宁多写不漏写）
             knownDurationMs = 0L
+            // video-buffer-prefetch-v2：新会话 → 重置预取会话/统计，并同步本次下发的倍速
+            ExoPlayerHelper.playbackSpeedSnapshot = mSpeedPlaybackParameters?.speed ?: 1f
+            prefetchSessionId = ManifestObserver.newSession()
+            VideoSegmentPrefetcher.beginSession(prefetchSessionId)
+            knownBitrateBps = 0L
+            recentRebufferAt.clear()
+            // §1.19：新会话沿用上次实测吞吐作为先验（换集不改变网络能力），
+            // 首个新样本到达后由 EMA 纠正；避免连播时退回带宽计初始值导致窗口/预算变保守。
+            observedThroughputBps = ExoPlayerHelper.lastObservedThroughputBps
+            observedThroughputAt = if (observedThroughputBps > 0L) {
+                android.os.SystemClock.elapsedRealtime()
+            } else {
+                0L
+            }
+            lastTierSwitchAt = 0L
+            decodeSampleStartAt = 0L
+            droppedSinceDecodeSample = 0
+            decodeHinted = false
+            liveLogged = false
+            lastBackCacheTrimAt = 0L
             AppLog.put("ExoPlayer state reset: currentSniffResult=UNKNOWN, fallbackTypesSize=${fallbackTypes.size}, currentFallbackIndex=0")
             // T5.1: 三件套改为实例池全局共享（池实例构建参数兼容的前提）
             // - V-P0-1 修正：TrackSelector 每实例独立（共享单例并发二次 init 崩溃 ×5 FATAL），
@@ -1468,13 +1557,20 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             val dur = player?.duration ?: 0L
             // tasks §13.3/§13.4：应用线程写时长快照（直播/未知时 duration 为 C.TIME_UNSET 或 0，不覆盖）
             if (dur > 0L) knownDurationMs = dur
+            if (state == Player.STATE_READY) updateKnownBitrate(player)
             // tasks §13.4：READY 后输出一次分流决策（确定性取证点——写 sink 是否被创建取决于
             // 是否真有上游读取，命中缓存/预填时不会创建，故不能只依赖 sink 侧日志）
+            // video-buffer-prefetch-v2：加入直播/回看维度（isLive 优先于 duration）
             if (state == Player.STATE_READY && dur > 0L) {
-                val write = shouldWriteCache(dur)
+                val live = player?.let { isLivePlayback(it) } ?: false
+                val write = shouldWriteCache(live, VideoPlay.longVideoBackCacheSec, dur)
+                val reason = when {
+                    write -> ""
+                    live -> "(reason=live)"
+                    else -> "(reason=long_video)"
+                }
                 AppLog.put(
-                    "[BufferSpeed] cache_policy durMs=$dur write=${if (write) "on" else "off"}" +
-                        (if (write) "" else "(reason=long_video)")
+                    "[BufferSpeed] cache_policy durMs=$dur write=${if (write) "on" else "off"}$reason"
                 )
             }
             val buf = (player?.bufferedPosition ?: 0L) - pos
@@ -1530,19 +1626,39 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 val timeoutMs = if (isFirstPlay) 25_000L else 12_000L
                 bufferingTimeoutHandler.postDelayed(bufferingTimeoutRunnable, timeoutMs)
                 // §13.8：只有起播成功后的缓冲才算卡顿（首缓冲不计）
-                if (VideoPlay.hasPlayedSuccessfully) rebufferTracker.onBufferingStart()
+                if (VideoPlay.hasPlayedSuccessfully) {
+                    rebufferTracker.onBufferingStart()
+                    // video-buffer-prefetch-v2：近 30s rebuffer 信号（档位裁决用）
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    recentRebufferAt.addLast(now)
+                    while (recentRebufferAt.isNotEmpty() && now - recentRebufferAt.first() > 30_000L) {
+                        recentRebufferAt.removeFirst()
+                    }
+                }
+                updatePrefetchSnapshot()
             }
             Player.STATE_READY, Player.STATE_ENDED -> {
                 // 离开 BUFFERING：清除超时回调，避免误降级
                 // - READY：播放成功，无需降级
                 // - ENDED：播放结束，无需降级
                 bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
+                if (state == Player.STATE_READY) {
+                    // video-buffer-prefetch-v2：起播/恢复后启动补水、预建实例、回看清理、解码提示
+                    updatePrefetchSnapshot()
+                    VideoSegmentPrefetcher.onReady()
+                    schedulePrefetchTick()
+                    PrebuiltPlayerHolder.warmUp()
+                    maybeTrimBackCache()
+                    maybeHintDecode()
+                }
                 // §13.8：上报稳态卡顿时长（seek 引发的缓冲由 tracker 过滤）
                 rebufferTracker.onBufferingEnd()?.let { VideoPlay.onRebuffer(it) }
             }
             Player.STATE_IDLE -> {
                 // IDLE：播放失败（onPlayerError 会跟进），避免重复降级；同时复位计时
                 bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
+                prefetchTickHandler.removeCallbacks(prefetchTickRunnable)
+                VideoSegmentPrefetcher.stop()
                 rebufferTracker.reset()
             }
         }
@@ -1560,7 +1676,24 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         if (isScopeCancelled.get()) return
         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
             rebufferTracker.markSeek()
+            // video-buffer-prefetch-v2：seek 后取消在途预取并按新位置重算（1s 节流）
+            updatePrefetchSnapshot()
+            VideoSegmentPrefetcher.onSeek()
+            maybeTrimBackCache()
         }
+    }
+
+    /**
+     * video-buffer-prefetch-v2：运行中变速 ⇒ 更新倍速快照并重算预取窗口。
+     */
+    override fun onPlaybackParametersChanged(
+        eventTime: AnalyticsListener.EventTime,
+        playbackParameters: PlaybackParameters
+    ) {
+        super.onPlaybackParametersChanged(eventTime, playbackParameters)
+        if (isScopeCancelled.get()) return
+        ExoPlayerHelper.playbackSpeedSnapshot = playbackParameters.speed
+        updatePrefetchSnapshot()
     }
 
     /**
@@ -1600,6 +1733,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         elapsedMs: Long
     ) {
         super.onDroppedVideoFrames(eventTime, droppedFrames, elapsedMs)
+        // video-buffer-prefetch-v2：解码提示采样（每会话最多一次）
+        droppedSinceDecodeSample += droppedFrames
+        if (mInternalPlayer?.playbackState == Player.STATE_READY) maybeHintDecode()
         if (droppedFrames > 3) {
             AppLog.put(
                 "[BufferSpeed] onDroppedVideoFrames: dropped=$droppedFrames, elapsed=${elapsedMs}ms, " +
@@ -1608,12 +1744,6 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         }
     }
 
-    /**
-     * P2: 加载开始时间记录（对齐 tasks.md §8.2，用于计算 TTFB）
-     * - 记录 onLoadStarted 时间戳，onLoadCompleted 时计算 TTFB
-     */
-    private var loadStartTimeMs: Long = 0L
-
     /** tasks §13.1：累计从缓存读取的字节（SimpleCache 命中量） */
     private var cachedBytesTotal: Long = 0L
 
@@ -1621,36 +1751,15 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private var networkBytesTotal: Long = 0L
 
     /**
-     * FR-5: TTFB 降档统计字段
+     * video-buffer-prefetch-v2 AD-05：加载统计按 per-load 记录，不再把「整段加载耗时」当 TTFB。
      *
-     * - ttfbSlowCount: 连续慢 TTFB（>1000ms）计数，达到 3 次触发降档
-     * - ttfbFastCount: 连续快 TTFB（<500ms）计数，达到 3 次恢复自动档位
-     * - lastSwitchTime: 上次降档时间戳，最小切换间隔 30 秒（防抖动）
-     *
-     * 注意：只统计 DATA_TYPE_MEDIA（视频分片加载），不统计 manifest/密钥等
+     * 旧实现（连续 3 次加载耗时 >1s 就降 WEAK）在好网大分片下会误触发；
+     * 新判据见 [BufferTierPolicy]（带宽估计 + 需求带宽 + 近 30s rebuffer）。
      */
-    private var ttfbSlowCount = 0
-    private var ttfbFastCount = 0
-    private var lastSwitchTime = 0L
+    private var loadStatCount = 0
 
     /**
-     * P2: 加载开始埋点（对齐 tasks.md §8.2）
-     * - 记录加载开始时间，用于 onLoadCompleted 时计算 TTFB
-     */
-    override fun onLoadStarted(
-        eventTime: AnalyticsListener.EventTime,
-        loadEventInfo: LoadEventInfo,
-        mediaLoadData: MediaLoadData
-    ) {
-        super.onLoadStarted(eventTime, loadEventInfo, mediaLoadData)
-        loadStartTimeMs = System.currentTimeMillis()
-    }
-
-    /**
-     * P2: 加载完成埋点（对齐 tasks.md §8.2 + §8.5）
-     * - TTFB = onLoadCompleted 时间 - onLoadStarted 时间
-     * - 实际带宽 = loadEventInfo.bytesLoaded / TTFB
-     * - 告警阈值：TTFB > 500ms 输出 WARN
+     * P2: 加载完成埋点（per-load）
      */
     override fun onLoadCompleted(
         eventTime: AnalyticsListener.EventTime,
@@ -1658,61 +1767,244 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         mediaLoadData: MediaLoadData
     ) {
         super.onLoadCompleted(eventTime, loadEventInfo, mediaLoadData)
-        if (loadStartTimeMs > 0) {
-            val loadElapsed = System.currentTimeMillis() - loadStartTimeMs
-            val bytesLoaded = loadEventInfo.bytesLoaded
-            val dataType = mediaLoadData.dataType
-            val dataTypeName = when (dataType) {
-                C.DATA_TYPE_MEDIA -> "media"
-                C.DATA_TYPE_MANIFEST -> "manifest"
-                else -> "type$dataType"
+        val bytesLoaded = loadEventInfo.bytesLoaded
+        val dataType = mediaLoadData.dataType
+        val loadDurationMs = loadEventInfo.loadDurationMs
+        val dataTypeName = when (dataType) {
+            C.DATA_TYPE_MEDIA -> "media"
+            C.DATA_TYPE_MANIFEST -> "manifest"
+            else -> "type$dataType"
+        }
+        val estimate = ExoPlayerHelper.bandwidthMeter.bitrateEstimate
+        if (loadDurationMs > 500) {
+            AppLog.put(
+                "[BufferSpeed] onLoadCompleted SLOW: loadDurationMs=$loadDurationMs, " +
+                    "bytes=$bytesLoaded, dataType=$dataTypeName, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+        }
+        if (dataType == C.DATA_TYPE_MEDIA) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            // READY 时 currentTracks 可能尚未就绪（HLS 首片到达前）⇒ 用首个媒体加载的 trackFormat 补码率
+            if (knownBitrateBps <= 0L) {
+                val trackBitrate = mediaLoadData.trackFormat?.bitrate ?: 0
+                if (trackBitrate > 0) knownBitrateBps = trackBitrate.toLong()
             }
-            // TTFB > 500ms 输出 WARN（对齐 tasks.md §8.2）
-            if (loadElapsed > 500) {
+            while (recentRebufferAt.isNotEmpty() && now - recentRebufferAt.first() > 30_000L) {
+                recentRebufferAt.removeFirst()
+            }
+            // §1.19：per-load 实测吞吐 EMA（带宽计在高带宽下更新滞后，用它补位）
+            val sample = ThroughputEstimator.sampleBps(bytesLoaded, loadDurationMs)
+            if (sample > 0L) {
+                observedThroughputBps = ThroughputEstimator.update(observedThroughputBps, sample)
+                observedThroughputAt = now
+                // §1.19：跨会话保留，供下一次 prepare 的档位选择使用
+                ExoPlayerHelper.lastObservedThroughputBps = observedThroughputBps
+            }
+            val speed = runCatching {
+                mInternalPlayer?.playbackParameters?.speed ?: 1f
+            }.getOrDefault(1f)
+            val effectiveEstimate = effectiveBandwidthBps()
+            val decision = BufferTierPolicy.decide(
+                currentForceTier = ExoPlayerHelper.forceTier,
+                bandwidthEstimateBps = effectiveEstimate,
+                trackBitrateBps = knownBitrateBps,
+                speed = speed,
+                rebufferCount = recentRebufferAt.size,
+                msSinceLastSwitch = now - lastTierSwitchAt,
+            )
+            if (decision.reason != "none" && decision.forceTier != ExoPlayerHelper.forceTier) {
+                val from = ExoPlayerHelper.forceTier
+                ExoPlayerHelper.forceTier = decision.forceTier
+                lastTierSwitchAt = now
                 AppLog.put(
-                    "[BufferSpeed] onLoadCompleted SLOW: ttfb=${loadElapsed}ms, " +
-                        "bytes=$bytesLoaded, dataType=$dataTypeName, " +
-                        "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                    "[BufferSpeed] tier from=$from to=${decision.forceTier} reason=${decision.reason} " +
+                        "rebuffers=${recentRebufferAt.size} estimate=$effectiveEstimate " +
+                        "meter=$estimate observed=$observedThroughputBps " +
+                        "bitrate=$knownBitrateBps speed=$speed"
                 )
             }
-            // FR-5: 连续慢/快 TTFB 强制降档/恢复（只统计视频分片加载 DATA_TYPE_MEDIA）
-            if (dataType == C.DATA_TYPE_MEDIA) {
-                if (loadElapsed > 1000) {
-                    ttfbSlowCount++
-                    ttfbFastCount = 0
-                    if (ttfbSlowCount >= 3 && System.currentTimeMillis() - lastSwitchTime > 30_000) {
-                        val currentTier = ExoPlayerHelper.getCurrentBandwidthTier()
-                        val newTier = when (currentTier) {
-                            ExoPlayerHelper.BandwidthTier.GOOD -> ExoPlayerHelper.BandwidthTier.MEDIUM
-                            ExoPlayerHelper.BandwidthTier.MEDIUM -> ExoPlayerHelper.BandwidthTier.WEAK
-                            else -> null
-                        }
-                        if (newTier != null) {
-                            ExoPlayerHelper.forceTier = newTier
-                            lastSwitchTime = System.currentTimeMillis()
-                            AppLog.put(
-                                "FR-5: force downgrade to $newTier, ttfbSlowCount=$ttfbSlowCount, " +
-                                    "ttfb=${loadElapsed}ms, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
-                            )
-                        }
-                        ttfbSlowCount = 0
-                    }
-                } else if (loadElapsed < 500) {
-                    ttfbFastCount++
-                    if (ttfbFastCount >= 3 && ExoPlayerHelper.forceTier != null) {
-                        ExoPlayerHelper.forceTier = null
-                        AppLog.put(
-                            "FR-5: recover to auto tier, ttfbFastCount=$ttfbFastCount, " +
-                                "ttfb=${loadElapsed}ms, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
-                        )
-                        ttfbFastCount = 0
-                    }
-                    ttfbSlowCount = 0
+            loadStatCount++
+            if (loadStatCount <= 10 || loadDurationMs > 500) {
+                val throughput = if (loadDurationMs > 0L) {
+                    (bytesLoaded.toDouble() * 8000.0 / loadDurationMs).toLong()
+                } else {
+                    0L
                 }
+                AppLog.put(
+                    "[BufferSpeed] load_stat loadDurationMs=$loadDurationMs bytes=$bytesLoaded " +
+                        "throughputBps=$throughput estimate=$estimate " +
+                        "observedEma=$observedThroughputBps effective=$effectiveEstimate " +
+                        "bitrate=$knownBitrateBps"
+                )
             }
-            networkBytesTotal += bytesLoaded
-            loadStartTimeMs = 0L
         }
+        networkBytesTotal += bytesLoaded
+    }
+
+    // ===================== video-buffer-prefetch-v2 预取/回看/解码提示 =====================
+
+    /**
+     * 有效带宽（bps）：带宽计估计与 per-load 实测吞吐 EMA 取较大值。
+     *
+     * 实测样本超过 [ThroughputEstimator.STALE_MS] 未更新时回落到带宽计，
+     * 避免长时间暂停后用旧高速值继续放大预取预算。
+     */
+    private fun effectiveBandwidthBps(): Long {
+        val meterBps = ExoPlayerHelper.bandwidthMeter.bitrateEstimate
+        val age = if (observedThroughputAt > 0L) {
+            android.os.SystemClock.elapsedRealtime() - observedThroughputAt
+        } else {
+            Long.MAX_VALUE
+        }
+        return ThroughputEstimator.effective(meterBps, observedThroughputBps, age)
+    }
+
+    /** 从当前轨道读取视频码率（READY 时调用） */
+    private fun updateKnownBitrate(player: ExoPlayer?) {
+        player ?: return
+        val format = player.currentTracks.groups
+            .firstOrNull { it.type == C.TRACK_TYPE_VIDEO }
+            ?.let { group -> (0 until group.length).firstNotNullOfOrNull { group.getTrackFormat(it) } }
+            ?: return
+        if (format.bitrate > 0) knownBitrateBps = format.bitrate.toLong()
+    }
+
+    /** 直播判定：播放器动态时间轴优先（`isCurrentMediaItemLive` 为权威） */
+    private fun isLivePlayback(player: ExoPlayer): Boolean {
+        val byFlag = runCatching { player.isCurrentMediaItemLive }.getOrDefault(false)
+        val dynamic = runCatching {
+            val timeline = player.currentTimeline
+            if (timeline.isEmpty) {
+                false
+            } else {
+                val w = Timeline.Window()
+                timeline.getWindow(0, w)
+                w.isDynamic
+            }
+        }.getOrDefault(false)
+        return LivePlaybackPolicy.isLive(byFlag, dynamic)
+    }
+
+    /** 把应用线程快照写给预取器（预取线程只读，不触碰 Player） */
+    private fun updatePrefetchSnapshot() {
+        val player = mInternalPlayer ?: return
+        val live = isLivePlayback(player)
+        val speed = runCatching { player.playbackParameters.speed }.getOrDefault(1f)
+        if (live && !liveLogged) {
+            liveLogged = true
+            val plan = LivePlaybackPolicy.offsetPlan(0L)
+            AppLog.put(
+                "[BufferSpeed] live detected, offsetOverride=${plan.overrideMs} " +
+                    "expectedMinMs=${plan.expectedMinMs} (use Media3 default)"
+            )
+        }
+        ExoPlayerHelper.currentIsLiveSnapshot = live
+        ExoPlayerHelper.currentBackCacheSecSnapshot = if (live) 0 else VideoPlay.longVideoBackCacheSec
+        val cacheSizeBytes = CacheSizePolicy.effectiveMb().toLong() * 1024L * 1024L
+        VideoSegmentPrefetcher.updateSnapshot(
+            VideoSegmentPrefetcher.Snapshot(
+                sessionId = prefetchSessionId,
+                positionMs = runCatching { player.currentPosition }.getOrDefault(0L),
+                bufferedPositionMs = runCatching { player.bufferedPosition }.getOrDefault(0L),
+                durationMs = knownDurationMs,
+                speed = speed,
+                isLive = live,
+                buffering = player.playbackState == Player.STATE_BUFFERING,
+                paused = !player.playWhenReady,
+                foreground = true,
+                // 计量网络门禁：用户显式开启「移动网络也预解析」时放行
+                isMetered = NetworkGate.isMeteredNow() && !VideoPlay.prefetchOnMobile,
+                videoCacheEnabled = VideoPlay.videoCache,
+                prefetchEnabled = VideoPlay.segmentPrefetchEnabled,
+                cacheSizeBytes = cacheSizeBytes,
+                bitrateBps = knownBitrateBps,
+                bandwidthEstimateBps = effectiveBandwidthBps(),
+                hasDrm = isCencActive(),
+                headers = currentHeaders,
+                directUri = if (currentSniffResult.contentType == C.TYPE_OTHER) {
+                    // 直链缓存键必须与播放一致：播放用 finalUrl（重定向后）创建 MediaSource
+                    currentSniffResult.finalUrl.ifBlank { currentUrl }
+                } else {
+                    null
+                },
+                contentType = currentSniffResult.contentType,
+                supportsRange = currentSniffResult.supportsRange,
+            )
+        )
+    }
+
+    /** READY 期间每 5s 补水 */
+    private fun schedulePrefetchTick() {
+        prefetchTickHandler.removeCallbacks(prefetchTickRunnable)
+        prefetchTickHandler.postDelayed(prefetchTickRunnable, 5_000L)
+    }
+
+    /** 长视频回看滚动清理（30s 一次；直播/短视频跳过） */
+    private fun maybeTrimBackCache() {
+        val player = mInternalPlayer ?: return
+        if (isLivePlayback(player)) return
+        if (knownDurationMs < LONG_VIDEO_CACHE_THRESHOLD_MS) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastBackCacheTrimAt != 0L && now - lastBackCacheTrimAt < 30_000L) return
+        lastBackCacheTrimAt = now
+        val cacheSizeBytes = CacheSizePolicy.effectiveMb().toLong() * 1024L * 1024L
+        val windowSec = SegmentPrefetchPolicy.backCacheSeconds(
+            configSec = VideoPlay.longVideoBackCacheSec,
+            cacheSizeBytes = cacheSizeBytes,
+            bitrateBps = knownBitrateBps,
+        )
+        if (windowSec <= 0) return
+        val windowMs = windowSec * 1000L
+        val position = runCatching { player.currentPosition }.getOrDefault(0L)
+        val removed = if (currentSniffResult.contentType == C.TYPE_HLS) {
+            VideoSegmentPrefetcher.trimBackCache(position, windowMs)
+        } else {
+            VideoSegmentPrefetcher.trimBackCacheSingleKey(
+                key = currentUrl,
+                positionMs = position,
+                windowMs = windowMs,
+                bitrateBps = knownBitrateBps,
+            )
+        }
+        if (removed > 0) {
+            AppLog.putDebug("[BufferSpeed] back_cache trim removed=$removed windowSec=$windowSec")
+        }
+    }
+
+    /** 解码降级提示（每会话一次；只提示，不自动改清晰度） */
+    private fun maybeHintDecode() {
+        if (decodeHinted) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (decodeSampleStartAt == 0L) {
+            decodeSampleStartAt = now
+            droppedSinceDecodeSample = 0
+            return
+        }
+        val windowMs = now - decodeSampleStartAt
+        if (windowMs < DecodeHintPolicy.MIN_WINDOW_MS) return
+        val player = mInternalPlayer ?: return
+        val format = player.currentTracks.groups
+            .firstOrNull { it.type == C.TRACK_TYPE_VIDEO }
+            ?.let { group -> (0 until group.length).firstNotNullOfOrNull { group.getTrackFormat(it) } }
+        val signal = DecodeHintPolicy.Signal(
+            format = format?.let {
+                DecodeHintPolicy.VideoFormat(it.sampleMimeType, it.codecs, it.width, it.height)
+            },
+            droppedFrames = droppedSinceDecodeSample,
+            windowMs = windowMs,
+            alreadyHinted = decodeHinted,
+        )
+        if (DecodeHintPolicy.shouldHint(signal)) {
+            decodeHinted = true
+            postEvent(EventBus.VIDEO_PLAY_TIP, "该编码对当前设备较重，可切换线路或降低清晰度")
+            AppLog.put(
+                "[BufferSpeed] decode_hint dropped=$droppedSinceDecodeSample windowMs=$windowMs " +
+                    "codec=${format?.codecs} size=${format?.width}x${format?.height}"
+            )
+        }
+        droppedSinceDecodeSample = 0
+        decodeSampleStartAt = now
     }
 
     /**

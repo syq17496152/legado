@@ -379,7 +379,11 @@ fun VideoSettingsPanelContent(
             SettingsClickRow(
                 icon = null,
                 title = stringResource(R.string.video_cache_size),
-                value = stringResource(R.string.video_cache_size_summary, cacheSize),
+                value = if (cacheSize == 0) {
+                    stringResource(R.string.video_cache_size_auto)
+                } else {
+                    stringResource(R.string.video_cache_size_summary, cacheSize)
+                },
                 onClick = { selection = PanelSelection.CacheSize }
             )
             RowDivider(palette.divider)
@@ -596,8 +600,15 @@ fun VideoSettingsPanelContent(
             )
         }
         PanelSelection.CacheSize -> {
-            val values = intArrayOf(50, 100, 200, 500)
-            val options = values.map { stringResource(R.string.video_cache_size_summary, it) }
+            // video-buffer-prefetch-v2 AD-16：0=自动（按设备内存/可用存储），并开放 1GB/2GB 大容量
+            val values = intArrayOf(0, 100, 200, 500, 1024, 2048)
+            val options = values.map {
+                if (it == 0) {
+                    stringResource(R.string.video_cache_size_auto)
+                } else {
+                    stringResource(R.string.video_cache_size_summary, it)
+                }
+            }
             val index = values.indexOfFirst { it == cacheSize }.coerceAtLeast(0)
             SingleChoiceDialog(
                 title = stringResource(R.string.video_cache_size),

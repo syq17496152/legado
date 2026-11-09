@@ -29,26 +29,42 @@ import java.util.concurrent.atomic.AtomicLong
 @Keep
 class ManifestBypassDataSourceFactory(
     private val cacheFactory: DataSource.Factory,
-    private val directFactory: DataSource.Factory
+    private val directFactory: DataSource.Factory,
+    private val onManifestOpened: (String) -> Unit = {},
+    private val onSegmentKey: (String?) -> Unit = {},
 ) : DataSource.Factory {
 
     override fun createDataSource(): DataSource {
-        return ManifestBypassDataSource(cacheFactory.createDataSource(), directFactory.createDataSource())
+        return ManifestBypassDataSource(
+            cacheFactory.createDataSource(),
+            directFactory.createDataSource(),
+            onManifestOpened,
+            onSegmentKey,
+        )
     }
 
     class ManifestBypassDataSource(
         private val cache: DataSource,
-        private val direct: DataSource
+        private val direct: DataSource,
+        private val onManifestOpened: (String) -> Unit = {},
+        private val onSegmentKey: (String?) -> Unit = {},
     ) : BaseDataSource(true) {
 
         private var active: DataSource? = null
 
         override fun open(dataSpec: DataSpec): Long {
-            val useDirect = isManifestUrl(dataSpec.uri.toString())
+            val uri = dataSpec.uri.toString()
+            val useDirect = isManifestUrl(uri)
+            if (useDirect) {
+                onManifestOpened(uri)
+            } else {
+                // video-buffer-prefetch-v2 tasks 1.1：分片请求的缓存键实证（只投递 key，不输出 URL）
+                onSegmentKey(dataSpec.key)
+            }
             active = if (useDirect) direct else cache
             if (useDirect && shouldLog()) {
                 AppLog.putDebug(
-                    "ManifestBypass: direct, urlPath=${ExoPlayerHelper.sanitizeUrl(dataSpec.uri.toString())}"
+                    "ManifestBypass: direct, urlPath=${ExoPlayerHelper.sanitizeUrl(uri)}"
                 )
             }
             return requireNotNull(active) { "active not set" }.open(dataSpec)

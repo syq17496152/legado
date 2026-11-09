@@ -182,6 +182,12 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     const val VIDEO_PREF_NAME = "video_config"
 
+    // video-buffer-prefetch-v2：预取/回看默认值（单测锁定；改默认值必须同步测试）
+    internal const val PREF_SEGMENT_PREFETCH_ENABLED = "segmentPrefetchEnabled"
+    internal const val PREF_LONG_VIDEO_BACK_CACHE_SEC = "longVideoBackCacheSec"
+    internal const val DEFAULT_SEGMENT_PREFETCH_ENABLED = true
+    internal const val DEFAULT_LONG_VIDEO_BACK_CACHE_SEC = 120
+
     private val videoPrefs: SharedPreferences by lazy { appCtx.getSharedPreferences(VIDEO_PREF_NAME, MODE_PRIVATE) }
     /**  是否自动播放  **/
     var autoPlay
@@ -454,11 +460,11 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putBoolean("cachePlay", value) }
         }
-    /**  视频缓存容量（MB），默认 100MB，可选 50/100/200/500
+    /**  视频缓存容量（MB）：0=自动（按设备内存分档 + 可用存储 5% 封顶），可选手动 50/100/200/500
      * P0-3 缓存容量可配置：修改后需重启 App 生效（SimpleCache 单例在首次访问时初始化，不可动态修改大小）
      **/
     var videoCacheSize: Int
-        get() = videoPrefs.getInt("videoCacheSize", 100)
+        get() = videoPrefs.getInt("videoCacheSize", 0)
         set(value) {
             videoPrefs.edit { putInt("videoCacheSize", value) }
         }
@@ -577,6 +583,20 @@ object VideoPlay : CoroutineScope by MainScope(){
         get() = videoPrefs.getInt("playerBufferStrategy", 0)
         set(value) {
             videoPrefs.edit { putInt("playerBufferStrategy", value) }
+        }
+
+    /** video-buffer-prefetch-v2：当前集分片预取总开关（默认开，异常可一键关闭回基线） */
+    var segmentPrefetchEnabled: Boolean
+        get() = videoPrefs.getBoolean(PREF_SEGMENT_PREFETCH_ENABLED, DEFAULT_SEGMENT_PREFETCH_ENABLED)
+        set(value) {
+            videoPrefs.edit { putBoolean(PREF_SEGMENT_PREFETCH_ENABLED, value) }
+        }
+
+    /** video-buffer-prefetch-v2：长视频回看滚动窗口秒数（默认 120；0=关闭回基线） */
+    var longVideoBackCacheSec: Int
+        get() = videoPrefs.getInt(PREF_LONG_VIDEO_BACK_CACHE_SEC, DEFAULT_LONG_VIDEO_BACK_CACHE_SEC)
+        set(value) {
+            videoPrefs.edit { putInt(PREF_LONG_VIDEO_BACK_CACHE_SEC, value) }
         }
 
     /** AD-04 播放历史开关（默认true，关闭时不保存播放进度） */

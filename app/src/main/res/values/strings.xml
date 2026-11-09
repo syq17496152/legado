@@ -1692,6 +1692,7 @@
     <string name="cache_play">播放时缓存</string>
     <string name="video_cache_size">视频缓存容量</string>
     <string name="video_cache_size_summary">%1$d MB（重启生效）</string>
+    <string name="video_cache_size_auto">自动（按设备内存）</string>
     <string name="mute_on_start">默认静音</string>
     <!-- 12.4E: 视频设置面板 i18n（VideoFragment/VideoSettingsPanel） -->
     <string name="video_play_control">播放控制</string>

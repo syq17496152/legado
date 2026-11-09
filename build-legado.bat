@@ -122,6 +122,10 @@ echo.
 :: Assemble optional Gradle -P flags (explicit version for 双包同版本发版)
 set "P_FLAGS=-PabiTarget=%ABI_TARGET%"
 if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
+:: 版本号显式覆盖（测试/应急）：设备已装更高 versionCode（如历史包/时钟回拨）时，
+:: 覆盖安装会报 INSTALL_FAILED_VERSION_DOWNGRADE。用法：set LEGADO_VERSION_CODE=26130102
+:: 注意：安装铁律禁止 uninstall（会清空书源/书架），故该钩子是覆盖安装的唯一安全通道。
+if not "%LEGADO_VERSION_CODE%"=="" set "P_FLAGS=%P_FLAGS% -PversionCodeOverride=%LEGADO_VERSION_CODE%"
 :: 交付用测试包默认关闭 debuggable（R8 optimize 模式，dex 30.3MB→12.5MB）；
 :: 仅排障需要 IDE attach 时 set LEGADO_TEST_DEBUGGABLE=true（该产物不得交付）。
 if "%BUILD_TYPE%"=="debug" (

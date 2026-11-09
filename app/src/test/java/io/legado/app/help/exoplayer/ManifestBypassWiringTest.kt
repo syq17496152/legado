@@ -29,7 +29,9 @@ class ManifestBypassWiringTest {
     fun cacheFactoryIsWrappedAtSingleExit() {
         assertTrue(
             "cacheDataSourceFactory 出口必须包装 ManifestBypassDataSourceFactory",
-            helper.contains("ManifestBypassDataSourceFactory(cachedFactory, directFactory)")
+            helper.contains("ManifestBypassDataSourceFactory(") &&
+                helper.contains("cachedFactory,") &&
+                helper.contains("directFactory,")
         )
         assertTrue(
             "缓存开关两分支必须先收敛到 cachedFactory",
@@ -46,7 +48,12 @@ class ManifestBypassWiringTest {
         assertTrue("必须在 open(dataSpec) 分发", factory.contains("override fun open(dataSpec: DataSpec): Long"))
         assertTrue(
             "清单判定必须用 URI 字符串",
-            factory.contains("isManifestUrl(dataSpec.uri.toString())")
+            factory.contains("val uri = dataSpec.uri.toString()") &&
+                factory.contains("isManifestUrl(uri)")
+        )
+        assertTrue(
+            "清单请求必须投递观察器（预取以播放实际加载的媒体清单为准）",
+            factory.contains("onManifestOpened(uri)")
         )
         assertTrue(
             "清单走 direct、其余走 cache",

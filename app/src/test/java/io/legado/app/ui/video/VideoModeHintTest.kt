@@ -1,10 +1,12 @@
 package io.legado.app.ui.video
 
+import io.legado.app.constant.EventBus
 import io.legado.app.help.video.EntryContext
 import io.legado.app.help.video.EntryModeResolver
 import io.legado.app.help.video.PlaybackMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -19,6 +21,12 @@ class VideoModeHintTest {
     @Test
     fun `未注入时返回null以回落上下文推导`() {
         assertNull(parsePlaybackModeHint(null))
+    }
+
+    @Test
+    fun `播放器浮层提示事件非空且与错误事件区分`() {
+        assertEquals("videoPlayTip", EventBus.VIDEO_PLAY_TIP)
+        assertTrue(EventBus.VIDEO_PLAY_TIP != EventBus.VIDEO_PLAY_ERROR)
     }
 
     @Test

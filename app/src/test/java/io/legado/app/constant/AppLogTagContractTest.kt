@@ -41,4 +41,10 @@ class AppLogTagContractTest {
         assertEquals("LlmTrace", AppLog.TAG_LLM_TRACE)
         assertTrue("Tag 不能为空", tags.none { it.isBlank() })
     }
+
+    @Test
+    fun `播放器浮层提示事件与错误事件分离`() {
+        assertEquals("videoPlayTip", EventBus.VIDEO_PLAY_TIP)
+        assertTrue(EventBus.VIDEO_PLAY_TIP != EventBus.VIDEO_PLAY_ERROR)
+    }
 }
