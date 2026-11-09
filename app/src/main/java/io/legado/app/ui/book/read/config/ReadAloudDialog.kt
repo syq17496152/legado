@@ -198,6 +198,25 @@ class ReadAloudDialog() : ComposeDialogFragment() {
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        // 继续上次（R23）：当前章节与上次收听/阅读章节不同时，顶部给一条可点提示
+                        val lastIndex = ReadBook.book?.durChapterIndex ?: -1
+                        val currentIndex = ReadBook.curTextChapter?.chapter?.index ?: -1
+                        if (lastIndex >= 0 && currentIndex >= 0 && lastIndex != currentIndex) {
+                            Text(
+                                text = "上次听到第 ${lastIndex + 1} 章 · 点此继续",
+                                color = style.primaryText,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                modifier = Modifier
+                                    .clickable {
+                                        ReadBook.openChapter(
+                                            index = lastIndex,
+                                            durChapterPos = ReadBook.durChapterPos
+                                        )
+                                        dismissAllowingStateLoss()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
