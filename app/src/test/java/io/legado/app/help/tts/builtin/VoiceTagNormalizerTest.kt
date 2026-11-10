@@ -87,4 +87,22 @@ class VoiceTagNormalizerTest {
         assertEquals("老年", VoiceTagNormalizer.ageLabel("aged"))
         assertEquals("", VoiceTagNormalizer.ageLabel(""))
     }
+
+    /**
+     * 性格只能手动标注（音色包几乎不带气质词）：保存口径必须"替换而不是并集"，
+     * 否则用户取消勾选后性格筛选永远清不掉。
+     */
+    @Test
+    fun `性格标注保存为替换语义并保留其它标签`() {
+        val tags = VoiceTagNormalizer.tagsWithMoods(
+            existing = listOf("旁白", "清冷", "女"),
+            gender = "女",
+            age = "青年",
+            moods = listOf("温柔", "沉稳")
+        )
+        assertEquals(listOf("旁白", "female", "youth", "gentle", "calm"), tags)
+        // 清空性格 ⇒ 旧性格标签必须消失，其它标签保留
+        val cleared = VoiceTagNormalizer.tagsWithMoods(tags, "女", "青年", emptyList())
+        assertEquals(listOf("旁白", "female", "youth"), cleared)
+    }
 }

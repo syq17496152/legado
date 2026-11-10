@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
+import io.legado.app.help.tts.builtin.VoiceTagNormalizer
 
 /**
  * 音色域动作（T6.3/T6.4）：从管理页 Activity 抽出的"删音色/改标签"逻辑。
@@ -31,22 +32,33 @@ internal object BuiltinVoiceOps {
     }
 
     /**
-     * 改音色标签（名称/性别/年龄）：只写索引，不动音频。
+     * 改音色标签（名称/性别/年龄/性格）：只写索引，不动音频。
      * 绑定键 `voiceName=id|名称` 含名称 ⇒ 改名后旧绑定会回落，提示用户重新绑一次。
+     *
+     * 性格（2026-11-10）：情绪/气质是唯一不能自动推断的维度（音色包几乎不带标签），
+     * 所以必须允许手动多选；写入时**替换**旧性格标签（用户取消勾选要能真的去掉），
+     * 非性格类标签（池名/来源等）原样保留。
      */
-    fun saveMeta(voiceId: String, name: String, gender: String, age: String): String {
+    fun saveMeta(
+        voiceId: String,
+        name: String,
+        gender: String,
+        age: String,
+        moods: List<String> = emptyList()
+    ): String {
         val store = BuiltinTtsRuntime.voiceStore()
         val voice = store.findById(voiceId) ?: return "音色不存在（可能已被删除）"
-        val tags = (voice.tags + listOfNotNull(
-            gender.takeIf { it.isNotBlank() },
-            age.takeIf { it.isNotBlank() }
-        )).distinct()
+        // 先剔除旧的性格标签（归一后能识别的），再追加本次勾选的规范 key
+        val keptTags = voice.tags.filter { VoiceTagNormalizer.mood(it).isBlank() }
+        val genderKey = VoiceTagNormalizer.gender(gender)
+        val ageKey = VoiceTagNormalizer.age(age)
+        val tags = VoiceTagNormalizer.tagsWithMoods(keptTags, genderKey, ageKey, moods)
         store.upsert(
             voice.copy(
                 name = name.ifBlank { voice.name },
-                gender = gender,
-                age = age,
-                tags = tags
+                gender = genderKey,
+                age = ageKey,
+                tags = tags.distinct()
             )
         )
         return "已更新音色标签（若改名，请到角色配音页重新绑一次该音色）"

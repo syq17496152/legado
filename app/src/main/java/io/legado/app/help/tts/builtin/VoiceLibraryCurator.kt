@@ -172,9 +172,14 @@ object VoiceLibraryCurator {
     internal fun baseName(name: String): String = name.replace(Regex("_\\d+$"), "").trim()
 
     /**
-     * 归档分组：`本档可用 → 性别 → 年龄`（空组不出现，未知一律排最后）。
+     * 归档分组：`本档可用 → 名称族 → 性别 → 年龄`（空组不出现，未知一律排最后）。
      *
-     * @param activeProfileId 当前激活档位；为 null 时不做可用性分区（全部按性别/年龄归档）
+     * 名称族（2026-11-10 用户要求「按名称…归档」）：只对**序号名**生效
+     * （`艾舍尔 47` / `珂珂 88` ⇒ 族名 `艾舍尔` / `珂珂`），因为这类名字在真机上占 274/282，
+     * 平铺时用户无法按"这是哪个音色包/哪一族"来找。非序号名（用户自命名/导入包名）不切族，
+     * 避免 500 条导入音色被切成上百个只有 1 条的分组。
+     *
+     * @param activeProfileId 当前激活档位；为 null 时不做可用性分区（全部按名称/性别/年龄归档）
      */
     fun archive(
         voices: List<BuiltinVoice>,
@@ -189,11 +194,16 @@ object VoiceLibraryCurator {
                 voice.profileId == activeProfileId
             val gender = VoiceTagNormalizer.gender(voice.gender)
             val age = VoiceTagNormalizer.age(voice.age)
-            val key = listOf(usable.toString(), gender, age).joinToString("|")
+            val family = nameFamily(voice.displayName)
+            val key = listOf(usable.toString(), family, gender, age).joinToString("|")
             buckets.getOrPut(key) { ArrayList() }.add(voice)
             titles[key] = buildString {
                 if (activeProfileId != null) {
                     append(if (usable) "本档可用" else "其他档位")
+                    append(" · ")
+                }
+                if (family.isNotBlank()) {
+                    append(family)
                     append(" · ")
                 }
                 append(
@@ -228,6 +238,15 @@ object VoiceLibraryCurator {
     }
 
     /**
+     * 名称族：只有「非数字前缀 + 空格 + 纯数字」这种**序号名**才有族名（`艾舍尔 47` ⇒ `艾舍尔`）。
+     * 其余返回空串（不切族）——避免把用户自定义名字切成"一条一组"。
+     */
+    internal fun nameFamily(name: String): String {
+        val match = Regex("^(\\S+)\\s+\\d+$").find(name.trim()) ?: return ""
+        return match.groupValues[1]
+    }
+
+    /**
      * 序号名自然排序：`艾舍尔 2` 必须排在 `艾舍尔 10` 前面（纯字符串排序会把 10 提到 2 之前，
      * 这是用户看到「乱七八糟」的直接来源之一）。
      */
@@ -258,11 +277,11 @@ object VoiceLibraryCurator {
         return (a.length - i) - (b.length - j)
     }
 
-    /** 组排序权重：女 → 男 → 未标；年龄按 teen→youth→middle→aged→未标 */
+    /** 组排序权重：女 → 男 → 未标；年龄按 teen→youth→middle→aged→未标（key=usable|family|gender|age） */
     private fun sectionRank(key: String): String {
         val parts = key.split("|")
-        val gender = parts.getOrElse(1) { "" }
-        val age = parts.getOrElse(2) { "" }
+        val gender = parts.getOrElse(2) { "" }
+        val age = parts.getOrElse(3) { "" }
         val genderRank = when (gender) {
             VoiceTagNormalizer.GENDER_FEMALE -> "0"
             VoiceTagNormalizer.GENDER_MALE -> "1"

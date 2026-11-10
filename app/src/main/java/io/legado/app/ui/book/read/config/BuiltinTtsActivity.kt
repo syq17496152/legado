@@ -468,7 +468,7 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 is PageAction.SaveVoiceMeta -> {
                     pageState.value = pageState.value.copy(
                         message = BuiltinVoiceOps.saveMeta(
-                            action.voiceId, action.name, action.gender, action.age
+                            action.voiceId, action.name, action.gender, action.age, action.moods
                         )
                     )
                     reload()

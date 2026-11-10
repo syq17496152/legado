@@ -241,11 +241,17 @@ internal fun VoicesPanel(
                     label = { Text("未标年龄") }
                 )
             }
-            // 性格归档：只列出库里真的标注过的性格，避免一排空选项
+            // 性格归档：只列出库里真的标注过的性格；一条都没有时给出可执行提示（否则用户以为没做）
             val moodKeys = VoiceTagNormalizer.MOOD_ORDER.filter { key ->
                 state.voices.any { key in BuiltinVoiceFilter.moodsOf(it) }
             }
-            if (moodKeys.isNotEmpty()) {
+            if (moodKeys.isEmpty()) {
+                Text(
+                    text = "性格：暂无标注（点任意音色可多选标注，用于按性格配声）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = mutedColor
+                )
+            } else {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -359,8 +365,8 @@ internal fun VoicesPanel(
         VoiceMetaDialog(
             voice = voice,
             onDismiss = { editing = null },
-            onSave = { name, genderText, ageText ->
-                onAction(PageAction.SaveVoiceMeta(voice.id, name, genderText, ageText))
+            onSave = { name, genderText, ageText, moods ->
+                onAction(PageAction.SaveVoiceMeta(voice.id, name, genderText, ageText, moods))
                 editing = null
             }
         )
@@ -438,17 +444,21 @@ private fun RecordSection(
 }
 
 /**
- * 音色标签编辑（T6.4）：名称/性别/年龄只改索引，不动音频；性别用 chips 避免手打英文。
+ * 音色标签编辑（T6.4）：名称/性别/年龄/性格只改索引，不动音频；chips 避免手打英文。
+ * 性格（2026-11-10）：音色包几乎不带气质词 ⇒ 这是唯一的"性格归档"数据来源，必须可多选、可取消。
  */
 @Composable
 private fun VoiceMetaDialog(
     voice: BuiltinVoice,
     onDismiss: () -> Unit,
-    onSave: (String, String, String) -> Unit
+    onSave: (String, String, String, List<String>) -> Unit
 ) {
     var name by remember { mutableStateOf(voice.displayName) }
     var gender by remember { mutableStateOf(voice.gender) }
     var age by remember { mutableStateOf(voice.age) }
+    var moods by remember {
+        mutableStateOf(VoiceTagNormalizer.MOOD_ORDER.filter { it in BuiltinVoiceFilter.moodsOf(voice) })
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("编辑音色标签") },
@@ -486,10 +496,27 @@ private fun VoiceMetaDialog(
                             )
                         }
                 }
+                Text("性格（可多选，用于按性格配声）", style = MaterialTheme.typography.bodySmall)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    VoiceTagNormalizer.MOOD_ORDER.forEach { key ->
+                        val selected = key in moods
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                moods = if (selected) moods - key else moods + key
+                            },
+                            label = { Text(VoiceTagNormalizer.moodLabel(key)) }
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name.trim(), gender, age) }) { Text("保存") }
+            TextButton(onClick = { onSave(name.trim(), gender, age, moods) }) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

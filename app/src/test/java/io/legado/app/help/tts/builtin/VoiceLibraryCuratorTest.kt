@@ -101,13 +101,15 @@ class VoiceLibraryCuratorTest {
             )
         )
         val sections = VoiceLibraryCurator.archive(voices, activeProfileId = "hq")
-        // 本档可用（hq 的两条）在前；第三条是其他档位
+        // 本档可用（hq 的两条）在前；第三条是其他档位。序号名按族归档（珂珂/艾舍尔）
         assertTrue(sections.first().title.startsWith("本档可用"))
         assertTrue(sections.last().title.startsWith("其他档位"))
-        // 女声组排在同档男声之前
         val usableTitles = sections.filter { it.title.startsWith("本档可用") }.map { it.title }
-        assertEquals("本档可用 · 女声 · 未标年龄（1）", usableTitles[0])
-        assertEquals("本档可用 · 男声 · 未标年龄（1）", usableTitles[1])
+        assertEquals("本档可用 · 珂珂 · 女声 · 未标年龄（1）", usableTitles[0])
+        assertEquals("本档可用 · 珂珂 · 男声 · 未标年龄（1）", usableTitles[1])
+        // 名称族只认序号名：`艾舍尔 1` ⇒ `艾舍尔`
+        assertEquals("艾舍尔", VoiceLibraryCurator.nameFamily("艾舍尔 1"))
+        assertEquals("", VoiceLibraryCurator.nameFamily("温柔女声"))
     }
 
     @Test

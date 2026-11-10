@@ -157,12 +157,14 @@ sealed interface PageAction {
     data object CancelTag : PageAction
     /** 2026-11-10 用户裁定：整理音色库（值域归一 + 去重 + 重新归档） */
     data object CurateVoices : PageAction
-    /** T6.4：编辑音色标签（名称/性别/年龄） */
+    /** T6.4：编辑音色标签（名称/性别/年龄/性格） */
     data class SaveVoiceMeta(
         val voiceId: String,
         val name: String,
         val gender: String,
-        val age: String
+        val age: String,
+        /** 性格（2026-11-10）：不可自动推断，只能手动标注；空列表 = 清空性格 */
+        val moods: List<String> = emptyList()
     ) : PageAction
 }
 

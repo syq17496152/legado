@@ -128,6 +128,23 @@ object VoiceTagNormalizer {
         return MOOD_KEYWORDS.firstOrNull { (_, words) -> words.any { text.contains(it) } }?.first.orEmpty()
     }
 
+    /**
+     * 编辑弹窗保存口径（性格可多选、可清空）：
+     * 保留非性格标签 → 剔除旧性格标签 → 按规范值补性别/年龄 → 追加本次勾选的性格。
+     *
+     * 为什么"替换"而不是"并集"：用户取消勾选必须真的从索引里去掉，否则性格筛选永远清不掉。
+     */
+    fun tagsWithMoods(
+        existing: List<String>,
+        gender: String,
+        age: String,
+        moods: List<String>
+    ): List<String> {
+        val kept = existing.filter { mood(it).isBlank() }
+        val moodKeys = moods.map { mood(it) }.filter { it.isNotBlank() }.distinct()
+        return (tags(kept, gender, age) + moodKeys).distinct()
+    }
+
     fun moodLabel(key: String): String = MOOD_LABELS[key].orEmpty()
 
     /** 性格维度展示顺序 */

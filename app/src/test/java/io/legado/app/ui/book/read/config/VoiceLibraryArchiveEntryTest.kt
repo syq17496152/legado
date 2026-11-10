@@ -6,6 +6,7 @@ import io.legado.app.help.tts.builtin.VoiceLibraryCurator
 import io.legado.app.help.tts.builtin.VoiceTagNormalizer
 import io.legado.app.testkit.SourceFileProbe
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,8 +32,9 @@ class VoiceLibraryArchiveEntryTest {
             BuiltinVoice(id = "b", name = "艾舍尔 1", gender = "男", age = "中年", profileId = "multi")
         )
         val sections = VoiceLibraryCurator.archive(voices, activeProfileId = "hq")
-        assertEquals("本档可用 · 女声 · 青年（1）", sections.first().title)
-        assertEquals("其他档位 · 男声 · 中年（1）", sections.last().title)
+        // 序号名先按名称族归（珂珂/艾舍尔），再按性别/年龄
+        assertEquals("本档可用 · 珂珂 · 女声 · 青年（1）", sections.first().title)
+        assertEquals("其他档位 · 艾舍尔 · 男声 · 中年（1）", sections.last().title)
     }
 
     @Test
@@ -82,11 +84,37 @@ class VoiceLibraryArchiveEntryTest {
         assertTrue(activity.contains("VoiceLibraryCurator.curate("))
     }
 
+    /**
+     * 真机铁证 2026-11-10：年龄 chips 放在 horizontalScroll 里，1200px 屏把「未标年龄」裁掉半边
+     * （与「管理角色」被挤出可视区同一类失守）⇒ 必须自动换行。
+     */
+    @Test
+    fun ageFilterChipsWrapInsteadOfHorizontalScroll() {
+        // SourceFileProbe.sourceText 会剥掉行注释 ⇒ 锚点必须用代码标识；
+        // 且 AGE_ORDER 在 FlowRow 内部，取它**之前**的一段才是容器声明处
+        val ageBlock = panel.substringAfter("\"未打标\"")
+            .substringBefore("VoiceTagNormalizer.AGE_ORDER")
+        assertTrue("年龄 chips 应使用 FlowRow 自动换行", ageBlock.contains("FlowRow"))
+        assertFalse(
+            "年龄 chips 不得放 horizontalScroll（会把「未标年龄」裁掉）",
+            ageBlock.contains("horizontalScroll")
+        )
+    }
+
     /** NER 入口必须真的开选择器：只 startActivity 跳页会让用户以为"点了没反应" */
     @Test
     fun assetCenterNerImportOpensFilePicker() {
         assertTrue("缺 NER 文件选择器", assetCenter.contains("pickNerZip"))
         assertTrue("IMPORT_NER 未接选择器", assetCenter.contains("AssetAction.IMPORT_NER ->"))
         assertTrue("未调用模型导入", assetCenter.contains("NerModelManager.importZip"))
+    }
+
+    /** 性格是唯一无法自动推断的维度 ⇒ 必须能从编辑弹窗多选标注并参与筛选 */
+    @Test
+    fun voiceMetaDialogCarriesMoodPicker() {
+        assertTrue("编辑弹窗缺性格多选", panel.contains("MOOD_ORDER.forEach"))
+        assertTrue("保存动作未携带性格", screens.contains("val moods: List<String>"))
+        assertTrue("Activity 未透传性格", activity.contains("action.moods"))
+        assertTrue("性格写入未走统一口径", activity.contains("BuiltinVoiceOps.saveMeta"))
     }
 }
