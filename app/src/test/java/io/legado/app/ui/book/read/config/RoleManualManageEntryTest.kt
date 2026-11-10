@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.config
 
 import io.legado.app.testkit.SourceFileProbe
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,5 +44,19 @@ class RoleManualManageEntryTest {
     fun rolesPanelGuidesWhenRecognitionIsFew() {
         assertTrue("缺「导入 LAC 识别模型」引导", screens.contains("导入 LAC 识别模型"))
         assertTrue("缺「手动补录」引导", screens.contains("手动补录"))
+    }
+
+    /**
+     * 真机铁证 2026-11-10：单行横向滚动时「管理角色」在 1200px 屏上滑出可视区 ⇒ 按钮必须分两行。
+     */
+    @Test
+    fun rolesPanelButtonsAreNotHorizontallyScrolled() {
+        val panel = screens.substringAfter("private fun RolesPanel")
+            .substringBefore("val target = selected")
+        assertTrue("角色面板应包含管理角色按钮", panel.contains("PageAction.ManageCharacters"))
+        assertFalse(
+            "角色按钮不得再放进 horizontalScroll（会把「管理角色」挤出屏幕）",
+            panel.contains("horizontalScroll")
+        )
     }
 }

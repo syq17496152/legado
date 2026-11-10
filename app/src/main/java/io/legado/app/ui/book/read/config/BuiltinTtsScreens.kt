@@ -243,22 +243,24 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
-                Text("识别当前章角色")
-            }
-            OutlinedButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
-                Text(LocalContext.current.getString(R.string.builtin_tts_roles_assign_all))
+        // 两行按钮：单行横向滚动时「管理角色」会滑出屏幕（真机 1200px 实测不可见）⇒ 拆两行保证都能看见
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onAction(PageAction.IdentifyRoles) }, enabled = state.hasBook) {
+                    Text("识别当前章角色")
+                }
+                OutlinedButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
+                    Text(LocalContext.current.getString(R.string.builtin_tts_roles_assign_all))
+                }
             }
             // 2026-11-10 用户裁定：识别不全时必须能手动补录 / 修正角色（不被自动清理）
-            OutlinedButton(onClick = { onAction(PageAction.AddCharacter) }, enabled = state.hasBook) {
-                Text("＋ 添加角色")
-            }
-            OutlinedButton(onClick = { onAction(PageAction.ManageCharacters) }, enabled = state.hasBook) {
-                Text("管理角色")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onAction(PageAction.AddCharacter) }, enabled = state.hasBook) {
+                    Text("＋ 添加角色")
+                }
+                OutlinedButton(onClick = { onAction(PageAction.ManageCharacters) }, enabled = state.hasBook) {
+                    Text("管理角色")
+                }
             }
         }
         if (state.roleRows.isNotEmpty()) {
