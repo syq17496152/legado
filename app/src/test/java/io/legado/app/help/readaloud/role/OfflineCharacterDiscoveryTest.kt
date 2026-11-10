@@ -41,6 +41,40 @@ class OfflineCharacterDiscoveryTest {
         assertEquals(listOf("李四"), candidates.map { it.name })
     }
 
+    /** 2026-11-10 用户反馈「角色获取太少」：非姓氏起头的对话人名（西式/自造名）必须能补扫到 */
+    @Test
+    fun `非姓氏人名按对话 cue 收录`() {
+        val paragraphs = listOf(
+            "艾伦说道：“这里的风有些冷。”",
+            "艾伦：我们得在天黑前赶到。",
+            "凯尔道：“别急，先看看地图。”",
+            "凯尔：地图在我这里。"
+        )
+        val names = OfflineCharacterDiscovery.candidates(paragraphs).map { it.name }
+        assertTrue("应收录艾伦：$names", "艾伦" in names)
+        assertTrue("应收录凯尔：$names", "凯尔" in names)
+    }
+
+    /** 只出现一次的「注意：」这类泛指不能被当作角色 */
+    @Test
+    fun `一次性冒号泛指不进候选`() {
+        val paragraphs = listOf(
+            "注意：天黑之后不要出门。",
+            "所有人都看向了门外，没有人说话。"
+        )
+        assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
+    }
+
+    @Test
+    fun `cue 人名可信度判定`() {
+        assertTrue(OfflineCharacterDiscovery.isPlausibleCueName("艾伦"))
+        assertTrue(OfflineCharacterDiscovery.isPlausibleCueName("凯尔"))
+        assertFalse(OfflineCharacterDiscovery.isPlausibleCueName("我们"))
+        assertFalse(OfflineCharacterDiscovery.isPlausibleCueName("注意"))
+        assertFalse(OfflineCharacterDiscovery.isPlausibleCueName("忽"))
+        assertFalse(OfflineCharacterDiscovery.isPlausibleCueName("张忽"))
+    }
+
     @Test
     fun `候选数量受上限约束`() {
         val names = listOf("张三", "李四", "王五", "赵六", "陈七", "杨八", "周九", "吴十")

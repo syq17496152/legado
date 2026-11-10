@@ -139,6 +139,13 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             pageState.value = pageState.value.copy(message = "角色卡已更新（可重新配声）")
         }
 
+    /** 角色管理（2026-11-10）：新增/编辑/删除/关系网在既有管理页内完成，返回后刷新 */
+    private val manageCharacters =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            reload()
+            pageState.value = pageState.value.copy(message = "角色列表已刷新（可重新配声）")
+        }
+
     private val pickModelFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         val profileId = pendingProfileId.ifBlank { "clone" }
@@ -452,6 +459,8 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                 is PageAction.AssignSegment -> assignSegment(action)
                 is PageAction.AssignVoice -> assignVoice(action)
                 is PageAction.EditCharacter -> openCharacterEditor(action.characterId)
+                PageAction.AddCharacter -> openCharacterEditor(0L)
+                PageAction.ManageCharacters -> openCharacterManager()
                 PageAction.Reload -> Unit
             }
     }
@@ -571,6 +580,20 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
             .putExtra(BookCharacterManageActivity.EXTRA_CHARACTER_ID, characterId)
         runCatching { editCharacter.launch(intent) }
             .onFailure { LogUtils.e("BuiltinTtsUi", "打开角色卡编辑失败：${it.message}") }
+    }
+
+    /** 2026-11-10：角色管理页（新增/编辑/删除/关系网）—— 识别不全时用户可自行补录与修正 */
+    private fun openCharacterManager() {
+        val book = ReadBook.book
+        if (book == null) {
+            pageState.value = pageState.value.copy(message = "请先打开一本书")
+            return
+        }
+        val intent = Intent(this, BookCharacterManageActivity::class.java)
+            .putExtra(BookCharacterManageActivity.EXTRA_BOOK_URL, book.bookUrl)
+            .putExtra(BookCharacterManageActivity.EXTRA_CHARACTER_BOOK_KEY, book.characterBookKey())
+        runCatching { manageCharacters.launch(intent) }
+            .onFailure { LogUtils.e("BuiltinTtsUi", "打开角色管理失败：${it.message}") }
     }
 
     private suspend fun assignCasting() {

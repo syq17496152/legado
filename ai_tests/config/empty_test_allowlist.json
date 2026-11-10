@@ -945,6 +945,11 @@
       "path": "app/src/test/java/io/legado/app/ui/config/AiConfigLocalModelEntryTest.kt",
       "type": "exception",
       "reason": "用户裁定 2026-11-10「文本模型放进 AI 设置」：AiConfigFragment 为 Compose 设置页，入口是否存在属源码结构关系，纯 JVM 无法组合页面（无 Robolectric）；模型就绪后的自动配置行为已由 LlmSettingsStateTest.autoConfigureAfterModelReady 以真值断言覆盖。若后续引入 Robolectric/Compose 测试缝，应改为「AI 设置页渲染出本地模型行并点击可达」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/RoleManualManageEntryTest.kt",
+      "type": "exception",
+      "reason": "用户裁定 2026-11-10「角色太少/不能手动加改」：Probe 的是「角色配音面板两个按钮 + 行内编辑 + Activity 分发到既有角色页」的跨文件接线，依赖 Context/Intent 导航，纯 JVM 无法拉起页面（无 Robolectric）。角色发现算法（cue 人名）已由 OfflineCharacterDiscoveryTest 行为断言覆盖；若后续引入 Robolectric，应改为「点添加角色 → 到达 CharacterEditActivity」的行为断言并移除本豁免。"
     }
   ]
 }

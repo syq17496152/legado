@@ -327,8 +327,19 @@ object BuiltinTtsRuntime {
                 level = AppLog.Level.INFO
             )
         }
-        // 读音归一唯一入口（T8.2 简繁 → 用户词典 → A6 数字/年份/单位；只影响送引擎文本）
+        // 读音归一唯一入口（T8.2 简繁 → 用户词典 → A6 数字/年份/单位 → 可朗读字符清洗；只影响送引擎文本）
         val normalizedText = speechTextOf(text)
+        if (normalizedText.isBlank()) {
+            // 整段都是词表外符号（网文装饰符）⇒ 不合成、不出声，避免模型补音节（2026-11-10 真机「耶」缺陷）
+            return null
+        }
+        BuiltinSpeechTextSanitizer.removedCount(text).takeIf { it > 0 }?.let { removed ->
+            AppLog.putDebugWithTag(
+                AppLog.TAG_TTS_TRACE,
+                "builtin 文本清洗 removed=$removed len=${text.length}",
+                level = AppLog.Level.INFO
+            )
+        }
         // 单声档（vits/matcha）音色不参与合成，缓存键固定；多说话人档必须按 sid 分键（否则换声播放旧音频）
         val voiceKey = voiceKeyOf(profile, voice)
         val gain = voice?.gainMultiplier ?: 1.0f
@@ -629,12 +640,17 @@ object BuiltinTtsRuntime {
     }
 
     /**
-     * 读音归一链唯一入口：简繁归一 → 用户发音词典 → 数字/年份/单位（A6）。
+     * 读音归一链唯一入口：简繁归一 → 用户发音词典 → 数字/年份/单位（A6）→ 可朗读字符清洗。
      * 合成与缓存键**必须**共用本方法，否则「缓存键按旧文本、合成按新文本」会读到别人的音频。
+     *
+     * 末段清洗为 2026-11-10 真机缺陷修复：Kokoro 中文前端会把词表外符号补成一个音节
+     * （每句结尾多读“耶”），必须在送引擎前剔除；详见 [BuiltinSpeechTextSanitizer]。
      */
     private fun speechTextOf(text: String): String =
-        BuiltinNumberNormalizer.normalize(
-            pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
+        BuiltinSpeechTextSanitizer.sanitize(
+            BuiltinNumberNormalizer.normalize(
+                pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
+            )
         )
 
     private fun splitRules(): List<Regex> {

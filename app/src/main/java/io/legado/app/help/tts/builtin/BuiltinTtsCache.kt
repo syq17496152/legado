@@ -12,10 +12,11 @@ object BuiltinCacheKeys {
     /**
      * 缓存命名空间版本：改变「音频内容」的规则升版必须换前缀，否则旧音频会以旧效果播放。
      * v2 = A4 段间 80ms 包络 + A6 数字/年份/单位读音归一（2026-11-04）
+     * v3 = 可朗读字符清洗（2026-11-10：剔除会让 Kokoro 补音节的词表外符号，修「句尾多读耶」）
      */
-    private const val CACHE_VERSION = "bt2"
+    private const val CACHE_VERSION = "bt3"
 
-    /** key = md5("bt2|<profile>|<voiceName>|<rateKey>|<gainKey>|<normalizedText>") */
+    /** key = md5("bt3|<profile>|<voiceName>|<rateKey>|<gainKey>|<normalizedText>") */
     fun key(
         profile: String,
         voiceName: String,

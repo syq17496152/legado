@@ -47,8 +47,13 @@ object OfflineCharacterDiscovery {
         paragraphs: List<String>
     ): Boolean = builtinActive && bookKey.isNotBlank() && paragraphs.isNotEmpty()
 
-    /** 单章候选上限：覆盖主角 + 主要配角（原 8 个会漏掉程啸等后续出场角色） */
-    const val DEFAULT_LIMIT = 12
+    /**
+     * 单章候选上限（2026-11-10 用户反馈「角色获取太少」后上调 12 → 30）：
+     * 网文一章常同时出现主角团 + 反派 + 路人（说话 cue 齐全），12 个会把后半章角色挤掉；
+     * 30 覆盖典型单章出场规模，同时仍防「整章误报几十个」污染角色表。
+     * 用户仍可在角色管理里手动新增/修正（补录不会被自动清理）。
+     */
+    const val DEFAULT_LIMIT = 30
 
     /** 单姓三字名至少被 cue 命中两次才接纳（剔除"郑吒嗤"式一次性碎片） */
     private const val MIN_LONG_NAME_CUES = 2
@@ -67,6 +72,62 @@ object OfflineCharacterDiscovery {
 
     /** 昵称式人名（前缀 1 字 + 1 字）：小美 / 老张 / 阿明。只在"无 NER 模型"的规则路径补扫 */
     private val NICKNAME_TOKEN = Regex("(?:小|老|阿)[\\u4e00-\\u9fa5]")
+
+    /**
+     * 无 NER 模型时的「对话 cue 人名」：`艾伦说道：` / `徐福道：` 这类**不以常见姓氏开头**的名字。
+     *
+     * 2026-11-10 用户反馈「角色获取太少」：规则路径原先只认百家姓 + 小/老/阿昵称，
+     * 西式/日式/自造名（艾伦、路明非式无姓设定）整类漏掉。这里用「人名 + 说话动词」
+     * 的强结构信号补扫，仍要求 ≥2 次出现（挡掉"注意："这类误报）。
+     */
+    private val CUE_NAME_REGEX = Regex(
+        "([\\u4e00-\\u9fa5]{2,3}?)(说道|问道|答道|笑道|喊道|叫道|沉声道|低声道|轻声道|开口道|说|道|问|答|喊|叫|叹)"
+    )
+
+    /** 段落起始的剧本式写法：`艾伦：你好。` */
+    private val COLON_NAME_REGEX = Regex("(?:^|[\\n。！？；])[ \\t\\u3000]*([\\u4e00-\\u9fa5]{2,4})[：:]")
+
+    /** 结构信号无法排除的代词/泛指（cue 路径专用；姓氏路径由 NerTextEngine 内部表兜住） */
+    private val CUE_STOP_NAMES = setOf(
+        "我们", "你们", "他们", "她们", "咱们", "大家", "众人", "两人", "三人", "一人",
+        "此人", "那人", "有人", "旁人", "对方", "自己", "这时", "此时", "闻言", "见状",
+        "接着", "然后", "于是", "只见", "只听", "注意", "所有", "全部", "任何", "其他"
+    )
+
+    /** cue 人名是否可信：长度 2~4、非伪名、非代词/泛指、不含副词/虚词用字 */
+    internal fun isPlausibleCueName(name: String): Boolean {
+        if (name.length !in 2..4) return false
+        if (name in CUE_STOP_NAMES) return false
+        if (NerTextEngine.isImplausibleName(name)) return false
+        return name.none { it in CUE_IMPLAUSIBLE_CHARS }
+    }
+
+    private val CUE_IMPLAUSIBLE_CHARS = setOf(
+        '忽', '然', '又', '便', '才', '就', '也', '都', '正', '在', '的', '是', '了', '着',
+        '把', '被', '和', '与', '跟', '对', '向', '从', '到', '要', '会', '能', '可', '却', '还'
+    )
+
+    /**
+     * 纯函数：无模型路径的 cue 人名候选（名字 → 出现次数）。
+     * 只统计「人名 + 说话动词」与「段首 名字：」两种强结构，避免泛化误报。
+     */
+    internal fun cueNameCandidates(paragraphs: List<String>): Map<String, Int> {
+        val counts = LinkedHashMap<String, Int>()
+        paragraphs.forEach { paragraph ->
+            CUE_NAME_REGEX.findAll(paragraph).forEach { match ->
+                val prev = paragraph.getOrNull(match.range.first - 1)
+                // 名字必须从词边界开始（前一字不是汉字），否则会把长词尾部当人名
+                if (prev != null && prev in '\u4e00'..'\u9fa5') return@forEach
+                val name = match.groupValues[1]
+                if (isPlausibleCueName(name)) counts[name] = (counts[name] ?: 0) + 1
+            }
+            COLON_NAME_REGEX.findAll(paragraph).forEach { match ->
+                val name = match.groupValues[1]
+                if (isPlausibleCueName(name)) counts[name] = (counts[name] ?: 0) + 1
+            }
+        }
+        return counts.filterValues { it >= MIN_RULE_UNSURNAMED_CUES }
+    }
 
     /** 昵称右侧 12 字内出现对话冒号/说话动词 ⇒ 视为有对话证据（昵称名常以"X：xxx"出现，无动词） */
     private fun hasDialogueCueNear(paragraph: String, start: Int, end: Int): Boolean {
@@ -177,6 +238,14 @@ object OfflineCharacterDiscovery {
             nicknameCandidates(paragraphs).forEach { (name, count) ->
                 cueCounts[name] = (cueCounts[name] ?: 0) + count
                 firstContext.putIfAbsent(name, paragraphs.firstOrNull { it.contains(name) }.orEmpty())
+            }
+            // 2026-11-10：补扫「非姓氏起头的对话人名」（艾伦说道 / 段首「艾伦：」），
+            // 只补新名字，避免与姓氏路径重复计数（既有排序/门槛口径不变）
+            cueNameCandidates(paragraphs).forEach { (name, count) ->
+                if (!cueCounts.containsKey(name)) {
+                    cueCounts[name] = count
+                    firstContext.putIfAbsent(name, paragraphs.firstOrNull { it.contains(name) }.orEmpty())
+                }
             }
         }
         return CueScan(cueCounts, firstContext)

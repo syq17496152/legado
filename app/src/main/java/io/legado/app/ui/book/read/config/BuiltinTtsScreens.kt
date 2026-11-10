@@ -149,6 +149,10 @@ sealed interface PageAction {
     data class AssignVoice(val characterId: Long, val voiceName: String) : PageAction
     data object Reload : PageAction
     data class EditCharacter(val characterId: Long) : PageAction
+    /** 2026-11-10 用户裁定：允许手动补录角色（识别不全时可自己加） */
+    data object AddCharacter : PageAction
+    /** 2026-11-10 用户裁定：角色管理页（新增/编辑/删除/关系网一站入口） */
+    data object ManageCharacters : PageAction
     /** T6.3：取消打标（已完成部分保留，下次续跑） */
     data object CancelTag : PageAction
     /** T6.4：编辑音色标签（名称/性别/年龄） */
@@ -249,6 +253,13 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
             OutlinedButton(onClick = { onAction(PageAction.AssignCasting) }, enabled = state.hasBook) {
                 Text(LocalContext.current.getString(R.string.builtin_tts_roles_assign_all))
             }
+            // 2026-11-10 用户裁定：识别不全时必须能手动补录 / 修正角色（不被自动清理）
+            OutlinedButton(onClick = { onAction(PageAction.AddCharacter) }, enabled = state.hasBook) {
+                Text("＋ 添加角色")
+            }
+            OutlinedButton(onClick = { onAction(PageAction.ManageCharacters) }, enabled = state.hasBook) {
+                Text("管理角色")
+            }
         }
         if (state.roleRows.isNotEmpty()) {
             LazyColumn(Modifier.weight(1f)) {
@@ -283,6 +294,10 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
                                     }
                                 }
                             }
+                            // 手动修正角色（改名/性别/别名）；换音色写回同一角色卡绑定
+                            TextButton(onClick = { onAction(PageAction.EditCharacter(row.characterId)) }) {
+                                Text("编辑")
+                            }
                             TextButton(onClick = { selected = row }) { Text("换音色") }
                         }
                     }
@@ -291,7 +306,7 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
         } else {
             AppCard {
                 Text(
-                    "还没有角色卡：先点「识别当前章角色」或到「首次配置向导」一键开书。",
+                    "还没有角色卡：可点「识别当前章角色」自动识别，或点「＋ 添加角色」手动补录（手动角色不会被自动清理）。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -561,7 +576,10 @@ private fun RoleStoryboardPanel(state: BuiltinTtsPageState, onAction: (PageActio
                         }
                     }
                     if (state.pickCharacters.isEmpty()) {
-                        Text("还没有角色卡：请先回到「角色配音」点识别角色", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "还没有角色卡：请先回到「角色配音」点识别角色，或点「＋ 添加角色」手动补录",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             },
