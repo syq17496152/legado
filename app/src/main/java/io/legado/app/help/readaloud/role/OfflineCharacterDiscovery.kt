@@ -94,13 +94,23 @@ object OfflineCharacterDiscovery {
         "接着", "然后", "于是", "只见", "只听", "注意", "所有", "全部", "任何", "其他"
     )
 
-    /** cue 人名是否可信：长度 2~4、非伪名、非代词/泛指、不含副词/虚词用字 */
+    /** cue 人名是否可信：长度 2~4、非伪名、非代词/泛指、不含副词/虚词用字、不以代词/身体词开头 */
     internal fun isPlausibleCueName(name: String): Boolean {
         if (name.length !in 2..4) return false
         if (name in CUE_STOP_NAMES) return false
+        if (name.first() in CUE_BAD_FIRST_CHARS) return false
         if (NerTextEngine.isImplausibleName(name)) return false
         return name.none { it in CUE_IMPLAUSIBLE_CHARS }
     }
+
+    /**
+     * 不能作为人名首字的字（2026-11-10 回归用例揭出）：`他心里说道` 会被切出「他心里」。
+     * 代词 + 身体/心理词 + 常见连词/副词——真名几乎不会以这些字开头。
+     */
+    private val CUE_BAD_FIRST_CHARS = setOf(
+        '他', '她', '它', '我', '你', '您', '咱', '这', '那', '哪', '谁', '其', '某', '每', '各',
+        '心', '里', '口', '嘴', '脑', '眼', '耳', '手', '脚', '又', '便', '就', '才', '还', '却'
+    )
 
     private val CUE_IMPLAUSIBLE_CHARS = setOf(
         '忽', '然', '又', '便', '才', '就', '也', '都', '正', '在', '的', '是', '了', '着',

@@ -75,6 +75,16 @@ class OfflineCharacterDiscoveryTest {
         assertFalse(OfflineCharacterDiscovery.isPlausibleCueName("张忽"))
     }
 
+    /** cue 补扫必须从词边界开始：`他心里说道` 不能切出「心里」这种词内片段 */
+    @Test
+    fun `词内片段不被当作 cue 人名`() {
+        val paragraphs = listOf(
+            "他心里说道：“别慌，还有机会。”",
+            "他心里说道：“再等等，天就亮了。”"
+        )
+        assertTrue(OfflineCharacterDiscovery.candidates(paragraphs).isEmpty())
+    }
+
     @Test
     fun `候选数量受上限约束`() {
         val names = listOf("张三", "李四", "王五", "赵六", "陈七", "杨八", "周九", "吴十")
