@@ -166,6 +166,40 @@ class LlmSettingsStateTest {
     }
 
     /**
+     * 模型就绪后的自动配置（用户裁定）：下载/导入完即帮用户开好本地 AI。
+     * 红线：低端机 / 缺引擎不能自动开（否则就是"开了但跑不动"的假就绪）；
+     * 用户选的「云端优先 / 关闭」不被静默改写。
+     */
+    @Test
+    fun `模型就绪后按设备能力自动开启本地 AI`() {
+        val ready = LlmSettingsState.autoConfigureAfterModelReady(
+            engineAvailable = true, totalRamMb = 12_000L, policy = LocalLlmPrefs.POLICY_LOCAL
+        )
+        assertTrue("高端机应自动开启", ready.enableLocalLlm)
+        assertTrue(ready.message.contains("已自动开启"))
+        assertTrue("要说明助手走端侧", ready.message.contains("端侧"))
+
+        val weak = LlmSettingsState.autoConfigureAfterModelReady(
+            engineAvailable = true, totalRamMb = 4_000L, policy = LocalLlmPrefs.POLICY_LOCAL
+        )
+        assertFalse("低端机不得自动开启", weak.enableLocalLlm)
+        assertTrue("要带出可执行原因", weak.message.contains("内存不足"))
+
+        val noEngine = LlmSettingsState.autoConfigureAfterModelReady(
+            engineAvailable = false, totalRamMb = 12_000L, policy = LocalLlmPrefs.POLICY_LOCAL
+        )
+        assertFalse(noEngine.enableLocalLlm)
+        assertTrue(noEngine.message.contains("未包含本地 AI 引擎"))
+
+        val online = LlmSettingsState.autoConfigureAfterModelReady(
+            engineAvailable = true, totalRamMb = 12_000L, policy = LocalLlmPrefs.POLICY_ONLINE
+        )
+        assertTrue("仍应设为当前模型并开启", online.enableLocalLlm)
+        assertTrue("但不得声称已切到仅本地", online.message.contains("云端优先"))
+        assertFalse(online.message.contains("已自动开启本地 AI"))
+    }
+
+    /**
      * 调试注入的 IPC 自检文案：L3 脚本按「连接推理进程 成功」判断链路是否成立，
      * 文案即契约 —— 这里锁死，防止后续改字把 7.2 的判据悄悄改坏。
      */

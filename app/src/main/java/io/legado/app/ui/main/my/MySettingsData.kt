@@ -14,6 +14,8 @@ import io.legado.app.ui.autoTask.AutoTaskActivity
 import io.legado.app.ui.book.bookmark.AllBookmarkActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
+import io.legado.app.ui.book.read.config.LlmSettingsActivity
+import io.legado.app.ui.book.read.config.VoiceAssetCenterActivity
 import io.legado.app.ui.config.AppearanceKitActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
@@ -112,6 +114,10 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
             title = context.getString(R.string.config_category_tools),
             rows = listOf(
                 actionRow("ai_setting", R.string.ai_setting, R.string.ai_setting_summary),
+                // 公共离线能力集中入口（用户裁定）：端侧文本模型与声音资产（音色/离线语音/理解模型/配乐/缓存）
+                // 属全局能力，不绑定具体书籍 —— 放在「我的 → 工具」，按书朗读时仍从听书设置进入同一页面。
+                actionRow("localAiModel", R.string.local_ai_model, R.string.local_ai_model_summary),
+                actionRow("voiceAssets", R.string.voice_asset_center, R.string.voice_asset_center_summary),
                 actionRow("autoTask", R.string.auto_task_manage, R.string.auto_task_manage_desc),
                 // video-player-dual-layout R11：视频播放器全局设置入口（布局模式/播放器类型/缓存等中心化配置）
                 actionRow("videoPlayerSetting", R.string.video_setting, R.string.video_setting_summary),
@@ -333,6 +339,10 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
         "ai_setting" -> startActivity<ConfigActivity> {
             putExtra("configTag", ConfigTag.AI_CONFIG)
         }
+
+        // 公共离线能力：端侧文本模型 / 声音资产（与听书设置内入口指向同一页面，不做第二套实现）
+        "localAiModel" -> startActivity<LlmSettingsActivity>()
+        "voiceAssets" -> startActivity<VoiceAssetCenterActivity>()
 
         // video-player-dual-layout R11：视频播放器全局设置页路由
         "videoPlayerSetting" -> startActivity<ConfigActivity> {

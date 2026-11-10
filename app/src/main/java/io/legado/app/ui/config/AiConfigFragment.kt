@@ -12,6 +12,7 @@ import io.legado.app.help.ai.AiToolRegistry
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.ui.book.read.config.LlmSettingsActivity
 import io.legado.app.ui.config.compose.ComposeSettingFragment
 import io.legado.app.ui.config.compose.SettingActionSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
@@ -53,6 +54,9 @@ class AiConfigFragment : ComposeSettingFragment() {
         const val KEY_SYSTEM_PROMPT = "aiSystemPrompt"
         const val KEY_WORLD_BOOK_MANAGE = "aiWorldBookManage"
         const val KEY_DEFAULT_MODEL_SETTINGS = "aiDefaultModelSettings"
+
+        /** 端侧文本模型入口（本地 AI 设置页） */
+        const val KEY_LOCAL_MODEL = "aiLocalModel"
 
         /** 未配置模型的占位文案（B1.3：摘要分行与 danger 判定共用同一真值，避免多处硬编码漂移） */
         private const val UNCONFIGURED_LABEL = "未配置"
@@ -204,6 +208,18 @@ class AiConfigFragment : ComposeSettingFragment() {
                             title = "默认模型",
                             summary = defaultModelSummary(),
                             onClick = ::showDefaultModelSettingsDialog
+                        ),
+                        // 用户裁定：端侧文本模型属 AI 能力，直接收进「我的 → 工具 → AI 设置」，
+                        // 不再只能从听书设置深处进入；下载/导入完成后由该页自动配好本地 AI。
+                        SettingActionSpec(
+                            key = KEY_LOCAL_MODEL,
+                            title = getString(R.string.local_ai_model),
+                            summary = getString(R.string.local_ai_model_summary),
+                            onClick = {
+                                startActivity(
+                                    Intent(requireContext(), LlmSettingsActivity::class.java)
+                                )
+                            }
                         ),
                         switch(
                             key = PreferKey.aiSceneDescEnabled,

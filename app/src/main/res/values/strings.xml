@@ -2557,6 +2557,10 @@ Selected text or question:
 
     <!-- Auto-added AI config strings -->
     <string name="ai_setting_summary">分开配置提供商和模型</string>
+    <string name="local_ai_model">本地模型（端侧）</string>
+    <string name="local_ai_model_summary">离线小模型：不出端、不花钱；下载后自动配好 AI 助手</string>
+    <string name="voice_asset_center">声音与离线资源</string>
+    <string name="voice_asset_center_summary">音色、离线语音模型、理解模型、配乐与缓存</string>
     <string name="ai_enable">Enable AI</string>
     <string name="ai_enable_summary_disabled">当前提供商下有模型时才能开启</string>
     <string name="ai_system_prompt">系统提示词</string>

@@ -196,21 +196,38 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
 
     private suspend fun loadFacts(): LlmSettingsState.Facts {
         val models = withContext(Dispatchers.IO) { manager.scan() }
-        val totalRamMb = runCatching {
-            val info = ActivityManager.MemoryInfo()
-            getSystemService(ActivityManager::class.java).getMemoryInfo(info)
-            info.totalMem / (1024L * 1024L)
-        }.getOrDefault(8000L)
         return LlmSettingsState.Facts(
             engineAvailable = engineAvailable(),
             modelInstalled = models.isNotEmpty(),
-            totalRamMb = totalRamMb,
+            totalRamMb = totalRamMb(),
             enabled = AppConfig.localLlmEnabled,
             policy = AppConfig.aiTaskPolicy,
             speedTokPerSec = AppConfig.localLlmSpeedTokPerSec,
             models = models.map { Triple(it.id, it.displayName, it.bytes) },
             activeModelId = AppConfig.localLlmProfileId
         )
+    }
+
+    private fun totalRamMb(): Long = runCatching {
+        val info = ActivityManager.MemoryInfo()
+        getSystemService(ActivityManager::class.java).getMemoryInfo(info)
+        info.totalMem / (1024L * 1024L)
+    }.getOrDefault(8000L)
+
+    /**
+     * 模型就绪后自动配置本地 AI（用户裁定：下载/导入完成即帮用户配好，不用再去翻开关）。
+     * 判定与文案统一走纯函数 [LlmSettingsState.autoConfigureAfterModelReady]。
+     */
+    private fun configureAfterModelReady(): String {
+        val result = LlmSettingsState.autoConfigureAfterModelReady(
+            engineAvailable = engineAvailable(),
+            totalRamMb = totalRamMb(),
+            policy = AppConfig.aiTaskPolicy
+        )
+        if (result.enableLocalLlm) {
+            AppConfig.localLlmEnabled = true
+        }
+        return result.message
     }
 
     /** 引擎可用 = 模块类存在 + 当前 ABI 在模块支持列表内（v7a 包没有 llama so） */
@@ -270,7 +287,8 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
             when (result) {
                 is LlmModelManager.ImportResult.Success -> {
                     AppConfig.localLlmProfileId = result.model.id
-                    message = "导入成功：${result.model.displayName}（${LlmSettingsState.sizeText(result.model.bytes)}）"
+                    message = "导入成功：${result.model.displayName}（${LlmSettingsState.sizeText(result.model.bytes)}）" +
+                            configureAfterModelReady()
                 }
                 is LlmModelManager.ImportResult.Failure -> message = "导入失败：${result.message}"
                 null -> message = "导入失败：无法读取所选文件"
@@ -304,7 +322,8 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
             when (result) {
                 is LlmModelDownloader.Result.Success -> {
                     AppConfig.localLlmProfileId = profile.id
-                    message = "下载完成：${profile.title}（${LlmSettingsState.sizeText(result.bytes)}）"
+                    message = "下载完成：${profile.title}（${LlmSettingsState.sizeText(result.bytes)}）" +
+                            configureAfterModelReady()
                 }
                 is LlmModelDownloader.Result.Failure -> message = result.message
             }

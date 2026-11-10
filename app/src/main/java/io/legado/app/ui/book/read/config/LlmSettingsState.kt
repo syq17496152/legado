@@ -32,6 +32,44 @@ data class LlmSettingsUi(
 
 object LlmSettingsState {
 
+    /** 模型就绪后的自动配置结论（用户裁定：下载/导入完成即帮用户配好本地 AI） */
+    data class AutoConfigureResult(
+        val enableLocalLlm: Boolean,
+        val message: String
+    )
+
+    /**
+     * 模型就绪 → 自动配置本地 AI。
+     *
+     * 只在「引擎在 + 设备够」时自动开启（与 [LocalLlmFeature] 同一判定口径，避免出现
+     * 低端机/缺引擎设备被强制打开后再静默失效的假就绪）。
+     * 不擅自改 AI 任务策略：用户可能刻意选了「云端优先 / 关闭」，只给出可执行提示。
+     */
+    fun autoConfigureAfterModelReady(
+        engineAvailable: Boolean,
+        totalRamMb: Long,
+        policy: String
+    ): AutoConfigureResult {
+        val verdict = LocalLlmFeature.evaluate(
+            LocalLlmFeature.Facts(
+                engineAvailable = engineAvailable,
+                modelInstalled = true,
+                totalRamMb = totalRamMb,
+                enabled = true
+            )
+        )
+        if (!verdict.usable) {
+            return AutoConfigureResult(false, "（未自动开启本地 AI：${verdict.message}）")
+        }
+        val policyNow = LocalLlmPrefs.policyOf(policy)
+        val message = if (policyNow == LocalLlmPrefs.POLICY_LOCAL) {
+            "（已自动开启本地 AI，AI 助手将优先使用端侧模型）"
+        } else {
+            "（已设为当前模型；AI 任务策略为「${policyLabel(policyNow)}」，可在本页切换为仅本地）"
+        }
+        return AutoConfigureResult(true, message)
+    }
+
     data class Facts(
         val engineAvailable: Boolean,
         val modelInstalled: Boolean,

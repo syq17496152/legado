@@ -1,0 +1,950 @@
+{
+  "_comment": "G-42 空测试豁免台账（testing-iron-rule T7）。legacy=存量结构断言测试（只减不增）；exception=因测试缝不可行为化而必须结构断言（须填 reason）。",
+  "entries": [
+    {
+      "path": "app/src/test/java/io/legado/app/data/dao/RetiredDaoQueryTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：B25 退役的 12 条零调用 DAO 窄查询（`@Dao` 接口方法）需 Room 生成实现 + appCtx 构造库才能行为化，纯 JVM 无法证明「方法不存在」这一命题 ⇒ 只能源码文本探针；同时双侧锁「活替代者仍在」（本轮实证：误删过 `successCandidatesByChapterContent`，靠编译期才发现）。若后续有可在 JVM 构造的 DAO 测试缝，应转行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/AppDatabaseGuardTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：appDb 依赖 appCtx（splitties），纯 JVM 无法构造 ⇒ 主线程查库守卫只能以源码文本探针守护（AD-04）；开关移除后应切换为「主线程必抛」的行为断言并移除本豁免"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/storage/BackupClearCacheLockTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：Backup.backupPath/zipFilePath 依赖 appCtx，纯 JVM 无法构造并发备份场景 ⇒ BUG-3（clearCache 无锁竞争）只能以源码文本探针守护；若后续引入可在 JVM 构造的锁语义则改行为断言"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/AppMemoryTrimWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/api/controller/BackupControllerRssReadRecordTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/api/controller/BackupControllerSceneBookmarkTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/constant/PreferKeyMangaKeysTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/constant/RetiredPreferKeyTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/DatabaseMigration110To111Test.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/DatabaseMigration111To112Test.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/DatabaseMigration112To113Test.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/dao/BookDaoTempCleanupTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/dao/McpAuditDaoContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/dao/RssArticleDaoVideoContextTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/dao/RssReadRecordDaoContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/dao/SceneBookmarkDaoContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/data/entities/BookVoiceAnchorFieldTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/book/BookHelpCacheWriteGuardWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigAiProviderBalanceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigAiToolNamesLimitTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigEpubReadEngineDefaultTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigMangaDefaultsTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigRssArticleRefreshToTopTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigSceneDescSwitchTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppVersionNamePersistTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/ReadHeaderBackConfigTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/ReadMenuHelpGuidanceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/ThemeConfigChainTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/TopBarActionSizeDimensSingleSourceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/TopBarIconContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/TopBarRefreshSignatureTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/crypto/SymmetricCryptoLogComplianceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/download/ChunkDownloaderUaSingleSourceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/exoplayer/BrowserUaCronetVersionTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/image/ImageShareHelperTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/rss/RssMarkReadWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/source/BookSourceConfigurationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/storage/AutoTaskBackupSyncTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/storage/BackupRestoreParityTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/storage/BackupRssReadRecordParityTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/lib/theme/view/ThemeCheckBoxProgrammaticCtorTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/lib/webdav/WebDavMessageFallbackTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/AudioPlayReadTimeSettleTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/AutoTaskSaveRulesTransactionTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/BookCoverMangaLoadTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/BookProgressStampAwaitFailTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/VideoBookshelfStateTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/VideoPlayFavoriteApiTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/VideoPlaySelfHealStateTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/analyzeRule/AnalyzeUrlDataUriDecodeTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/localBook/epubcore/template/ReaderBuiltinTemplateChromeBudgetTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/localBook/epubcore/web/EpubWebLayoutSessionRendererCrashTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/service/AudioPlaybackSelfHealWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/service/CheckSourceServiceStageWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/service/CheckRssSourceServiceWiringTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：CheckRssSourceService 继承 BaseService 且依赖 appCtx，JVM 无法实例化；分组读写又走 Android TextUtils（JVM 不可执行，见 QualityReportApplierTest 注释）⇒ 接线只能以源码文本探针守护，判定内核另由纯函数单测 RssCheckFailureUnificationTest 覆盖"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/RssCheckConfigWiringTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：CheckRssSource 的对象初始化即访问 CacheManager（依赖 appCtx），纯 JVM 触发会污染整个测试 JVM（NEW-14 同族，与 AppConfig 注入陷阱一致）⇒ 配置面形态只能用源码文本探针守护；分组判定内核另由纯函数单测 RssCheckFailureUnificationTest 覆盖"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/book/ContentProcessorCancellationTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：ContentProcessor 依赖 appCtx/appDb(Room)，纯 JVM 无法驱动其替换净化路径 ⇒ 只能以源码文本探针守护「取消信号必须重抛」形态；若后续该路径抽出可 JVM 构造的纯函数，应改为行为断言并移除本豁免"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/image/CoverImageViewCancellationTest.kt",
+      "type": "exception",
+      "reason": "AD-02 例外：CoverImageView 该路径依赖 Android View/Bitmap 与 delay+ensureActive 轮询，纯 JVM 无法驱动 ⇒ 只能以源码文本探针守护「取消信号必须重抛」形态；若后续抽出可 JVM 构造的协程体，应改为行为断言并移除本豁免"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/service/ReadAloudVoiceAnchorTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/service/kernel/BackupKernelTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/service/kernel/RelayKernelTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/testkit/FixturesConventionTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/ProgrammaticRecyclerViewLayoutManagerGuardTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/about/AboutPositioningTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/about/AboutShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/about/AboutThirdPartyNoticeTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/about/ReadRecordTopBarNodeRetiredTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/adapter/SourceFolderAdapterRetiredTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/association/ImportBookSourceEmptyConfigTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/association/ImportBookSourceStreamingTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/audio/AudioPlayThemeInPlaceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/changesource/ChangeSourceDeadAdapterRetiredTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/character/compose/AiAvatarPickerGridTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/explore/ExploreShowShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/import/ImportBookShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/import/local/LocalImportBookShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/import/remote/RemoteImportBookShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/manage/ArrangeBookMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/manage/BookshelfManageShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/manage/compose/ArrangeBookComposeListTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/manga/ReadMangaLongTapSaveTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/manga/ReadMangaVolumeKeyGateTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/manga/SceneBookmarkMangaEntryTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/EpubEngineFallbackRoutingTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/ReadMenuAiPurifyEntryTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/ReadSelectionImageSsivTrackTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/SceneBookmarkEntryWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/ContentSelectAiPurifyActionTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/ContentSelectSceneBookmarkActionTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/ReadStyleDialogTemplateDecorationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/TipConfigHeaderBackUiTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/page/PageViewHeaderBackWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/textweb/TextRichReadViewTapTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/search/SearchChipTokenTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/search/SearchShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/searchContent/SearchContentShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/searchContent/compose/SearchContentResultListTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/source/manage/BookSourceCheckStageUiTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/source/manage/BookSourceShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/storage/StorageManageOverflowIconResTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/toc/rule/TxtTocRuleOverflowIconResTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/browser/WebViewShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/AiConfigFragmentSceneDescSwitchTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/AiImageProviderEditShellParityTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/ContainerManageShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/CoverCollectionShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/DiscoverySubscriptionRefreshToTopSettingTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/ManageShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/OtherConfigEpubEngineDefaultTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/OtherConfigMangaSwitchTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/ReaderTemplateEditorPayloadTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/ReaderTemplateManageShellTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/WebServiceSettingsScreenContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/dict/rule/DictRuleOverflowIconResTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/download/DownloadHostRefreshHookTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/download/DownloadManageOverflowIconResTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/download/DownloadTagBarPaddingTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/file/HandleFileShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/font/FontSelectComposeOnlyTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/highlight/HighlightRuleOverflowIconResTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/image/ImageDetailShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/image/ImagePyramidUnifiedTrackTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/image/ImageSaveShareNamingWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/image/SceneBookmarkImageEntryTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/image/adapter/ImageCanvasUnifiedTrackWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/image/adapter/ImageLegacyPagerAdapterRetiredTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/login/WebViewLoginShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/BottomBarSearchRemovalTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/MainActivityComposeHostScopeTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/MainTopBarRefreshUnifyTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/UpgradeChangelogWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/ai/AiImageGalleryShellParityTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/ai/AiImagePreviewSsivTrackTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/bookshelf/BookshelfContinueBarInsetsContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/bookshelf/style1/BookshelfFragment1SnapshotTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2SnapshotTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/explore/DiscoverySuiteManageShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/my/SceneBookmarkEntryTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/my/WebServiceEntryWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/readrecord/ReadRecordFragmentTopBarWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/qrcode/QrCodeShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/replace/ReplaceRuleShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/replace/edit/ReplaceEditShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/article/RssArticleRefreshToTopTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/article/RssArticlesComposeListMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/article/RssArticlesReadContextTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/article/RssArtivlesShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/article/compose/RssArticleImageLifecycleContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/article/compose/RssArticlesComposeListScrollTopRequestTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/favorites/RssFavoritesShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/favorites/compose/RssFavoritesComposeListTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/read/ReadRssMarkReadWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/read/ReadRssShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/read/ReadRssViewModelDataUriDecodeTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/search/RssArticleInfoShellParityTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/search/RssSearchShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/source/edit/RssSourceEditShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/source/manage/RssSourceOpmlMenuWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/source/manage/RssSourceShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/rss/subscription/RuleSubShellMigrationTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/scene/SceneBookmarkLibraryWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/source/recycle/RecycleBinScreenTokenTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/video/VideoPlayerActivityBookshelfIntentTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/MainTopBarViewSearchTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/PopupActionComposeOnlyTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/TopBarPopupIconResAndModeContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/TopBarRefreshContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/components/GlassTopAppBarCapabilityKdocTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/components/GlassTopAppBarSignatureKeyTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/components/MenuActionIconResPassthroughTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/components/SearchBarFocusWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/components/SettingsSelectableRowConvergenceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/components/TopBarNavIconContractTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/compose/AppDialogFrameAdaptiveHeightTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/compose/LegadoMiuixChoiceRowIconSourceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/dialog/PhotoDialogSsivTrackTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/recycler/scroller/FastScrollRecyclerViewProgrammaticCtorTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/utils/BareAndroidLogCleanupTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/utils/ColorUtilsContrastSingleSourceTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/web/McpAuditorWiringTest.kt",
+      "type": "legacy",
+      "reason": "存量结构断言测试（G-42 建立时的基线；重构触及时应转为行为测试并从本台账移除）"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/AiImageProviderDeadActionsRetiredTest.kt",
+      "type": "exception",
+      "reason": "B15 死码清理：被 providerActions 取代的旧菜单实现删除，断言缝＝Compose 宿主 UI 不可纯 JVM 行为化 ⇒ 只能源码探针守护「旧实现不回潮 + 活单源仍接线」"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/ReadAloudRoleDialogDeadAliasesRetiredTest.kt",
+      "type": "exception",
+      "reason": "B15 死码清理：Compose 弹窗内部旧实现/转发别名删除，纯 JVM 不可行为化 ⇒ 源码探针守护「旧别名不回潮 + 活单源仍在接线」"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/ShareNoteDeadPathRetiredTest.kt",
+      "type": "exception",
+      "reason": "B15 死码清理：划词分享笔记旧链路（Activity 入口 + 自建 WebView 渲染）退役，Activity/WebView 渲染不可纯 JVM 行为化 ⇒ 源码探针守护「旧链路不回潮 + 预览浮层单源仍在」"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/exoplayer/ManifestBypassWiringTest.kt",
+      "type": "exception",
+      "reason": "fix-live-hls-manifest-cache 接线不变量：ManifestBypassDataSource 的 open(DataSpec) 依赖 android.net.Uri/DataSpec，纯 JVM 单测无法构造（无 Robolectric）⇒ 分发顺序只能源码文本探针守护；行为层（isManifestUrl 真/假例）已由 ManifestUrlMatcherTest 覆盖。若后续引入可 JVM 构造的 DataSpec 测试缝，应转行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/config/ReadAloudDialogResumeHintTest.kt",
+      "type": "exception",
+      "reason": "offline-tts-ux-consolidation R23「继续上次」：提示依赖 ReadBook 全局单例与 curTextChapter（appDb/appCtx），纯 JVM 无法构造出『上次章节 ≠ 当前章节』的运行时态（无 Robolectric）⇒ 只能以源码文本探针守护『比较章节索引 + 点击回跳 openChapter』这条接线；状态判定内核已由 CastSceneState/OnboardingHealthCheck 等纯函数单测覆盖。若后续引入可构造的 ReadBook 测试缝，应改为行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/read/BuiltinTtsOverflowEntriesTest.kt",
+      "type": "exception",
+      "reason": "offline-tts-ux-consolidation AD-01 入口收敛：被守护的命题是「XML 菜单项/溢出项产出函数已移除且不回潮」「朗读面板改为跳 CastSceneActivity 且不再叠配置对话框」——均为资源文件与 Compose 宿主的跨文件结构关系，纯 JVM 无法拉起页面行为化（无 Robolectric）。行为层已由 ReadAloudDialog 的 CastScene 跳转在真机场景走查覆盖；若后续引入 Compose 测试缝，应改为「点设置 → 到达听书设置」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/widget/compose/ComposeIconResourceTypeTest.kt",
+      "type": "exception",
+      "reason": "compose-page-regression-sweep：painterResource 只接受 vector/位图，而 iconRes 误指 <selector> 只会在 Activity 组合期崩溃（ReplaceRuleActivity 2026-11-08 实证 FATAL）。该缺陷的测试缝是「源码引用 × res 文件根标签」的跨文件结构关系，纯 JVM 无法构造 Compose 组合 ⇒ 只能以源码+资源文本探针守护；判据内核 isComposeIconCompatible 已由 judgement_acceptsVectorAndRejectsSelector 以真值断言（vector=true / selector·shape·layer-list=false）覆盖。若后续引入 Robolectric/Compose 测试缝，应改为「拉起页面不抛异常」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/main/my/LocalAiEntryWiringTest.kt",
+      "type": "exception",
+      "reason": "用户裁定 2026-11-10「公共离线能力收进我的设置」：被守护的命题是「我的→工具 存在 localAiModel/voiceAssets 两行 + handleSettingsRowClick 跳到共享页面 + 双语言 strings 齐备」——入口接线依赖 Context/Activity 导航，纯 JVM 无法拉起页面行为化（无 Robolectric）。行为层判定内核由 LlmSettingsStateTest 的 autoConfigureAfterModelReady 真值断言覆盖；若后续引入 Robolectric，应改为「点行 → 到达目标 Activity」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/AiConfigLocalModelEntryTest.kt",
+      "type": "exception",
+      "reason": "用户裁定 2026-11-10「文本模型放进 AI 设置」：AiConfigFragment 为 Compose 设置页，入口是否存在属源码结构关系，纯 JVM 无法组合页面（无 Robolectric）；模型就绪后的自动配置行为已由 LlmSettingsStateTest.autoConfigureAfterModelReady 以真值断言覆盖。若后续引入 Robolectric/Compose 测试缝，应改为「AI 设置页渲染出本地模型行并点击可达」的行为断言并移除本豁免。"
+    }
+  ]
+}
