@@ -155,6 +155,8 @@ sealed interface PageAction {
     data object ManageCharacters : PageAction
     /** T6.3：取消打标（已完成部分保留，下次续跑） */
     data object CancelTag : PageAction
+    /** 2026-11-10 用户裁定：整理音色库（值域归一 + 去重 + 重新归档） */
+    data object CurateVoices : PageAction
     /** T6.4：编辑音色标签（名称/性别/年龄） */
     data class SaveVoiceMeta(
         val voiceId: String,

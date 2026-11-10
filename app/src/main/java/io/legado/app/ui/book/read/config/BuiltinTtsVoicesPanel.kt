@@ -3,6 +3,8 @@ package io.legado.app.ui.book.read.config
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,13 +48,19 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.BuiltinTtsRuntime
 import io.legado.app.help.tts.builtin.BuiltinVoiceFilter
+import io.legado.app.help.tts.builtin.VoiceLibraryCurator
+import io.legado.app.help.tts.builtin.VoiceTagNormalizer
 
 /**
  * 音色页：导入/打标 → 自录（折叠）→ 检索 → 列表。
  *
  * 视觉口径：主操作最多两个实心/描边按钮，其余为次要文字按钮；
  * 音色行用"首字头像 + 名称/元信息 + 试听/删除图标按钮"的紧凑结构。
+ *
+ * 归档 chips 用 [FlowRow]（2026-11-10 真机铁证：横向滚动的年龄行在 1200px 屏把「未标年龄」裁掉，
+ * 与「管理角色」被挤出可视区是同一类失守）。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun VoicesPanel(
     state: BuiltinTtsPageState,
@@ -65,6 +73,9 @@ internal fun VoicesPanel(
     var gender by remember { mutableStateOf(BuiltinVoiceFilter.Gender.ALL) }
     var untaggedOnly by remember { mutableStateOf(false) }
     var poolId by remember { mutableStateOf("") }
+    // 归档维度（2026-11-10）：年龄/性格与性别同级，都是"找音色"的入口
+    var ageFilter by remember { mutableStateOf("") }
+    var moodFilter by remember { mutableStateOf("") }
     // T6.4：点音色行打开标签编辑（名称/性别/年龄），只影响索引不改音频
     var editing by remember { mutableStateOf<BuiltinVoice?>(null) }
     // 自录区默认折叠：音色管理的主任务是"看列表"，录音是低频操作
@@ -113,6 +124,11 @@ internal fun VoicesPanel(
                 contentPadding = PaddingValues(horizontal = 10.dp)
             ) { Text("对比试听") }
             TextButton(
+                onClick = { onAction(PageAction.CurateVoices) },
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) { Text("整理音色库") }
+            TextButton(
                 onClick = { onAction(PageAction.CancelTag) },
                 contentPadding = PaddingValues(horizontal = 10.dp),
                 colors = ButtonDefaults.textButtonColors(contentColor = mutedColor)
@@ -130,7 +146,9 @@ internal fun VoicesPanel(
                 query = query,
                 gender = gender,
                 untaggedOnly = untaggedOnly,
-                poolId = poolId
+                poolId = poolId,
+                age = ageFilter,
+                mood = moodFilter
             )
         )
         if (state.voices.isNotEmpty()) {
@@ -166,7 +184,7 @@ internal fun VoicesPanel(
                         FilterChip(
                             selected = poolId == name,
                             onClick = { poolId = name },
-                            label = { Text(name) }
+                            label = { Text(VoiceTagNormalizer.poolLabel(name)) }
                         )
                     }
                 }
@@ -192,6 +210,60 @@ internal fun VoicesPanel(
                     onClick = { untaggedOnly = !untaggedOnly },
                     label = { Text("未打标") }
                 )
+            }
+            // 年龄归档（2026-11-10）：童/少年/青年/中年/老年 + 未标注（自动换行，不裁切）
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilterChip(
+                    selected = ageFilter.isBlank(),
+                    onClick = { ageFilter = "" },
+                    label = { Text("全部年龄") }
+                )
+                VoiceTagNormalizer.AGE_ORDER.forEach { key ->
+                    FilterChip(
+                        selected = ageFilter == key,
+                        onClick = { ageFilter = if (ageFilter == key) "" else key },
+                        label = { Text(VoiceTagNormalizer.ageLabel(key)) }
+                    )
+                }
+                FilterChip(
+                    selected = ageFilter == BuiltinVoiceFilter.Criteria.UNLABELED,
+                    onClick = {
+                        ageFilter = if (ageFilter == BuiltinVoiceFilter.Criteria.UNLABELED) {
+                            ""
+                        } else {
+                            BuiltinVoiceFilter.Criteria.UNLABELED
+                        }
+                    },
+                    label = { Text("未标年龄") }
+                )
+            }
+            // 性格归档：只列出库里真的标注过的性格，避免一排空选项
+            val moodKeys = VoiceTagNormalizer.MOOD_ORDER.filter { key ->
+                state.voices.any { key in BuiltinVoiceFilter.moodsOf(it) }
+            }
+            if (moodKeys.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = moodFilter.isBlank(),
+                        onClick = { moodFilter = "" },
+                        label = { Text("全部性格") }
+                    )
+                    moodKeys.forEach { key ->
+                        FilterChip(
+                            selected = moodFilter == key,
+                            onClick = { moodFilter = if (moodFilter == key) "" else key },
+                            label = { Text(VoiceTagNormalizer.moodLabel(key)) }
+                        )
+                    }
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -219,48 +291,63 @@ internal fun VoicesPanel(
             }
             return@Column
         }
+        // 归档分组（2026-11-10）：本档可用 → 性别 → 年龄。282 条平铺不可用，分组后一眼能定位。
+        val sections = VoiceLibraryCurator.archive(filtered, activeProfile?.id)
         LazyColumn(Modifier.weight(1f)) {
-            items(filtered, key = { it.id }) { voice ->
-                AppCard(
-                    modifier = Modifier.padding(vertical = 3.dp),
-                    onClick = { editing = voice }
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        VoiceAvatar(BuiltinTtsUiSupport.voiceTitle(voice.displayName))
-                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                            Text(
-                                text = BuiltinTtsUiSupport.voiceTitle(voice.displayName),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1
-                            )
-                            Text(
-                                // 「需切档」放最前：该行 maxLines=1，放末尾会被元信息挤掉
-                                text = (if (activeProfile != null &&
-                                        !BuiltinVoiceFilter.usableIn(activeProfile, voice)
-                                    ) "需切档 · " else "") +
-                                    BuiltinTtsUiSupport.voiceMetaText(voice),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = mutedColor,
-                                maxLines = 1
-                            )
-                        }
-                        IconButton(onClick = { onAction(PageAction.PreviewVoice(voice.voiceName)) }) {
-                            Icon(
-                                Icons.Filled.PlayArrow,
-                                contentDescription = context.getString(R.string.builtin_tts_voice_preview),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        if (!voice.readOnly) {
-                            IconButton(onClick = { onAction(PageAction.DeleteVoice(voice.id)) }) {
-                                Icon(
-                                    Icons.Filled.Delete,
-                                    contentDescription = "删除音色",
-                                    tint = mutedColor,
-                                    modifier = Modifier.size(19.dp)
+            sections.forEach { section ->
+                item(key = "sec-${section.key}") {
+                    Text(
+                        text = section.title,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp, start = 2.dp)
+                    )
+                }
+                items(section.voices, key = { it.id }) { voice ->
+                    AppCard(
+                        modifier = Modifier.padding(vertical = 3.dp),
+                        onClick = { editing = voice }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            VoiceAvatar(BuiltinTtsUiSupport.voiceTitle(voice.displayName))
+                            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                Text(
+                                    text = BuiltinTtsUiSupport.voiceTitle(voice.displayName),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
                                 )
+                                Text(
+                                    // 「需切档」放最前：该行 maxLines=1，放末尾会被元信息挤掉
+                                    text = (if (activeProfile != null &&
+                                            !BuiltinVoiceFilter.usableIn(activeProfile, voice)
+                                        ) "需切档 · " else "") +
+                                        BuiltinTtsUiSupport.voiceMetaText(voice),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = mutedColor,
+                                    maxLines = 1
+                                )
+                            }
+                            IconButton(
+                                onClick = { onAction(PageAction.PreviewVoice(voice.voiceName)) }
+                            ) {
+                                Icon(
+                                    Icons.Filled.PlayArrow,
+                                    contentDescription = context.getString(R.string.builtin_tts_voice_preview),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            if (!voice.readOnly) {
+                                IconButton(onClick = { onAction(PageAction.DeleteVoice(voice.id)) }) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "删除音色",
+                                        tint = mutedColor,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -389,7 +476,8 @@ private fun VoiceMetaDialog(
                     Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("" to "未定", "teen" to "少年", "youth" to "青年", "aged" to "老年")
+                    listOf("" to "未定", "teen" to "少年", "youth" to "青年",
+                        "middle" to "中年", "aged" to "老年")
                         .forEach { (value, label) ->
                             FilterChip(
                                 selected = age == value,

@@ -49,8 +49,9 @@ class BuiltinVoiceExporterTest {
         val voice = target.list().first()
         assertEquals("旁白男", voice.name)
         assertEquals("这是逐字稿内容", voice.refText)
-        assertEquals("男", voice.gender)
-        assertEquals("青年", voice.age)
+        // 2026-11-10：导入端统一值域（中文 男/青年 → male/youth），round-trip 以规范值为准
+        assertEquals("male", voice.gender)
+        assertEquals("youth", voice.age)
         assertTrue(voice.tags.contains("旁白"))
         assertTrue(target.audioFile(voice).isFile)
     }

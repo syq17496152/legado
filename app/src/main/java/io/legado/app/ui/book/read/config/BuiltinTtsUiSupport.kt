@@ -4,6 +4,7 @@ import io.legado.app.help.readaloud.casting.CharacterVoiceAssignService
 import io.legado.app.help.tts.builtin.BuiltinEngineState
 import io.legado.app.help.tts.builtin.BuiltinVoice
 import io.legado.app.help.tts.builtin.VoiceAutoTagger
+import io.legado.app.help.tts.builtin.VoiceTagNormalizer
 import java.util.Locale
 
 /** 管理页纯逻辑（可单测）：导入档案推断 + 体积格式化 + 页签数量 */
@@ -208,23 +209,19 @@ internal object BuiltinTtsUiSupport {
             BuiltinVoice.ORIGIN_SELF -> "自录"
             else -> "导入"
         }
-        val genderLabel = when (voice.gender) {
-            "male" -> "男"
-            "female" -> "女"
-            else -> ""
-        }
-        val ageLabel = when (voice.age) {
-            "teen" -> "少年"
-            "youth" -> "青年"
-            "aged" -> "老年"
-            else -> ""
-        }
+        val genderLabel = VoiceTagNormalizer.genderLabel(VoiceTagNormalizer.gender(voice.gender))
+        val ageLabel = VoiceTagNormalizer.ageLabel(VoiceTagNormalizer.age(voice.age))
+        val moodLabels = voice.tags.mapNotNull {
+            VoiceTagNormalizer.mood(it).takeIf { m -> m.isNotBlank() }
+        }.map { VoiceTagNormalizer.moodLabel(it) }.distinct()
         return buildList {
             add(badge)
-            if (voice.groupId.isNotBlank()) add("池:${voice.groupId}")
+            // 池名一律中文展示（历史索引里存的是 narration/youth 这类内部值）
+            if (voice.groupId.isNotBlank()) add("池:${VoiceTagNormalizer.poolLabel(voice.groupId)}")
             // 名称已写"男/女"或"少年/青年/老年"时不再重复（避免"男 · 男"这类冗余）
             if (genderLabel.isNotBlank() && !voice.displayName.contains(genderLabel)) add(genderLabel)
             if (ageLabel.isNotBlank() && !voice.displayName.contains(ageLabel)) add(ageLabel)
+            if (moodLabels.isNotEmpty()) add(moodLabels.joinToString("/"))
             // 可读性优先：「稿57字」这种压缩写法在列表里容易被读成乱码，改成完整词
             if (voice.refText.isNotEmpty()) add("逐字稿 ${voice.refText.length} 字")
         }.joinToString(" · ")

@@ -112,6 +112,19 @@ class ClonettsVoiceImporter(
                             return@forEach
                         }
                         val packEntry = packById[id]
+                        // 值域归一（2026-11-10）：导入包写中文（女/青年/未定），内置写英文（female/teen）
+                        // ⇒ 入库即归一，避免列表/筛选出现两套口径
+                        val rawGender = packEntry?.gender.orEmpty()
+                        val rawAge = packEntry?.ageByName.orEmpty()
+                        val gender = VoiceTagNormalizer.gender(rawGender)
+                        val age = VoiceTagNormalizer.age(rawAge).ifBlank {
+                            VoiceTagNormalizer.ageFromText(name)
+                        }
+                        val tags = VoiceTagNormalizer.tags(
+                            packEntry?.tags.orEmpty() + profile.roleTags,
+                            gender,
+                            age
+                        )
                         // T2.2：入库前统一加工（下混/裁静音/重采样/峰值归一/时长校验）；
                         // 加工失败保留原始音频（不能因为"太短/太长"就让整包导入失败）
                         val processed = ReferenceAudioProcessor.process(wavBytes, targetSampleRate)
@@ -126,9 +139,6 @@ class ClonettsVoiceImporter(
                             skipped++
                             return@forEach
                         }
-                        val gender = packEntry?.gender.orEmpty()
-                        val age = packEntry?.ageByName.orEmpty()
-                        val tags = (packEntry?.tags.orEmpty() + profile.roleTags).filter { it.isNotBlank() }
                         val voice = store.prepareVoice(
                             name = name,
                             pcmWavBytes = audioBytes,

@@ -52,8 +52,9 @@ class ClonettsVoiceImporterTest {
         val voice = store.list().first()
         assertEquals("旁白男", voice.name)
         assertEquals("这是逐字稿", voice.refText)
-        assertEquals("男", voice.gender)
-        assertEquals("青年", voice.age)
+        // 2026-11-10：入库即值域归一（中文 男/青年 → 规范值 male/youth），避免列表里两套口径混排
+        assertEquals("male", voice.gender)
+        assertEquals("youth", voice.age)
         assertEquals(BuiltinVoice.ORIGIN_ZIP, voice.origin)
     }
 

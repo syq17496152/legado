@@ -57,6 +57,22 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
 
     private var ui by mutableStateOf(VoiceAssetCenterUi("", emptyList(), false))
 
+    /**
+     * NER 模型导入（2026-11-10）：原来这里只跳内置 TTS 页，不落任何选择器
+     * ⇒ 用户点「导入 NER 模型」什么也没发生，模型一直没导进来。这里直接开文件选择器。
+     */
+    private val pickNerZip = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            toastOnUi("导入 NER 模型…")
+            val result = withContext(Dispatchers.IO) { NerModelManager.importZip(this@VoiceAssetCenterActivity, uri) }
+            toastOnUi(result.message)
+            reload()
+        }
+    }
+
     override val binding: ViewBinding by lazy {
         val view = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
@@ -154,8 +170,11 @@ class VoiceAssetCenterActivity : BaseActivity<ViewBinding>() {
         when (action) {
             AssetAction.MANAGE_ENGINE,
             AssetAction.MANAGE_VOICE,
-            AssetAction.IMPORT_NER,
             AssetAction.MANAGE_TEXT -> startActivity<BuiltinTtsActivity>()
+
+            // NER 模型：直接开选择器（原先只跳页面，等于没有入口）
+            AssetAction.IMPORT_NER ->
+                pickNerZip.launch(arrayOf("application/zip", "application/octet-stream"))
 
             AssetAction.MANAGE_TEMPLATE ->
                 showDialogFragment(TtsCastingManageFragment.newInstance())

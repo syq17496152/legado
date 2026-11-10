@@ -14,18 +14,33 @@ object BuiltinVoiceFilter {
         val untaggedOnly: Boolean = false,
         val origin: String = "",
         /** 声音池（T8.16）：空=全部；非空按 groupId 精确匹配 */
-        val poolId: String = ""
-    )
+        val poolId: String = "",
+        /** 年龄归档（2026-11-10）：空=全部；取 [VoiceTagNormalizer.AGE_ORDER] 或 UNLABELED */
+        val age: String = "",
+        /** 性格归档：空=全部；取 [VoiceTagNormalizer.MOOD_ORDER] */
+        val mood: String = ""
+    ) {
+        companion object {
+            /** 未标注年龄的筛选项 */
+            const val UNLABELED = "unlabeled"
+        }
+    }
 
     /** 性别归一：兼容 male/female 与 男/女，空值与"未定"视为未知 */
     fun genderOf(voice: BuiltinVoice): Gender {
-        val raw = voice.gender.trim()
-        return when {
-            raw.contains("女") || raw.equals("female", true) -> Gender.FEMALE
-            raw.contains("男") || raw.equals("male", true) -> Gender.MALE
+        return when (VoiceTagNormalizer.gender(voice.gender)) {
+            VoiceTagNormalizer.GENDER_FEMALE -> Gender.FEMALE
+            VoiceTagNormalizer.GENDER_MALE -> Gender.MALE
             else -> Gender.UNKNOWN
         }
     }
+
+    /** 年龄归一（未知返回空串） */
+    fun ageOf(voice: BuiltinVoice): String = VoiceTagNormalizer.age(voice.age)
+
+    /** 音色的性格集合（中英标签都归一） */
+    fun moodsOf(voice: BuiltinVoice): Set<String> =
+        voice.tags.mapNotNull { VoiceTagNormalizer.mood(it).takeIf { m -> m.isNotBlank() } }.toSet()
 
     fun apply(voices: List<BuiltinVoice>, criteria: Criteria): List<BuiltinVoice> {
         val query = criteria.query.trim()
@@ -39,7 +54,15 @@ object BuiltinVoiceFilter {
             val matchesUntagged = !criteria.untaggedOnly || genderOf(voice) == Gender.UNKNOWN
             val matchesOrigin = criteria.origin.isBlank() || voice.origin == criteria.origin
             val matchesPool = criteria.poolId.isBlank() || voice.groupId == criteria.poolId
-            matchesQuery && matchesGender && matchesUntagged && matchesOrigin && matchesPool
+            val matchesAge = criteria.age.isBlank() ||
+                    if (criteria.age == Criteria.UNLABELED) {
+                        ageOf(voice).isBlank()
+                    } else {
+                        ageOf(voice) == criteria.age
+                    }
+            val matchesMood = criteria.mood.isBlank() || criteria.mood in moodsOf(voice)
+            matchesQuery && matchesGender && matchesUntagged && matchesOrigin &&
+                    matchesPool && matchesAge && matchesMood
         }
     }
 

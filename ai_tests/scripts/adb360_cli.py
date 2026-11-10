@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adb360 import RawAdb, AdbError  # noqa: E402
+from adb360 import open_adb, AdbError  # noqa: E402
 
 
 def parse(argv):
@@ -45,7 +45,9 @@ def main() -> int:
     if not rest:
         sys.stderr.write("用法：adb360_cli.py [-s serial] <devices|shell|install|...>\n")
         return 1
-    adb = RawAdb()
+    adb = open_adb()
+    if serial:
+        adb.serial = serial
     action, args = rest[0], rest[1:]
     try:
         if action == "devices":

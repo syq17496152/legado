@@ -70,6 +70,7 @@ import io.legado.app.help.tts.builtin.ClonettsVoiceImporter
 import io.legado.app.help.tts.builtin.ReferenceAudioProcessor
 import io.legado.app.help.tts.builtin.ReferenceAudioRecorder
 import io.legado.app.help.tts.builtin.VoiceAutoTagger
+import io.legado.app.help.tts.builtin.VoiceLibraryCurator
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
@@ -187,7 +188,11 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                     val report = ClonettsVoiceImporter(BuiltinTtsRuntime.voiceStore()).importZip(target)
                     // T8.16：导入后按 tag 聚合成声音池（幂等，失败不阻断导入结果）
                     runCatching { BuiltinVoicePools.sync(BuiltinTtsRuntime.voiceStore()) }
-                    report.message
+                    // 2026-11-10：导入即打标 + 归一，避免用户导完还得手动点两次才可归档
+                    val tag = VoiceAutoTagger.tagAll(BuiltinTtsRuntime.voiceStore())
+                    val curated = VoiceLibraryCurator.curate(BuiltinTtsRuntime.voiceStore())
+                    "${report.message} · 自动打标 男${tag.male}/女${tag.female}/未定${tag.unknown}" +
+                        " · ${curated.message}"
                 }
             }.getOrElse { error ->
                 // 失败原因必须透出：旧实现用 getOrNull 吞掉异常，只剩一句"音色包导入失败"，无从排查
@@ -288,9 +293,22 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
     /** 联调用：从外置导入目录按文件名导入音色包（不经过 SAF，便于 adb push 后自动验证） */
     private suspend fun importVoicesFromImportDir(fileName: String) {
         pageState.value = pageState.value.copy(busy = true, message = "导入音色包中…")
-        val message = BuiltinAssetOps.importVoiceZip(fileName)
+        val message = autoCurateAfterImport(BuiltinAssetOps.importVoiceZip(fileName))
         pageState.value = pageState.value.copy(busy = false, message = message)
         reload()
+    }
+
+    /**
+     * 导入完成后的自动收口（2026-11-10 用户裁定「282 个音色乱七八糟」）：
+     * 音色包普遍只有中文性别/年龄或干脆没有性别 ⇒ 自动打标（F0）+ 值域归一 + 池/归档一次做完，
+     * 用户导完直接就是可分组的音色库，不用再手动点「自动打标」+「整理音色库」两次。
+     */
+    private suspend fun autoCurateAfterImport(importedMessage: String): String {
+        val store = BuiltinTtsRuntime.voiceStore()
+        val tag = withContext(Dispatchers.IO) { VoiceAutoTagger.tagAll(store) }
+        val report = withContext(Dispatchers.IO) { VoiceLibraryCurator.curate(store) }
+        return "$importedMessage · 自动打标 男${tag.male}/女${tag.female}/未定${tag.unknown}" +
+            " · ${report.message}"
     }
 
     /** 联调用：从外置导入目录导入 LAC NER 模型 ZIP（adb push 后 --es import_ner 触发） */
@@ -417,6 +435,20 @@ class BuiltinTtsActivity : BaseActivity<ViewBinding>() {
                         busy = false,
                         message = BuiltinTtsUiSupport.autoTagMessage(result)
                     )
+                }
+                // 2026-11-10 用户裁定：值域归一 + 去重（500 级音色在主线程算 md5 会 ANR ⇒ IO）
+                PageAction.CurateVoices -> {
+                    pageState.value = pageState.value.copy(busy = true, message = "整理音色库…")
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val report = VoiceLibraryCurator.curate(BuiltinTtsRuntime.voiceStore())
+                        withContext(Dispatchers.Main) {
+                            pageState.value = pageState.value.copy(
+                                busy = false,
+                                message = report.message
+                            )
+                            reload()
+                        }
+                    }
                 }
                 is PageAction.DeleteVoice -> {
                     pageState.value = pageState.value.copy(

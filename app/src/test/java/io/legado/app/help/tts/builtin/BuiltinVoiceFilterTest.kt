@@ -85,6 +85,40 @@ class BuiltinVoiceFilterTest {
         assertEquals("显示 2 / 共 4 个音色", BuiltinVoiceFilter.summary(4, 2))
     }
 
+    /** 2026-11-10 归档：年龄筛选必须同时兼容中文库值与英文规范值 */
+    @Test
+    fun `年龄筛选兼容中文与规范值并支持未标注`() {
+        val youth = BuiltinVoiceFilter.apply(
+            voices,
+            BuiltinVoiceFilter.Criteria(age = VoiceTagNormalizer.AGE_YOUTH)
+        )
+        assertEquals(listOf("a"), youth.map { it.id })
+        val aged = BuiltinVoiceFilter.apply(
+            voices,
+            BuiltinVoiceFilter.Criteria(age = VoiceTagNormalizer.AGE_AGED)
+        )
+        assertEquals(listOf("d"), aged.map { it.id })
+        val unlabeled = BuiltinVoiceFilter.apply(
+            voices,
+            BuiltinVoiceFilter.Criteria(age = BuiltinVoiceFilter.Criteria.UNLABELED)
+        )
+        assertEquals(listOf("c"), unlabeled.map { it.id })
+    }
+
+    /** 性格归档：音色 tags 里的性格词归一后参与筛选（中英同口径） */
+    @Test
+    fun `性格筛选按归一后的气质桶匹配`() {
+        val withMood = voices.map { voice ->
+            voice.copy(tags = if (voice.id == "b") listOf("清冷") else voice.tags)
+        }
+        val cool = BuiltinVoiceFilter.apply(
+            withMood,
+            BuiltinVoiceFilter.Criteria(mood = "cool")
+        )
+        assertEquals(listOf("b"), cool.map { it.id })
+        assertEquals(setOf("gentle"), BuiltinVoiceFilter.moodsOf(voice("x", "x", tags = listOf("温柔"))))
+    }
+
     /**
      * 用户实测「内置 6 个音色试听都是同一个音色」：根因是列表跨档混排，而多说话人档只认带 sid 的音色。
      * 这里锁定口径：clone 档认 zipvoice 参考音色；hq 档只认同档 sid>0 的内置音色。

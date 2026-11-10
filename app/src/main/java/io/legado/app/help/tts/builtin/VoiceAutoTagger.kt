@@ -71,10 +71,6 @@ object VoiceAutoTagger {
         return Result(processed, male, female, unknown)
     }
 
-    fun inferAge(name: String): String = when {
-        name.contains("少年") || name.contains("少女") || name.contains("童") -> "teen"
-        name.contains("老年") || name.contains("老") || name.contains("奶奶") || name.contains("爷爷") -> "aged"
-        name.contains("青年") || name.contains("年轻") -> "youth"
-        else -> ""
-    }
+    /** 年龄按名称词推断（统一走值域归一，避免打标与导入两条口径） */
+    fun inferAge(name: String): String = VoiceTagNormalizer.ageFromText(name)
 }
