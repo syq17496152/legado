@@ -841,11 +841,14 @@ class ImageCanvasAdapter(
             // H1(sniff-regression-rss-image-crash): 小内存设备（heap≤320MB）解码高度收敛到屏高，
             // 普通竖图解码峰值从最高 4×屏高（约 25MB/张）降到 ≤1×屏高（约 6MB/张），
             // 布局高度不变，仅降低解码分辨率（PhotoView 放大时轻微模糊可接受）
+            // crash-hardening AD-03：内存降载期再乘能力位缩放（0.75 / 0.5）；布局高度仍用 targetH，
+            // 只降解码分辨率，回到 NORMAL 后 scale=1.0 自动恢复清晰度。
+            val decodeScale = io.legado.app.help.MemoryPressure.throttleState().imageDecodeScale
             val decodeH = if (io.legado.app.help.MemoryPressure.isSmallHeap) {
                 minOf(targetH, screenH)
             } else {
                 targetH
-            }
+            }.let { (it * decodeScale).toInt().coerceAtLeast(1) }
             val lp = itemView.layoutParams
             if (lp.height != targetH) {
                 lp.height = targetH

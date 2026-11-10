@@ -1841,6 +1841,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val html = intro.substring(8, lastIndex)
             val pooledWebView = this.pooledWebView ?: let{
                 val pooledWebView = WebViewPool.acquire(this)
+                // crash-hardening AD-02：播放页的嗅探/解析 WebView 属关键会话，CRITICAL 压力下也不回收
+                WebViewPool.protect(pooledWebView.id, true)
                 val webView = pooledWebView.realWebView
                 webView.onResume()
                 webView.webViewClient = CustomWebViewClient()

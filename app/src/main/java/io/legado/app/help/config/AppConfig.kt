@@ -1178,6 +1178,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefString(PreferKey.localLlmProfileId) ?: ""
         set(value) = appCtx.putPrefString(PreferKey.localLlmProfileId, value)
 
+    /**
+     * crash-hardening AD-09：内存降载/回收动作总开关。
+     *
+     * 默认 **false**（观测模式）：只计算压力档位并打点，不执行任何降载/回收动作，
+     * 行为与改造前完全一致。真机档位分布校准通过后才把默认值改为 true。
+     * 关闭状态下所有动作退化为现状（仅保留既有 idle WebView / 缓存清理）。
+     */
+    var crashHardeningActionsEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.crashHardeningActionsEnabled, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.crashHardeningActionsEnabled, value)
+
     /** 自检实测速度（tok/s）；0 = 未测。存字符串避免额外偏好类型。 */
     var localLlmSpeedTokPerSec: Float
         get() = (appCtx.getPrefString(PreferKey.localLlmSpeedTokPerSec) ?: "").toFloatOrNull() ?: 0f

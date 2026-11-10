@@ -351,6 +351,8 @@ class LlmSettingsActivity : BaseActivity<ViewBinding>() {
         lifecycleScope.launch {
             busy = true
             message = "正在自检（加载 + 生成 64 token，在推理进程内执行）…"
+            // crash-hardening AD-07：用户主动自检 = 一次显式"重试"，解除熔断冷却（仅本次）
+            io.legado.app.help.llm.LlmCircuitBreaker.allowManualRetry()
             val bench = withContext(Dispatchers.IO) { llmClient.bench(model.modelFile.absolutePath) }
             AppConfig.localLlmSpeedTokPerSec = bench.tokPerSec
             AppConfig.localLlmUnsupportedReason = if (bench.ok) "" else bench.message

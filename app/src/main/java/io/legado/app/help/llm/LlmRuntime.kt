@@ -3,6 +3,7 @@ package io.legado.app.help.llm
 import android.content.Context
 import com.arm.aichat.AiChat
 import com.arm.aichat.InferenceEngine
+import com.arm.aichat.TemplateUnavailableException
 import com.arm.aichat.UnsupportedArchitectureException
 import com.arm.aichat.isModelLoaded
 import kotlinx.coroutines.CancellationException
@@ -43,6 +44,8 @@ class LlmRuntime(
 
     enum class LlmErrorCode {
         UNSUPPORTED_ARCH,
+        /** crash-hardening AD-05：native chat 模板不可用（旧实现会 SIGSEGV 打崩 :llm 进程） */
+        TEMPLATE_UNAVAILABLE,
         NOT_LOADED,
         TIMEOUT,
         EMPTY_OUTPUT,
@@ -119,6 +122,15 @@ class LlmRuntime(
                     elapsedMs = clock() - started,
                     errorCode = LlmErrorCode.UNSUPPORTED_ARCH,
                     message = "模型架构不受支持"
+                )
+            } catch (e: TemplateUnavailableException) {
+                // crash-hardening AD-05：chat 模板不可用属于"该模型/该引擎状态不可用"，
+                // 与架构不支持分开报，便于用户换模型或重新导入
+                fail(LlmErrorCode.TEMPLATE_UNAVAILABLE, "chat 模板不可用：$modelPath")
+                Result(
+                    elapsedMs = clock() - started,
+                    errorCode = LlmErrorCode.TEMPLATE_UNAVAILABLE,
+                    message = "chat 模板不可用"
                 )
             } catch (e: CancellationException) {
                 // 显式取消（非超时）：回到未加载态，不把状态打成 ERROR（否则下次自检会误报引擎坏了）
@@ -258,6 +270,15 @@ class LlmRuntime(
                 tokenCount = tokens,
                 errorCode = LlmErrorCode.CANCELLED,
                 message = "已取消"
+            )
+        } catch (e: TemplateUnavailableException) {
+            // crash-hardening AD-05：native 模板为空时立刻失败（旧实现会 SIGSEGV 整进程）
+            fail(LlmErrorCode.TEMPLATE_UNAVAILABLE, "chat 模板不可用，已放弃本次生成")
+            Result(
+                elapsedMs = clock() - started,
+                tokenCount = tokens,
+                errorCode = LlmErrorCode.TEMPLATE_UNAVAILABLE,
+                message = "chat 模板不可用"
             )
         } catch (e: Exception) {
             fail(LlmErrorCode.UNKNOWN, e.localizedMessage ?: e.javaClass.simpleName)

@@ -65,6 +65,8 @@ class LlmClient private constructor(private val context: Context) {
         override fun onServiceDisconnected(name: ComponentName?) {
             // 推理进程崩溃：只表现为连接断开，由上层按策略重连/降级
             messenger = null
+            // crash-hardening AD-07：计入熔断窗口，避免"崩→重连→再崩"风暴
+            LlmCircuitBreaker.recordDeath()
             AppLog.putWarn("LlmClient 与推理进程断开")
         }
     }
@@ -75,6 +77,11 @@ class LlmClient private constructor(private val context: Context) {
      */
     suspend fun ensureConnected(timeoutMs: Long = CONNECT_TIMEOUT_MS): Boolean {
         if (messenger != null) return true
+        // crash-hardening AD-07：熔断冷却期内不再拉起 :llm（调用方直接回落规则）
+        if (LlmCircuitBreaker.isCoolingDown()) {
+            AppLog.putWarn("LlmClient 熔断冷却中，跳过连接推理进程")
+            return false
+        }
         if (LlmRetryPolicy.exhausted(retryUsed)) return false
         val connected = bind(timeoutMs)
         if (connected) {
@@ -122,6 +129,13 @@ class LlmClient private constructor(private val context: Context) {
         timeoutMs: Long = GENERATE_TIMEOUT_MS
     ): LlmJobResult {
         if (prompt.isBlank()) return LlmJobResult.failure(LlmIpc.ERROR_BAD_JOB, "请求正文为空")
+        // crash-hardening AD-07：熔断冷却期直接失败，调用方回落规则结果（不再拉起 native）
+        if (LlmCircuitBreaker.isCoolingDown()) {
+            return LlmJobResult.failure(
+                LlmRuntime.LlmErrorCode.UNKNOWN.name,
+                "本地 AI 暂不可用（近期推理进程异常，已熔断）"
+            )
+        }
         val jobId = LlmJobs.newJobId()
         val written = runCatching { LlmJobs.writeInput(jobsDir, jobId, prompt) }.isSuccess
         if (!written) return LlmJobResult.failure(LlmRuntime.LlmErrorCode.IO.name, "请求正文落盘失败")

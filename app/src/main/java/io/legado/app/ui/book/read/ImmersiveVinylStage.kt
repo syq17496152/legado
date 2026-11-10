@@ -153,11 +153,14 @@ internal fun reduceMotionLogText(reduced: Boolean, lowRam: Boolean, sdkInt: Int)
 internal fun isReducedMotionDevice(): Boolean {
     val am = appCtx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
     val lowRam = am?.isLowRamDevice == true
-    val reduced = ImmersiveStagePolicy.shouldReduceMotion(lowRam, Build.VERSION.SDK_INT)
+    // crash-hardening AD-03：内存压力 CRITICAL 档暂停非必要动效（能力位默认恒为 true，仅降载时生效）
+    val pressureReduced = !io.legado.app.help.MemoryPressure.throttleState().animationAllowed
+    val reduced = ImmersiveStagePolicy.shouldReduceMotion(lowRam, Build.VERSION.SDK_INT) ||
+        pressureReduced
     // 正式诊断日志（保留）：真机验证"低配降级是否真的生效"（任务 2.7），便于现场取证
     AppLog.putDebugWithTag(
         AppLog.TAG_TTS_TRACE,
-        reduceMotionLogText(reduced, lowRam, Build.VERSION.SDK_INT),
+        reduceMotionLogText(reduced, lowRam, Build.VERSION.SDK_INT) + " pressure=$pressureReduced",
         level = AppLog.Level.INFO
     )
     return reduced

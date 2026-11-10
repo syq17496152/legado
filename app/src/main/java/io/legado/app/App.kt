@@ -42,6 +42,8 @@ import io.legado.app.help.AppFreezeMonitor
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.CacheManager
 import io.legado.app.help.CrashHandler
+import io.legado.app.help.crash.ExitInfoRecorder
+import io.legado.app.help.llm.LlmCircuitBreaker
 import io.legado.app.help.DefaultData
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.LifecycleHelp
@@ -104,13 +106,83 @@ class App : Application() {
 
     // B13 内存压力监控：定时轮询，小堆 3s / 大堆 10s
     private val memoryTrimHandler by lazy { buildMainHandler() }
+    /** crash-hardening：观测模式打点用（只在档位变化时输出一条，避免日志洪水） */
+    private var lastLoggedPressureLevel = MemoryPressure.PressureLevel.NORMAL
     private val memoryTrimRunnable = object : Runnable {
         override fun run() {
+            // 既有行为（保持不变）：低内存时按原口径清理
             MemoryPressure.throttleTrim(::trimAppMemory)
+            // crash-hardening AD-01/AD-09：四档前馈。默认观测模式（总开关关闭）⇒ 只算档位 + 打点
+            val level = MemoryPressure.refreshLevel()
+            if (level != lastLoggedPressureLevel) {
+                lastLoggedPressureLevel = level
+                kotlin.runCatching {
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_MEMORY_PRESSURE,
+                        "压力档位=${level.name} avail=${MemoryPressure.availableMemory() / (1024 * 1024)}MB" +
+                            " used=${MemoryPressure.usedMemory() / (1024 * 1024)}MB" +
+                            " max=${MemoryPressure.maxMemory / (1024 * 1024)}MB" +
+                            " actions=${MemoryPressure.actionsEnabled()}",
+                        level = if (level == MemoryPressure.PressureLevel.NORMAL) AppLog.Level.INFO
+                        else AppLog.Level.WARN
+                    )
+                }
+                // 回到 NORMAL：解除 WebView 池的缓存上限覆盖（否则 maxCached 会一直停在 0）。
+                // 与总开关无关：即便用户在 CRITICAL 期间关掉开关，也必须恢复缓存策略。
+                if (level == MemoryPressure.PressureLevel.NORMAL) {
+                    Coroutine.async(executeContext = IO) {
+                        kotlin.runCatching { WebViewPool.trim(level) }
+                    }
+                }
+            }
+            if (level != MemoryPressure.PressureLevel.NORMAL &&
+                MemoryPressure.actionsEnabled() &&
+                MemoryPressure.allowActions()
+            ) {
+                applyPressureActions(level)
+            }
             memoryTrimHandler.postDelayed(
                 this,
                 if (MemoryPressure.isSmallHeap) 3_000L else 10_000L
             )
+        }
+    }
+
+    /**
+     * crash-hardening：按压力档位执行降载动作（AD-01/AD-02/AD-03）。
+     *
+     * 安全约束（design §8.2）：
+     * - 只动缓存/展示参数，不动任何数据写盘路径；
+     * - 后台线程执行（WebView 的 destroy 由 WebViewPool 内部切主线程）；
+     * - 每步 runCatching，任何失败都不影响主流程。
+     */
+    private fun applyPressureActions(level: MemoryPressure.PressureLevel) {
+        val trimLevel = when (level) {
+            MemoryPressure.PressureLevel.MODERATE ->
+                ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE
+
+            MemoryPressure.PressureLevel.LOW ->
+                ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+
+            MemoryPressure.PressureLevel.CRITICAL, MemoryPressure.PressureLevel.NORMAL ->
+                ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+        }
+        Coroutine.async(executeContext = IO) {
+            kotlin.runCatching { WebViewPool.trim(level) }
+            kotlin.runCatching { CacheManager.trimMemory(trimLevel) }
+            kotlin.runCatching { ImageProvider.trimMemory(trimLevel) }
+            kotlin.runCatching { CoverImageView.trimMemory(trimLevel) }
+            kotlin.runCatching { Glide.get(this@App).trimMemory(trimLevel) }
+            if (level == MemoryPressure.PressureLevel.CRITICAL) {
+                kotlin.runCatching { EpubCoreProvider.onMemoryPressure(trimLevel) }
+            }
+            kotlin.runCatching {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_MEMORY_PRESSURE,
+                    "降载动作已执行 level=${level.name} trim=$trimLevel",
+                    level = AppLog.Level.WARN
+                )
+            }
         }
     }
 
@@ -206,6 +278,12 @@ class App : Application() {
                 .setLogger(EventLogger())
             AppLog.syncEventBusLogger()
             DefaultData.upVersion()
+            // crash-hardening AD-06/AD-07：冷启动转存 native 崩溃 / ANR 记录，并给 LLM 熔断播种
+            val recorded = ExitInfoRecorder.recordOnStartup(this@App)
+            LlmCircuitBreaker.seedDeaths(ExitInfoRecorder.recentInferenceDeaths(this@App))
+            if (recorded > 0) {
+                AppLog.put("已转存 $recorded 条异常退出记录（崩溃/ANR 取证）")
+            }
             AppFreezeMonitor.init(this@App)
             DispatchersMonitor.init()
             URL.setURLStreamHandlerFactory(ObsoleteUrlFactory(okHttpClient))

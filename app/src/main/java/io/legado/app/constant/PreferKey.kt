@@ -283,6 +283,13 @@ object PreferKey {
     const val optimizeRender = "optimizeRender"
 
     /**
+     * crash-hardening AD-09：内存降载/回收动作总开关。
+     * 首版默认 false（观测模式：只算档位与打点，行为与改造前一致）；
+     * 阈值经真机校准后再把默认值改为 true；用户手动关闭等价当前版本行为。
+     */
+    const val crashHardeningActionsEnabled = "crashHardeningActionsEnabled"
+
+    /**
      * R18（B4）书源查询短时缓存开关（默认开）。
      *
      * 无 UI 入口的技术开关（同 `optimizeRender`）：关闭 ⇒ 每次直查数据库（回退到改造前行为）。

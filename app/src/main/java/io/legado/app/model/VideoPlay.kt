@@ -921,6 +921,8 @@ object VideoPlay : CoroutineScope by MainScope(){
      * - 预取并发/失败均静默（VideoBookPreloader 内部处理），绝不阻塞播放
      */
     fun prefetchNextNeighbor() {
+        // crash-hardening AD-03：内存降载期（LOW 起）停止"非当前内容"的预取，避免清理后立刻又被占满
+        if (!io.legado.app.help.MemoryPressure.throttleState().prefetchAllowed) return
         val book = book ?: return
         if (!VideoPlaylistHolder.containsBookUrl(book.bookUrl)) return
         val next = VideoPlaylistHolder.neighborOf(book.bookUrl, 1) ?: return

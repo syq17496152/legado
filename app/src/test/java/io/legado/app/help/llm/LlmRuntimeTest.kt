@@ -1,6 +1,7 @@
 package io.legado.app.help.llm
 
 import com.arm.aichat.InferenceEngine
+import com.arm.aichat.TemplateUnavailableException
 import com.arm.aichat.UnsupportedArchitectureException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -28,6 +29,8 @@ class LlmRuntimeTest {
         private val pieces: List<String> = listOf("你好", "世界"),
         private val delayPerPieceMs: Long = 0,
         private val emitNothing: Boolean = false,
+        /** crash-hardening AD-05：生成阶段抛出的异常（模拟 native 模板不可用） */
+        private val generateError: Exception? = null,
         /** 第 N 次（从 1 起）调用 setSystemPrompt 时抛异常，模拟官方 `_readyForSystemPrompt` 拒绝二次设置 */
         private val failPromptCalls: Set<Int> = emptySet()
     ) : LlmRuntime.LlmBinding {
@@ -55,6 +58,7 @@ class LlmRuntimeTest {
 
         override fun sendUserPrompt(message: String, predictLength: Int): Flow<String> = flow {
             userPromptCalls += 1
+            generateError?.let { throw it }
             if (emitNothing) return@flow
             pieces.forEach {
                 if (delayPerPieceMs > 0) delay(delayPerPieceMs)
@@ -244,5 +248,36 @@ class LlmRuntimeTest {
         assertFalse(bench.ok)
         assertEquals(LlmRuntime.LlmErrorCode.UNKNOWN, bench.errorCode)
         assertEquals(0, binding.userPromptCalls)
+    }
+
+    // ---------------- crash-hardening AD-05：native chat 模板不可用 ----------------
+
+    /**
+     * prepare() 失败（native 返回 3）⇒ 必须映射为 TEMPLATE_UNAVAILABLE，
+     * 不能再报"架构不受支持"（会误导用户换错方向）。
+     */
+    @Test
+    fun `加载时 chat 模板不可用映射为 TEMPLATE_UNAVAILABLE`() = runBlocking {
+        val runtime = LlmRuntime(FakeBinding(loadError = TemplateUnavailableException()))
+        val result = runtime.load("/m.gguf")
+        assertFalse(result.ok)
+        assertEquals(LlmRuntime.LlmErrorCode.TEMPLATE_UNAVAILABLE, result.errorCode)
+        assertEquals(LlmRuntime.Phase.ERROR, runtime.snapshot.value.phase)
+    }
+
+    /**
+     * 生成阶段 native 返回 4（模板为空）⇒ 立刻失败、0 token，
+     * 旧实现继续跑 token 循环会在 native 侧解引用空指针并 SIGSEGV。
+     */
+    @Test
+    fun `生成时模板不可用直接失败且不产出 token`() = runBlocking {
+        val binding = FakeBinding(generateError = TemplateUnavailableException())
+        val runtime = LlmRuntime(binding, tickingClock())
+        assertTrue(runtime.load("/m.gguf").ok)
+        val result = runtime.generate("prompt")
+        assertFalse(result.ok)
+        assertEquals(LlmRuntime.LlmErrorCode.TEMPLATE_UNAVAILABLE, result.errorCode)
+        assertEquals(0, result.tokenCount)
+        assertEquals(1, binding.userPromptCalls)
     }
 }

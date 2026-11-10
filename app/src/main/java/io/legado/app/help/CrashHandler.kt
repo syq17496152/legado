@@ -174,11 +174,18 @@ class CrashHandler(val context: Context) : Thread.UncaughtExceptionHandler {
 
         /**
          * sniff-regression-rss-image-crash: 读取最近一次崩溃日志全文（启动时取证回灌到 appLog 用）
+         *
+         * crash-hardening AD-06：除 Java 崩溃的 `crash-*.log` 外，也纳入 native/ANR 的
+         * `exit-*.txt`（由 [io.legado.app.help.crash.ExitInfoRecorder] 转存），
+         * 这样"上次为什么死"在无 adb 时也能看到。
          */
         fun readLatestCrashLog(): String? {
             return kotlin.runCatching {
                 appCtx.externalCacheDir?.getFile("crash")?.listFiles()
-                    ?.filter { it.name.startsWith("crash-") && it.name.endsWith(".log") }
+                    ?.filter {
+                        (it.name.startsWith("crash-") && it.name.endsWith(".log")) ||
+                            it.name.startsWith("exit-")
+                    }
                     ?.maxByOrNull { it.lastModified() }
                     ?.readText()
             }.getOrNull()?.takeIf { it.isNotBlank() }

@@ -209,6 +209,8 @@ class BackstageWebView(
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(): WebView {
         val pooledWebView = WebViewPool.acquire(appCtx, poolScope)
+        // crash-hardening AD-02：嗅探会话属关键会话，CRITICAL 压力下也不回收（回收会断掉 6s 嗅探窗口）
+        WebViewPool.protect(pooledWebView.id, true)
         this.pooledWebView = pooledWebView
         val webView = pooledWebView.realWebView
         webView.onResume() //缓存库拿的需要激活
