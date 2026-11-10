@@ -647,11 +647,20 @@ object BuiltinTtsRuntime {
      * （每句结尾多读“耶”），必须在送引擎前剔除；详见 [BuiltinSpeechTextSanitizer]。
      */
     private fun speechTextOf(text: String): String =
-        BuiltinSpeechTextSanitizer.sanitize(
-            BuiltinNumberNormalizer.normalize(
-                pronDict.transform(BuiltinTextNormalizer.ensureSimplified(text))
-            )
+        composeSpeechText(text) { pronDict.transform(it) }
+
+    /**
+     * 同 [speechTextOf]，但把「用户词典」作为参数注入（JVM 可测的纯链路）。
+     * 顺序不可调整：数字归一必须在清洗之前（否则 `50%` 的百分号会先被删掉）。
+     */
+    internal fun composeSpeechText(
+        text: String,
+        pronounce: (String) -> String = { it }
+    ): String = BuiltinSpeechTextSanitizer.sanitize(
+        BuiltinNumberNormalizer.normalize(
+            pronounce(BuiltinTextNormalizer.ensureSimplified(text))
         )
+    )
 
     private fun splitRules(): List<Regex> {
         val file = paths.splitRulesFile
