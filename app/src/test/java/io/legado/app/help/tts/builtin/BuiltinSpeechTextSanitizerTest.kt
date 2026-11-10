@@ -44,6 +44,9 @@ class BuiltinSpeechTextSanitizerTest {
         assertEquals(text, BuiltinSpeechTextSanitizer.sanitize(text))
         val english = "Hello, world! 版本 2.0 — ok…"
         assertEquals(english, BuiltinSpeechTextSanitizer.sanitize(english))
+        // ASCII 连字符与半角括号实测不补音节，保留以免把「三-五」「(示例)」读错
+        assertEquals("三-五个人", BuiltinSpeechTextSanitizer.sanitize("三-五个人"))
+        assertEquals("他说(好)", BuiltinSpeechTextSanitizer.sanitize("他说(好)"))
     }
 
     @Test

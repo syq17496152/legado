@@ -17,10 +17,10 @@ package io.legado.app.help.tts.builtin
 object BuiltinSpeechTextSanitizer {
 
     /**
-     * 可保留的标点：中文句读 + 英文句读 + 引号。
-     * 依据：同模型实测这些标点不产生额外音节；括号/装饰符号会产生。
+     * 可保留的标点：中文句读 + 英文句读 + 引号 + ASCII 连字符/括号。
+     * 依据：同模型实测这些标点不产生额外音节；全角括号与装饰符号会产生。
      */
-    private const val SAFE_PUNCT = "。，、；：！？…—,.!?;:\"'“”‘’"
+    private const val SAFE_PUNCT = "。，、；：！？…—,.!?;:\"'“”‘’()-"
 
     /** 清洗；返回只含可朗读字符的文本（可能为空串） */
     fun sanitize(text: String): String {
