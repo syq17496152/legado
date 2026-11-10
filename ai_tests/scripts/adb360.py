@@ -244,6 +244,127 @@ class RawAdb:
         return True
 
 
+class CliAdb:
+    """标准 adb.exe 后端的同构实现（与 [RawAdb] 同 API）。
+
+    何时用：360MobileSrv 退出后 5037 归标准 adb server 所有，裸协议仍可用；
+    但**本工具链的命令常常在独立 Job 里执行**，命令结束会连带杀掉自己启动的 server
+    （实测：命令行内 start-server 能连上，下一条命令 ConnectionRefused）。
+    标准 adb.exe 每条命令内部自起 server，天然规避该问题 ⇒ 作为可用性优先的后端。
+    """
+
+    def __init__(self, exe: str = "", serial: str = "", timeout: float = 60.0):
+        self.exe = exe or os.environ.get("ADB_EXE") or r"C:\Android\Sdk\platform-tools\adb.exe"
+        self.serial = serial
+        self.timeout = timeout
+
+    def _run(self, args, timeout: float = None, text: bool = True):
+        import subprocess
+        cmd = [self.exe]
+        if self.serial:
+            cmd += ["-s", self.serial]
+        cmd += list(args)
+        return subprocess.run(cmd, capture_output=True, timeout=timeout or self.timeout, text=text)
+
+    def devices(self) -> list:
+        out = self._run(["devices"]).stdout or ""
+        result = []
+        for line in out.splitlines():
+            line = line.strip()
+            if not line or line.startswith("*") or line.startswith("List of"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                result.append((parts[0], parts[1]))
+        return result
+
+    def resolve_serial(self, serial: str = "") -> str:
+        if serial:
+            self.serial = serial
+            return serial
+        items = [it for it in self.devices() if it[1] == "device"]
+        if not items:
+            raise AdbError("adb devices 为空：检查 USB 调试/授权（%s）" % self.devices())
+        self.serial = items[0][0]
+        return self.serial
+
+    def shell(self, cmd: str, serial: str = "", timeout: float = 60.0) -> str:
+        if serial:
+            self.serial = serial
+        return self._run(["shell", cmd], timeout=timeout).stdout or ""
+
+    def push(self, local_path: str, remote_path: str, mode: str = "0644",
+             serial: str = "", timeout: float = 240.0) -> None:
+        if serial:
+            self.serial = serial
+        r = self._run(["push", local_path, remote_path], timeout=timeout)
+        if r.returncode != 0:
+            raise AdbError("push 失败：%s" % (r.stderr or r.stdout))
+
+    def install(self, apk_path: str, serial: str = "", reinstall: bool = True,
+                extra_flags: str = "") -> str:
+        if serial:
+            self.serial = serial
+        args = ["install"]
+        if reinstall:
+            args.append("-r")
+        if extra_flags:
+            args += extra_flags.split()
+        args.append(apk_path)
+        return (self._run(args, timeout=600.0).stdout or "")
+
+    def pull(self, remote_path: str, local_path: str, serial: str = "",
+             timeout: float = 240.0) -> int:
+        if serial:
+            self.serial = serial
+        r = self._run(["pull", remote_path, local_path], timeout=timeout)
+        if r.returncode != 0:
+            raise AdbError("pull 失败：%s" % (r.stderr or r.stdout))
+        return os.path.getsize(local_path) if os.path.exists(local_path) else 0
+
+    def screenshot(self, local_path: str, serial: str = "") -> str:
+        if serial:
+            self.serial = serial
+        r = self._run(["exec-out", "screencap", "-p"], timeout=120.0, text=False)
+        if r.returncode != 0 or not r.stdout:
+            raise AdbError("screencap 失败：%s" % r.stderr)
+        with open(local_path, "wb") as fh:
+            fh.write(r.stdout)
+        return local_path
+
+    def dump_ui(self, serial: str = "", timeout: float = 60.0) -> str:
+        if serial:
+            self.serial = serial
+        remote = "/data/local/tmp/_ui_%d.xml" % int(time.time() * 1000)
+        self.shell("uiautomator dump %s" % remote, timeout=timeout)
+        import tempfile
+        tmp = os.path.join(tempfile.gettempdir(), "_adb360_ui_cli.xml")
+        try:
+            self.pull(remote, tmp, timeout=60.0)
+            with open(tmp, "r", encoding="utf-8", errors="replace") as fh:
+                return fh.read()
+        finally:
+            self.shell("rm -f %s" % remote, timeout=15.0)
+
+    find_node = RawAdb.find_node
+    tap = RawAdb.tap
+    tap_text = RawAdb.tap_text
+
+
+def open_adb(prefer_raw: bool = True, port: int = DEFAULT_PORT) -> "RawAdb | CliAdb":
+    """返回可用后端：裸协议优先（360 劫持场景），不可用则回落标准 adb.exe。"""
+    if prefer_raw:
+        try:
+            raw = RawAdb(port=port)
+            if raw.devices():
+                return raw
+        except Exception:
+            pass
+    cli = CliAdb()
+    cli.resolve_serial("")
+    return cli
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="裸协议 adb 通道（360 劫持场景）")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -268,16 +389,22 @@ def main() -> int:
     p_tap.add_argument("label")
 
     args = parser.parse_args()
-    adb = RawAdb(port=args.port)
     try:
         if args.action == "devices":
-            items = adb.devices()
+            items = []
+            try:
+                items = RawAdb(port=args.port).devices()
+            except Exception:
+                items = CliAdb().devices()
             if not items:
-                print("（空）360 server 未识别到设备")
+                print("（空）未识别到设备")
                 return 2
             for serial, state in items:
                 print("%s\t%s" % (serial, state))
             return 0
+        adb = open_adb(port=args.port)
+        if args.serial:
+            adb.serial = args.serial
         if args.action == "shell":
             sys.stdout.write(adb.shell(args.cmd, serial=args.serial))
             return 0
