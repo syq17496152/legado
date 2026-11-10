@@ -37,4 +37,11 @@ class RoleManualManageEntryTest {
         assertTrue(screens.contains("data object AddCharacter : PageAction"))
         assertTrue(screens.contains("data object ManageCharacters : PageAction"))
     }
+
+    /** 识别偏少时必须给出可执行出路（导入 LAC 模型 / 手动补录），不能只让用户困惑 */
+    @Test
+    fun rolesPanelGuidesWhenRecognitionIsFew() {
+        assertTrue("缺「导入 LAC 识别模型」引导", screens.contains("导入 LAC 识别模型"))
+        assertTrue("缺「手动补录」引导", screens.contains("手动补录"))
+    }
 }

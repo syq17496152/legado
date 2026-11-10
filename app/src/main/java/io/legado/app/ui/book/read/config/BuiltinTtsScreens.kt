@@ -313,7 +313,8 @@ private fun RolesPanel(state: BuiltinTtsPageState, onAction: (PageAction) -> Uni
             }
         }
         Text(
-            "说明：离线识别只做“人名 + 引号邻接 + 轮转/对话锁”，置信不足一律标未识别，不会乱猜。",
+            "说明：离线识别只做“人名 + 引号邻接 + 轮转/对话锁”，置信不足一律标未识别，不会乱猜。" +
+                "识别偏少时：可到「引擎」页导入 LAC 识别模型（约 30MB，离线），或直接「＋ 添加角色」手动补录。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
