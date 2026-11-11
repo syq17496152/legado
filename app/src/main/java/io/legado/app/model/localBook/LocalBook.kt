@@ -34,6 +34,7 @@ import io.legado.app.help.book.isUmd
 import io.legado.app.help.book.removeLocalUriCache
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.storage.StorageAccess
 import io.legado.app.lib.webdav.WebDav
 import io.legado.app.lib.webdav.WebDavException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -420,8 +421,9 @@ object LocalBook {
         fileName: String,
         source: BaseSource? = null,
     ): Uri {
-        AppConfig.defaultBookTreeUri
-            ?: throw NoBooksDirException()
+        // 保存位置由 saveBookFile(inputStream) 内部统一解析（含全盘权限公共目录与回退），
+        // 此处不再以 defaultBookTreeUri 是否为空做前置拦截 —— 否则开了全盘权限但没有
+        // SAF 目录的用户会被误判为「未设置书籍目录」。
         val inputStream = when {
             str.isAbsUrl() -> AnalyzeUrl(
                 str, source = source, callTimeout = 0,
@@ -445,13 +447,17 @@ object LocalBook {
         inputStream: InputStream,
         fileName: String
     ): Uri {
+        // 按「显式保存目录 → 已授权目录 → 全盘权限公共目录 → 私有目录」解析可写位置。
+        // 只剩私有目录时仍抛 NoBooksDirException：私有目录用户不可见，静默写入等于丢书，
+        // 必须让 UI 引导用户设置公共目录（原实现同样抛此异常，语义保持一致）。
+        val target = StorageAccess.resolveSaveDir()
+        if (target.isPrivate) throw NoBooksDirException()
         inputStream.use {
-            val defaultBookTreeUri = AppConfig.defaultBookTreeUri
-            if (defaultBookTreeUri.isNullOrBlank()) throw NoBooksDirException()
-            val treeUri = defaultBookTreeUri.toUri()
-            return if (treeUri.isContentScheme()) {
+            return if (target.isContent) {
+                val treeUri = target.value.toUri()
                 val treeDoc = DocumentFile.fromTreeUri(appCtx, treeUri)
-                var doc = treeDoc!!.findFile(fileName)
+                    ?: throw SecurityException("请重新设置书籍保存位置\nPermission Denial")
+                var doc = treeDoc.findFile(fileName)
                 if (doc == null) {
                     doc = treeDoc.createFile(FileUtils.getMimeType(fileName), fileName)
                         ?: throw SecurityException("请重新设置书籍保存位置\nPermission Denial")
@@ -462,8 +468,11 @@ object LocalBook {
                 doc.uri
             } else {
                 try {
-                    val treeFile = File(treeUri.path!!)
-                    val file = treeFile.getFile(fileName)
+                    val dir = File(target.value)
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        throw SecurityException("请重新设置书籍保存位置\nPermission Denial")
+                    }
+                    val file = dir.getFile(fileName)
                     FileOutputStream(file).use { oStream ->
                         it.copyTo(oStream)
                     }

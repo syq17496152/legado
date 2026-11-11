@@ -1093,6 +1093,32 @@
     <string name="book_tree_uri_t">Book Save Location</string>
     <string name="book_tree_uri_s">Save location for books opened from other apps</string>
     <string name="select_book_folder">Select the folder where the books are saved</string>
+    <!-- storage-permission-full-access：全盘文件访问权限 + 多目录 SAF 授权 -->
+    <string name="storage_all_files_access">All files access</string>
+    <string name="storage_all_files_access_on">Enabled: any folder on the device is readable</string>
+    <string name="storage_all_files_access_off">Disabled: only authorized folders are readable</string>
+    <string name="storage_all_files_access_unsupported">Not supported on this system, use folder authorization instead</string>
+    <string name="storage_all_files_access_rationale">With &quot;All files access&quot; you can browse any folder on the device (except Android/data and Android/obb) without moving files into a specific folder first.\n\nThis permission must be enabled manually in system settings.</string>
+    <string name="storage_safe_dirs">Authorized folders</string>
+    <string name="storage_safe_dirs_empty">No folder authorized yet</string>
+    <string name="storage_safe_dirs_summary">%1$d folder(s) authorized, tap to manage</string>
+    <string name="storage_dir_add">Add new folder…</string>
+    <string name="storage_dir_set_default">Set as default save folder</string>
+    <string name="storage_dir_remove">Remove this folder</string>
+    <string name="storage_dir_remove_confirm">The folder will no longer appear in the local library. Imported book files are not deleted.</string>
+    <string name="storage_dir_unavailable">Re-authorization required</string>
+    <string name="storage_dir_unavailable_name">%1$s (re-authorization required)</string>
+    <string name="storage_dir_default">Default save folder</string>
+    <string name="storage_dir_limit">Up to %1$d folders, remove unused ones first</string>
+    <string name="storage_restricted_path">System restriction: Android/data and Android/obb cannot be accessed</string>
+    <string name="storage_guide_title">Access more folders</string>
+    <string name="storage_guide_message">Android only allows apps to read folders you explicitly authorize. You can enable &quot;All files access&quot; to browse any folder directly, or authorize folders one by one.</string>
+    <string name="storage_guide_positive">Enable all files access</string>
+    <string name="storage_guide_choose_dir">Choose folder</string>
+    <string name="storage_guide_later">Not now</string>
+    <string name="storage_save_dir_degraded">Save folder unavailable, using: %1$s</string>
+    <string name="storage_add_dir">Add folder</string>
+    <string name="storage_open_full_access">All files access</string>
     <string name="user_agent">User agent</string>
     <string name="bg_alpha">Background alpha</string>
 

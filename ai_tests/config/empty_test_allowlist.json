@@ -950,6 +950,36 @@
       "path": "app/src/test/java/io/legado/app/ui/book/read/config/RoleManualManageEntryTest.kt",
       "type": "exception",
       "reason": "用户裁定 2026-11-10「角色太少/不能手动加改」：Probe 的是「角色配音面板两个按钮 + 行内编辑 + Activity 分发到既有角色页」的跨文件接线，依赖 Context/Intent 导航，纯 JVM 无法拉起页面（无 Robolectric）。角色发现算法（cue 人名）已由 OfflineCharacterDiscoveryTest 行为断言覆盖；若后续引入 Robolectric，应改为「点添加角色 → 到达 CharacterEditActivity」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/constant/PreferKeyStorageKeysTest.kt",
+      "type": "exception",
+      "reason": "storage-permission-full-access：PreferKey 是纯常量集合，唯一可证明的不变量是「键已登记且不与 defaultBookTreeUri 冲突」（冲突会导致保存目录与浏览目录互相覆盖）。该命题无运行时行为可驱动，纯 JVM 只能断言常量值与源码登记形态；判定内核（迁移/合并/上限/保存解析/受限路径）已由 StorageAccessTest 以真值断言覆盖。若后续键改为可注入配置对象，应转为行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/help/config/AppConfigSafeDirsWiringTest.kt",
+      "type": "exception",
+      "reason": "storage-permission-full-access：AppConfig.safeDirs 的读写依赖 appCtx/SharedPreferences（splitties），returnDefaultValues 下 appCtx 为 null，纯 JVM 无法构造 SharedPreferences 行为化 ⇒ 只能守护「JSON 数组序列化 + 空列表清键 + 迁移标记独立键」三条实现形态；迁移幂等、上限截断、合并去重已由 StorageAccessTest 行为断言覆盖。若后续引入 SharedPreferences 测试缝，应改为行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/model/localBook/LocalBookSaveDirWiringTest.kt",
+      "type": "exception",
+      "reason": "storage-permission-full-access：LocalBook.saveBookFile 依赖 appCtx/DocumentFile/FileOutputStream 与真实文件系统，纯 JVM 无法驱动写入路径（无 Robolectric）⇒ 只能以源码探针守护「保存位置统一走 StorageAccess.resolveSaveDir + 仅私有回退才抛 NoBooksDirException + 移除旧单值键前置拦截」三条接线；位置解析链已由 StorageAccessTest.saveDirCandidates_* 真值断言覆盖。若后续抽出可 JVM 构造的写入端口，应改为行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/config/OtherConfigStorageEntryTest.kt",
+      "type": "exception",
+      "reason": "storage-permission-full-access：OtherConfigFragment 为 Compose 设置页，入口存在性、权限通道选择、双语资源齐备属跨文件结构关系，纯 JVM 无法组合页面（无 Robolectric）⇒ 只能源码+资源探针；状态判定（GRANTED/DENIED/UNSUPPORTED）与目录增删上限已由 StorageAccessTest 真值断言覆盖。若后续引入 Robolectric/Compose 测试缝，应改为「点入口 → 到达系统授权页」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/import/local/ImportBookStorageWiringTest.kt",
+      "type": "exception",
+      "reason": "storage-permission-full-access：ImportBookActivity 依赖 DocumentFile/ActivityResult/appCtx，纯 JVM 无法拉起页面（无 Robolectric）⇒ 只能守护「根来源统一到 StorageAccess.browseRoots + 受限路径进入前拦截 + onResume 重校验 + 一次性引导 + 顶部常驻入口」五条接线；浏览模式与受限路径判定内核已由 StorageAccessTest 真值断言覆盖。若后续引入 Robolectric，应改为「点 Android/data → 出现系统限制提示」的行为断言并移除本豁免。"
+    },
+    {
+      "path": "app/src/test/java/io/legado/app/ui/book/import/BaseImportBookStorageWiringTest.kt",
+      "type": "exception",
+      "reason": "storage-permission-full-access：BaseImportBookActivity.setBookStorage 依赖 Activity/Assets/Compose 弹窗与协程挂起恢复，纯 JVM 无法构造引导交互（无 Robolectric）⇒ 只能守护「全盘权限与已授权目录短路 + 不再以旧单值键为唯一依据 + 选中目录登记」三条结构关系；保存位置解析已由 StorageAccessTest 真值断言覆盖。若后续引入可构造的引导测试缝，应改为行为断言并移除本豁免。"
     }
   ]
 }

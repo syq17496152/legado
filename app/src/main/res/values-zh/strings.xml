@@ -1042,6 +1042,32 @@
     <string name="book_tree_uri_t">书籍保存位置</string>
     <string name="book_tree_uri_s">从其它应用打开的书籍保存位置</string>
     <string name="select_book_folder">选择保存书籍的文件夹</string>
+    <!-- storage-permission-full-access：全盘文件访问权限 + 多目录 SAF 授权 -->
+    <string name="storage_all_files_access">所有文件访问权限</string>
+    <string name="storage_all_files_access_on">已开启：可浏览设备任意目录</string>
+    <string name="storage_all_files_access_off">未开启：仅能访问已授权目录</string>
+    <string name="storage_all_files_access_unsupported">当前系统不支持，请改用目录授权</string>
+    <string name="storage_all_files_access_rationale">开启「所有文件访问权限」后，可直接浏览设备上的任意目录（Android/data、Android/obb 除外），无需先把文件移动到指定目录。\n\n该权限需要在系统设置中手动开启。</string>
+    <string name="storage_safe_dirs">已授权目录</string>
+    <string name="storage_safe_dirs_empty">尚未授权任何目录</string>
+    <string name="storage_safe_dirs_summary">已授权 %1$d 个目录，点击管理</string>
+    <string name="storage_dir_add">添加新目录…</string>
+    <string name="storage_dir_set_default">设为默认保存目录</string>
+    <string name="storage_dir_remove">移除该目录</string>
+    <string name="storage_dir_remove_confirm">移除后该目录不再出现在本地书库中，已导入的书籍文件不会被删除。</string>
+    <string name="storage_dir_unavailable">需重新授权</string>
+    <string name="storage_dir_unavailable_name">%1$s（需重新授权）</string>
+    <string name="storage_dir_default">默认保存目录</string>
+    <string name="storage_dir_limit">最多添加 %1$d 个目录，请先移除不用的目录</string>
+    <string name="storage_restricted_path">系统限制：Android/data 与 Android/obb 目录无法访问</string>
+    <string name="storage_guide_title">访问更多目录</string>
+    <string name="storage_guide_message">安卓只允许应用读取你明确授权的目录。你可以开启「所有文件访问权限」直接浏览任意目录，也可以逐个授权需要的目录。</string>
+    <string name="storage_guide_positive">开启所有文件访问权限</string>
+    <string name="storage_guide_choose_dir">选择目录</string>
+    <string name="storage_guide_later">暂不设置</string>
+    <string name="storage_save_dir_degraded">保存目录不可用，已改用：%1$s</string>
+    <string name="storage_add_dir">添加目录</string>
+    <string name="storage_open_full_access">所有文件访问权限</string>
     <string name="user_agent">用户代理</string>
     <string name="bg_alpha">背景透明度</string>
 

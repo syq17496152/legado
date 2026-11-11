@@ -207,6 +207,9 @@ object PreferKey {
     const val doublePageHorizontal = "doubleHorizontalPage"
     const val readUrlOpenInBrowser = "readUrlInBrowser"
     const val defaultBookTreeUri = "defaultBookTreeUri"
+    // 多目录 SAF 授权：已授权目录集合（JSON 数组）与一次性迁移标记（设备本地键，不参与备份）
+    const val safeDirs = "safeDirs"
+    const val safeDirsMigrated = "safeDirsMigrated"
     const val checkSource = "checkSource"
 
     // NEW-33：订阅源校验设置（书源侧 checkSource 的同构入口）——设置页摘要由

@@ -408,6 +408,30 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             }
         }
 
+    /**
+     * 已授权的 SAF 浏览目录集合（JSON 数组）。
+     *
+     * 设备本地键：SAF 授权换机后必然失效，故不参与备份（见 BackupConfig.DEVICE_LOCAL_IGNORE_PREF_KEYS）。
+     * 迁移与上限由 `StorageAccess` 负责，此处只做存取。
+     */
+    var safeDirs: List<String>
+        get() {
+            val json = appCtx.getPrefString(PreferKey.safeDirs) ?: return emptyList()
+            return GSON.fromJsonArray<String>(json).getOrDefault(emptyList())
+        }
+        set(value) {
+            if (value.isEmpty()) {
+                appCtx.removePref(PreferKey.safeDirs)
+            } else {
+                appCtx.putPrefString(PreferKey.safeDirs, GSON.toJson(value))
+            }
+        }
+
+    /** 旧单值 [defaultBookTreeUri] 迁移到 [safeDirs] 的一次性标记 */
+    var safeDirsMigrated: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.safeDirsMigrated, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.safeDirsMigrated, value)
+
     val showDiscovery: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showDiscovery, true)
 
