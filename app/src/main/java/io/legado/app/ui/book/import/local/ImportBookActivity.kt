@@ -459,10 +459,11 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     @Synchronized
     private fun upPath() {
         composeCanGoBack = viewModel.subDocs.isNotEmpty()
-        viewModel.rootDoc?.let {
-            scanDocJob?.cancel()
-            upDocs(it)
-        }
+        // 加载「当前所在目录」而非永远是根目录：rootDoc 只代表浏览起点，
+        // 子目录导航全部记在 subDocs 中（原实现固定传 rootDoc ⇒ 进入子目录后列表不刷新）
+        val currentDoc = viewModel.subDocs.lastOrNull() ?: viewModel.rootDoc ?: return
+        scanDocJob?.cancel()
+        upDocs(currentDoc)
     }
 
     private fun upDocs(rootDoc: FileDoc) {

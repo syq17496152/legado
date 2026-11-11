@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import android.os.Build
 import androidx.fragment.app.Fragment
 import io.legado.app.R
 import io.legado.app.help.storage.FullAccessState
@@ -52,7 +53,21 @@ internal object StorageAccessSettingsUi {
     /** 全盘文件访问权限：状态展示 + 跳系统设置（MANAGE_EXTERNAL_STORAGE 无运行时弹窗） */
     private fun showAllFilesAccess(fragment: Fragment, onChanged: () -> Unit) {
         if (!StorageAccess.supportsAllFilesAccess()) {
-            fragment.toastOnUi(R.string.storage_all_files_access_unsupported)
+            // API 23-28：等价能力由运行时存储权限提供（READ/WRITE_EXTERNAL_STORAGE），
+            // 直接申请即可，不该只提示「不支持」把老设备用户挡在门外。
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+            ) {
+                PermissionsCompat.Builder()
+                    .addPermissions(*Permissions.Group.STORAGE)
+                    .rationale(R.string.storage_all_files_access_rationale)
+                    .onGranted(onChanged)
+                    .onDenied { onChanged() }
+                    .request()
+            } else {
+                // API 29 在 targetSdk>=30 下无 File 公有存储能力，只能走目录授权
+                fragment.toastOnUi(R.string.storage_all_files_access_unsupported)
+            }
             return
         }
         if (StorageAccess.fullAccessState() == FullAccessState.GRANTED) {
