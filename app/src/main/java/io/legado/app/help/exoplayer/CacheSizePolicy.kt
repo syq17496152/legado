@@ -9,15 +9,16 @@ import splitties.init.appCtx
 import java.io.File
 
 /**
- * 视频磁盘缓存容量自适应（video-buffer-prefetch-v2 §1.18 / AD-16）。
+ * 视频磁盘缓存容量自适应（video-buffer-prefetch-v2 §1.18 / AD-16；
+ * 本期 AD-31 v1.1：整集全量需要更大的磁盘池）。
  *
- * 背景：中端机普遍 8G+ 内存、高端 16G+，固定 100MB 缓存会让「回看/预取/连播」频繁淘汰。
- * 方案：`videoCacheSize=0` 时按设备内存分档给出默认容量，并用「可用存储 5%」封顶；
+ * 背景：中端机普遍 8G+ 内存、高端 16G+，固定 100MB 缓存会让「整集全量/回看/连播」频繁淘汰。
+ * 方案：`videoCacheSize=0` 时按设备内存分档给出默认容量，并用「可用存储 10%」封顶；
  * 淘汰仍由 `LeastRecentlyUsedCacheEvictor` 负责（写入量与回看窗口另有预算）。
  *
  * 不变式：
  * - 最终容量 ∈ [MIN_MB, MAX_MB]；
- * - 绝不占用超过可用存储的 5%（避免把用户存储写满）。
+ * - 绝不占用超过可用存储的 10%（避免把用户存储写满）。
  */
 object CacheSizePolicy {
 
@@ -27,23 +28,23 @@ object CacheSizePolicy {
     const val MIN_MB = 50
     const val MAX_MB = 4096
 
-    /** 可用存储只使用 5% 作为缓存上限 */
-    const val STORAGE_RATIO = 0.05
+    /** 可用存储只使用 10% 作为缓存上限（基线 5% → 10%，整集全量需要） */
+    const val STORAGE_RATIO = 0.10
 
     /**
-     * 按物理内存自动分档（MB）：
-     * ≥15GB→2048 / ≥11GB→1536 / ≥7GB→1024 / ≥5.5GB→512 / ≥3.5GB→256 / 其余 128。
+     * 按物理内存自动分档（MB），整体上调一档：
+     * ≥15GB→4096 / ≥11GB→3072 / ≥7GB→2048 / ≥5.5GB→1024 / ≥3.5GB→512 / 其余 256。
      */
     fun autoMbByRam(totalRamMb: Long): Int = when {
-        totalRamMb >= 15_000L -> 2048
-        totalRamMb >= 11_000L -> 1536
-        totalRamMb >= 7_000L -> 1024
-        totalRamMb >= 5_500L -> 512
-        totalRamMb >= 3_500L -> 256
-        else -> 128
+        totalRamMb >= 15_000L -> 4096
+        totalRamMb >= 11_000L -> 3072
+        totalRamMb >= 7_000L -> 2048
+        totalRamMb >= 5_500L -> 1024
+        totalRamMb >= 3_500L -> 512
+        else -> 256
     }
 
-    /** 可用存储封顶（5%，最少 128MB，最多 [MAX_MB]） */
+    /** 可用存储封顶（10%，最少 128MB，最多 [MAX_MB]） */
     fun storageCapMb(freeStorageMb: Long): Int {
         if (freeStorageMb <= 0L) return MIN_MB
         val cap = (freeStorageMb * STORAGE_RATIO).toInt()

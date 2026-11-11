@@ -105,7 +105,26 @@ object VideoPrefiller {
         // video-buffer-prefetch-v2 §1.6：HLS 清单不再只预填 97B 清单（且清单已被
         // ManifestBypass 绕过缓存 ⇒ 永远读不到）；改为解析清单后预取真实分片 3 个。
         if (isManifestUrl(finalUrl) || M3u8UrlShape.matches(finalUrl)) {
-            val bytes = VideoSegmentPrefetcher.prefillSegments(finalUrl, headers, count = 3)
+            // 档位预算（本期 AD-35：不再落默认 1.5MB/s）
+            val bandwidth = maxOf(
+                ExoPlayerHelper.bandwidthMeter.bitrateEstimate,
+                ExoPlayerHelper.lastObservedThroughputBps,
+            )
+            val tier = SegmentPrefetchPolicy.tierOf(bandwidth)
+            val limit = if (bandwidth > 0L) {
+                (bandwidth * tier.budgetRatio).toLong().coerceIn(
+                    SegmentPrefetchPolicy.MIN_BUDGET_BPS,
+                    tier.maxBudgetBps,
+                )
+            } else {
+                PrefillThrottle.DEFAULT_LIMIT_BYTES_PER_SEC
+            }
+            val bytes = VideoSegmentPrefetcher.prefillSegments(
+                playlistUri = finalUrl,
+                headers = headers,
+                count = 3,
+                limitBytesPerSec = limit,
+            )
             AppLog.put(
                 "VideoPrefiller: hls prefill segs, bytes=$bytes, urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}"
             )
@@ -208,6 +227,8 @@ object VideoPrefiller {
         prefillRecords.clear()
         // 当前集分片预取同样必须随会话结束清理（video-buffer-prefetch-v2）
         VideoSegmentPrefetcher.clearAll()
+        // 本期 AD-24：下一集预热随会话结束统一取消
+        io.legado.app.help.video.NextEpisodeWarmup.cancelAll("clear_cache")
         AppLog.putDebug("VideoPrefiller: prefill records cleared")
     }
 }

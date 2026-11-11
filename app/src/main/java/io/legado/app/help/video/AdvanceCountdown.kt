@@ -41,4 +41,34 @@ object AdvanceCountdown {
         val remain = (totalMs - elapsedMs).coerceAtLeast(0L)
         return ((remain + 999L) / 1000L).toInt()
     }
+
+    /** 预热计划（片数） */
+    data class WarmupPlan(val count: Int)
+
+    /**
+     * 倒计时期间的下一集增量预取片数（R36）。
+     *
+     * 档位映射：WEAK 3 / STANDARD 8 / FAST 12 / ULTRA 20 / EXTREME 20；
+     * 档位未知按 STANDARD 处理；短视频取「剩余片数」与档位片数的较小者。
+     */
+    fun warmupPlan(
+        tier: io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier?,
+        isShort: Boolean,
+        remainingSegments: Int,
+    ): WarmupPlan {
+        val base = when (tier) {
+            null -> 8
+            io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier.WEAK -> 3
+            io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier.STANDARD -> 8
+            io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier.FAST -> 12
+            io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier.ULTRA -> 20
+            io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier.EXTREME -> 20
+        }
+        val count = if (isShort) {
+            minOf(base, remainingSegments.coerceAtLeast(0))
+        } else {
+            base
+        }
+        return WarmupPlan(count.coerceAtLeast(0))
+    }
 }

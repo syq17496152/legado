@@ -1,15 +1,6 @@
-package io.legado.app.help.exoplayer
+﻿package io.legado.app.help.exoplayer
 
-import android.net.Uri
-import androidx.media3.common.C
-import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.FileDataSource
-import androidx.media3.datasource.cache.CacheDataSink
-import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.datasource.cache.ContentMetadata
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import io.legado.app.constant.AppLog
-import io.legado.app.help.http.videoStreamClient
 import io.legado.app.help.video.engine.M3u8Parser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -64,6 +56,18 @@ object VideoSegmentPrefetcher {
         /** 嗅探出的 contentType（C.TYPE_OTHER 才走直链 Range 预取） */
         val contentType: Int = -1,
         val supportsRange: Boolean = false,
+        /** 内存桶当前深度（毫秒），用于磁盘池 NEAR 分区；0=未知 */
+        val bucketDepthMs: Long = 0L,
+        /** 本集已写入磁盘池的字节数（应用线程维护的累计值） */
+        val episodeWrittenBytes: Long = 0L,
+        /** 本会话是否已有有效实测吞吐样本（升档门槛） */
+        val hasMeasuredSample: Boolean = false,
+        /** 上一次档位（自调档滞回） */
+        val previousTier: SegmentPrefetchPolicy.NetworkTier? = null,
+        /** 距上次档位切换的毫秒数 */
+        val msSinceTierSwitch: Long = 0L,
+        /** 是否允许整集全量（低电/过热/近 30s 卡顿时为 false） */
+        val allowFullEpisode: Boolean = true,
     )
 
     /** 已学习的媒体清单 */
@@ -78,9 +82,8 @@ object VideoSegmentPrefetcher {
 
     private const val MAX_PLAYLISTS = 2
     private const val PLAYLIST_TTL_MS = 60_000L
-    private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
-    private const val MAX_SEGMENT_WRITE_BYTES = 32L * 1024 * 1024
     private const val MAX_CONSECUTIVE_FAILURES = 3
+    private const val CIRCUIT_COOLDOWN_MS = 60_000L
     private const val ROUND_MIN_INTERVAL_MS = 1_000L
     private const val SEEK_DELAY_MS = 1_000L
 
@@ -107,6 +110,32 @@ object VideoSegmentPrefetcher {
     private var segDoneLogCount = 0
     private var planLogCount = 0
 
+    /** 已完成（取到片尾且全部命中）的清单 URI 集合；双清单都完成 ⇒ 本集预取完成 */
+    private val completedPlaylists = ConcurrentHashMap.newKeySet<String>()
+
+    /** 本集已写入字节（会话内累计，用于池子余量与整集判定） */
+    private val episodeWrittenBytes = AtomicLong(0L)
+
+    /** 已做过定向清理的会话号（每会话一次，AD-33） */
+    @Volatile
+    private var governedSessionId: Long = 0L
+
+    /** 最近一次计算的档位（供上层读取；不直接读 Player） */
+    @Volatile
+    private var lastTier: SegmentPrefetchPolicy.NetworkTier? = null
+
+    /** 熔断冷却截止时间（elapsed 毫秒）；0=未冷却 */
+    private val circuitCooldownUntil = AtomicLong(0L)
+
+    /** 熔断次数（1=冷却，2=本会话停用） */
+    private val circuitStrikes = AtomicInteger(0)
+
+    /** 本会话永久停用（第二次熔断） */
+    private val circuitDisabled = AtomicBoolean(false)
+
+    /** doneKeys 上限（防整集模式下无界增长） */
+    private const val MAX_DONE_KEYS = 4096
+
     // ===== 可注入端口（默认生产实现） =====
     internal var writer: SegmentWriter = DefaultSegmentWriter
     internal var cache: PrefetchCache = DefaultPrefetchCache
@@ -129,6 +158,13 @@ object VideoSegmentPrefetcher {
         learned.clear()
         masterUris.clear()
         doneKeys.clear()
+        completedPlaylists.clear()
+        episodeWrittenBytes.set(0L)
+        governedSessionId = 0L
+        lastTier = null
+        circuitCooldownUntil.set(0L)
+        circuitStrikes.set(0)
+        circuitDisabled.set(false)
         consecutiveFailures.set(0)
         circuitOpen.set(false)
         lastRoundAt.set(0L)
@@ -152,6 +188,13 @@ object VideoSegmentPrefetcher {
             learned.clear()
             masterUris.clear()
             doneKeys.clear()
+            completedPlaylists.clear()
+            episodeWrittenBytes.set(0L)
+            governedSessionId = 0L
+            lastTier = null
+            circuitCooldownUntil.set(0L)
+            circuitStrikes.set(0)
+            circuitDisabled.set(false)
             consecutiveFailures.set(0)
             circuitOpen.set(false)
             lastRoundAt.set(0L)
@@ -159,6 +202,25 @@ object VideoSegmentPrefetcher {
             segDoneLogCount = 0
             planLogCount = 0
         }
+    }
+
+    /** 当前档位（供倒计时预热读取；null=尚未计算） */
+    fun lastTier(): SegmentPrefetchPolicy.NetworkTier? = lastTier
+
+    /** 本集已写入字节（测试/日志用） */
+    fun episodeWrittenBytes(): Long = episodeWrittenBytes.get()
+
+    /**
+     * 本集预取是否已完成（双清单都到片尾且全部命中）。
+     *
+     * @param sessionId 会话号；与当前会话不一致时返回 false（防旧实例误报）
+     */
+    fun isEpisodeComplete(sessionId: Long): Boolean {
+        if (sessionId != currentSessionId) return false
+        val playlists = learned.values.filter { it.segments.isNotEmpty() }
+        if (playlists.isEmpty()) return false
+        val playlistsToCheck = playlists.take(MAX_PLAYLISTS)
+        return playlistsToCheck.isNotEmpty() && playlistsToCheck.all { completedPlaylists.contains(it.uri) }
     }
 
     /**
@@ -213,8 +275,15 @@ object VideoSegmentPrefetcher {
         learned.clear()
         masterUris.clear()
         doneKeys.clear()
+        completedPlaylists.clear()
+        episodeWrittenBytes.set(0L)
+        governedSessionId = 0L
+        lastTier = null
         ManifestObserver.clear()
         circuitOpen.set(false)
+        circuitStrikes.set(0)
+        circuitDisabled.set(false)
+        circuitCooldownUntil.set(0L)
         consecutiveFailures.set(0)
     }
 
@@ -232,52 +301,35 @@ object VideoSegmentPrefetcher {
         return result
     }
 
-    /** 长视频回看清理（HLS：按分片 key 删资源） */
-    fun trimBackCache(positionMs: Long, windowMs: Long): Int {
-        if (windowMs <= 0L) return 0
-        val spans = learnedSpans()
-        if (spans.isEmpty()) return 0
-        val removals = RollingBackCache.plan(spans, positionMs, windowMs, singleKey = false)
-        return RollingBackCache.trim(cache, removals)
-    }
+    /** 长视频回看清理（HLS：按分片 key 删资源）——实现见 [LearnedBackCacheTrimmer] */
+    fun trimBackCache(positionMs: Long, windowMs: Long): Int =
+        LearnedBackCacheTrimmer.trim(cache, learnedSpans(), positionMs, windowMs)
 
-    /** 长视频回看清理（直链：单 key，按 span 精确删） */
+    /** 长视频回看清理（直链：单 key，按 span 精确删）——实现见 [LearnedBackCacheTrimmer] */
     fun trimBackCacheSingleKey(
         key: String,
         positionMs: Long,
         windowMs: Long,
         bitrateBps: Long,
-    ): Int {
-        if (windowMs <= 0L || key.isBlank() || bitrateBps <= 0L) return 0
-        val cached = cache.cachedSpans(key)
-        if (cached.isEmpty()) return 0
-        val spans = cached.map { span ->
-            val startMs = span.position * 8L * 1000L / bitrateBps
-            val endMs = (span.position + span.length) * 8L * 1000L / bitrateBps
-            RollingBackCache.Span(
-                key = key,
-                startMs = startMs,
-                endMs = endMs,
-                byteStart = span.position,
-                byteEnd = span.position + span.length,
-            )
-        }
-        val removals = RollingBackCache.plan(
-            spans,
-            positionMs = positionMs,
-            windowMs = windowMs,
-            singleKey = true,
-            bitrateBps = bitrateBps,
-        )
-        return RollingBackCache.trim(cache, removals)
-    }
+    ): Int = LearnedBackCacheTrimmer.trimSingleKey(cache, key, positionMs, windowMs, bitrateBps)
 
     /** 主动触发一轮补水（5s 定时调用；force=false 时受最小间隔约束） */
     fun topUp(force: Boolean = false) {
         val s = snapshot ?: return
         if (s.sessionId != currentSessionId) return
-        if (circuitOpen.get()) return
         val now = clock.nowMs()
+        if (circuitDisabled.get()) return
+        if (circuitOpen.get()) {
+            val until = circuitCooldownUntil.get()
+            if (until > 0L && now >= until) {
+                circuitOpen.set(false)
+                circuitCooldownUntil.set(0L)
+                consecutiveFailures.set(0)
+                AppLog.put("[Prefetch] circuit reopened after cooldown")
+            } else {
+                return
+            }
+        }
         if (!force && now - lastRoundAt.get() < ROUND_MIN_INTERVAL_MS) return
         if (roundJob?.isActive == true) return
 
@@ -318,77 +370,131 @@ object VideoSegmentPrefetcher {
         else -> null
     }
 
+    /** 档位切换时间（自调档滞回） */
+    @Volatile
+    private var lastTierAt = 0L
+
+    /**
+     * 解析当前档位（自调档唯一入口）。
+     *
+     * 降档立即生效；升档需「本会话有实测样本 + 距上次切换 ≥30s」。
+     */
+    private fun resolvedTier(s: Snapshot): SegmentPrefetchPolicy.NetworkTier {
+        val now = clock.nowMs()
+        val input = s.toInput(emptyList()).copy(
+            previousTier = lastTier,
+            msSinceTierSwitch = if (lastTier == null) 0L else (now - lastTierAt).coerceAtLeast(0L),
+        )
+        val tier = SegmentPrefetchPolicy.resolveTier(input)
+        if (tier != lastTier) {
+            AppLog.put(
+                "[Prefetch] tier ${lastTier?.name ?: "null"} -> ${tier.name} " +
+                    "bw=${s.bandwidthEstimateBps} measured=${s.hasMeasuredSample}"
+            )
+            lastTier = tier
+            lastTierAt = now
+        }
+        return tier
+    }
+
     private suspend fun runRound(s: Snapshot) {
         val headers = s.headers
+        val tier = resolvedTier(s)
         val playlists = learnPlaylists(s, headers)
         if (playlists.isEmpty()) {
-            // video-buffer-prefetch-v2 E1：直链 MP4/FLV（支持 Range）按字节窗口预取
-            if (!tryDirectRange(s, headers)) recordFailure("no_media_playlist")
+            // video-buffer-prefetch-v2 E1 / 本期 AD-34：直链 MP4/FLV（支持 Range）预取
+            if (!tryDirectRange(s, headers, tier)) recordFailure("no_media_playlist")
             return
         }
-        val baseInput = s.toInput(emptyList())
-        val budget = SegmentPrefetchPolicy.budget(baseInput)
-        if (budget.state == SegmentPrefetchPolicy.BudgetState.PAUSED) {
-            if (lastGateReason != "low_buffer") {
-                lastGateReason = "low_buffer"
-                AppLog.put("[Prefetch] gate reason=low_buffer bufMs=${(s.bufferedPositionMs - s.positionMs).coerceAtLeast(0)}")
-            }
-            return
-        }
-        val perPlaylistBudget = (budget.bytesPerSec / playlists.size).coerceAtLeast(1L)
-
-        coroutineScope {
-            playlists.map { playlist ->
-                async {
-                    writePlaylist(s, playlist, headers, perPlaylistBudget)
+        // 完成度以第一份（视频）清单为准
+        run {
+            val probe = playlists.first()
+            val probeInput = s.toInput(probe.segments).copy(
+                hasEndList = probe.hasEndList,
+                hasByteRange = probe.hasByteRange,
+            )
+            var state = SegmentPrefetchPolicy.stateOf(probeInput, tier)
+            // R45 / AD-33：整集装不下时，先定向清理「非当前视频」的旧 key（每会话一次）
+            if (state == SegmentPrefetchPolicy.PrefetchState.FILL_TO_CAPACITY &&
+                probeInput.allowFullEpisode &&
+                probeInput.bitrateBps > 0L &&
+                governedSessionId != s.sessionId
+            ) {
+                governedSessionId = s.sessionId
+                val need = SegmentPrefetchPolicy.episodeBytes(
+                    probeInput.durationMs,
+                    probeInput.bitrateBps,
+                )
+                val free = SegmentPrefetchPolicy.poolFreeBytes(
+                    s.cacheSizeBytes,
+                    episodeWrittenBytes.get(),
+                )
+                if (need > free) {
+                    val protectedKeys = learned.values
+                        .flatMap { playlist -> playlist.segments.map { it.uri } }
+                        .toSet() + listOfNotNull(s.directUri)
+                    CacheGovernor.govern(protectedKeys, need - free, s.cacheSizeBytes)
                 }
-            }.awaitAll()
+            }
+            if (state == SegmentPrefetchPolicy.PrefetchState.COMPLETE) {
+                playlists.forEach { completedPlaylists.add(it.uri) }
+                if (lastGateReason != "episode_complete") {
+                    lastGateReason = "episode_complete"
+                    AppLog.put(
+                        "[Prefetch] gate reason=episode_complete written=${episodeWrittenBytes.get()} " +
+                            "tier=${tier.name}"
+                    )
+                }
+                return
+            }
+            if (lastGateReason == "episode_complete") {
+                lastGateReason = null
+                AppLog.put("[Prefetch] gate open after seek/resume")
+            }
+
+            val budget = SegmentPrefetchPolicy.budget(probeInput, tier)
+            if (budget.state == SegmentPrefetchPolicy.BudgetState.PAUSED) {
+                if (lastGateReason != "low_buffer") {
+                    lastGateReason = "low_buffer"
+                    AppLog.put(
+                        "[Prefetch] gate reason=low_buffer " +
+                            "bufMs=${(s.bufferedPositionMs - s.positionMs).coerceAtLeast(0)}"
+                    )
+                }
+                return
+            }
+            // 清单并行 × 清单内并发：总量仍受档位预算约束
+            val totalTasks = (playlists.size * tier.concurrency).coerceAtLeast(1)
+            val perTaskBudget = (budget.bytesPerSec / totalTasks).coerceAtLeast(1L)
+
+            coroutineScope {
+                playlists.map { playlist ->
+                    async { writePlaylist(s, playlist, headers, tier, perTaskBudget) }
+                }.awaitAll()
+            }
         }
     }
 
     /**
-     * 直链 MP4/FLV 的 Range 窗口预取（E1）。
-     *
-     * 只在 `supportsRange=true` 且 `contentType=TYPE_OTHER` 且时长/码率已知时启用；
-     * 服务器若忽略 Range（返回 200），写入器读到窗口字节即停，不会整包下载。
+     * 直链 MP4/FLV 的 Range 预取（E1 / 本期 AD-34）——实现见 [DirectRangePrefetcher]。
      */
-    private suspend fun tryDirectRange(s: Snapshot, headers: Map<String, String>): Boolean {
-        val uri = s.directUri ?: return false
-        if (!uri.startsWith("http")) return false
-        if (!s.supportsRange || s.contentType != androidx.media3.common.C.TYPE_OTHER) return false
-        if (s.durationMs <= 0L || s.bitrateBps <= 0L) return false
-        val total = cache.contentLength(uri)
-        if (total <= 0L) return false
-        val budget = SegmentPrefetchPolicy.budget(s.toInput(emptyList()))
-        if (budget.state == SegmentPrefetchPolicy.BudgetState.PAUSED) return true
-
-        val startMs = s.bufferedPositionMs + 2_000L
-        if (startMs >= s.durationMs) return true
-        val windowMs = minOf(
-            SpeedBufferPolicy.scaledWindowMs(SegmentPrefetchPolicy.BASE_WINDOW_MS, s.speed),
-            s.durationMs - startMs,
+    private suspend fun tryDirectRange(
+        s: Snapshot,
+        headers: Map<String, String>,
+        tier: SegmentPrefetchPolicy.NetworkTier,
+    ): Boolean {
+        val ok = DirectRangePrefetcher.prefetch(
+            snapshot = s,
+            headers = headers,
+            tier = tier,
+            cache = cache,
+            writer = writer,
+            clock = clock,
+            episodeWritten = episodeWrittenBytes,
+            currentSessionId = currentSessionId,
         )
-        if (windowMs <= 0L) return true
-        val bytesPerMs = total.toDouble() / s.durationMs
-        val maxBytes = (s.cacheSizeBytes * SegmentPrefetchPolicy.BYTE_RATIO_LONG).toLong()
-        val startByte = (startMs * bytesPerMs).toLong().coerceIn(0L, (total - 1).coerceAtLeast(0L))
-        val length = minOf(
-            (windowMs * bytesPerMs).toLong(),
-            total - startByte,
-            if (maxBytes > 0L) maxBytes else Long.MAX_VALUE,
-        )
-        if (length <= 0L) return true
-        if (cache.isCached(uri, startByte, length)) return true
-        val bytes = try {
-            writer.write(uri, headers, startByte, length)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            AppLog.putDebug("[Prefetch] direct_range fail error=${e.javaClass.simpleName}")
-            return false
-        }
-        AppLog.put("[Prefetch] direct_range startByte=$startByte len=$length bytes=$bytes")
-        return true
+        if (ok) consecutiveFailures.set(0)
+        return ok
     }
 
     private suspend fun learnPlaylists(s: Snapshot, headers: Map<String, String>): List<MediaPlaylist> {
@@ -433,6 +539,7 @@ object VideoSegmentPrefetcher {
         s: Snapshot,
         playlist: MediaPlaylist,
         headers: Map<String, String>,
+        tier: SegmentPrefetchPolicy.NetworkTier,
         budgetBps: Long,
     ) {
         val input = s.toInput(playlist.segments).copy(
@@ -441,22 +548,33 @@ object VideoSegmentPrefetcher {
         )
         val gate = SegmentPrefetchPolicy.gate(input)
         if (gate != null) return
-        val window = SegmentPrefetchPolicy.selectWindow(input) ?: return
+        val window = SegmentPrefetchPolicy.selectWindow(input, tier) ?: return
         if (window.isEmpty) return
         // HLS 分片请求头：与播放一致（已有 Referer 不覆盖）
         val writeHeaders = M3u8UrlShape.headersWithHlsReferer(headers, playlist.uri)
+        val poolFree = SegmentPrefetchPolicy.poolFreeBytes(
+            s.cacheSizeBytes,
+            episodeWrittenBytes.get(),
+        )
         if (planLogCount < 30 || planLogCount % 10 == 0) {
             AppLog.put(
-                "[Prefetch] plan segs=${window.count} startMs=${window.startMs} endMs=${window.endMs} " +
-                    "maxBytes=${window.maxBytes} budgetBps=$budgetBps td=${playlist.targetDurationMs} " +
-                    "speed=${s.speed} pl=${playlist.uri.substringAfterLast('/').take(24)}"
+                "[Prefetch] plan tier=${tier.name} state=${window.state} segs=${window.count} " +
+                    "startMs=${window.startMs} endMs=${window.endMs} maxBytes=${window.maxBytes} " +
+                    "budgetBps=$budgetBps poolFree=$poolFree conc=${tier.concurrency} " +
+                    "bucketMs=${s.bucketDepthMs} speed=${s.speed} " +
+                    "pl=${playlist.uri.substringAfterLast('/').take(24)}"
             )
         }
         planLogCount++
 
         // 按估算字节数截断，避免只写半个分片（半个分片对播放无收益）
+        val effectiveBitrate = if (s.bitrateBps > 0L) {
+            s.bitrateBps
+        } else {
+            SegmentPrefetchPolicy.ESTIMATE_BITRATE_BPS
+        }
         val segBytes = { seg: SegmentPrefetchPolicy.Segment ->
-            (seg.durationMs / 1000.0 * s.bitrateBps / 8.0 * 1.3).toLong()
+            (seg.durationMs / 1000.0 * effectiveBitrate / 8.0 * 1.3).toLong()
         }
         var plannedBytes = 0L
         val indexes = ArrayList<Int>(window.count)
@@ -468,75 +586,142 @@ object VideoSegmentPrefetcher {
         }
         if (indexes.isEmpty()) return
 
+        // 磁盘池 NEAR 优先：近端（即将进内存桶）先写，FAR（储备）后写
+        val bucketDepth = if (s.bucketDepthMs > 0L) {
+            s.bucketDepthMs
+        } else {
+            tier.windowMs.coerceAtMost(60_000L)
+        }
+        val nearEndMs = s.bufferedPositionMs + bucketDepth
+        val starts = LongArray(playlist.segments.size)
+        var acc = 0L
+        for (i in playlist.segments.indices) {
+            starts[i] = acc
+            acc += playlist.segments[i].durationMs.coerceAtLeast(0L)
+        }
+        val ordered = indexes.sortedWith(
+            compareBy({ if (starts[it] < nearEndMs) 0 else 1 }, { it })
+        )
+        val nearCount = ordered.count { starts[it] < nearEndMs }
+
         var written = 0L
         var writtenSegs = 0
         var skipped = 0
-        val roundStart = clock.nowMs()
-        for (i in indexes) {
+
+        for (batch in ordered.chunked(tier.concurrency.coerceAtLeast(1))) {
             if (s.sessionId != currentSessionId) return
-            val seg = playlist.segments[i]
-            if (doneKeys.contains(seg.uri)) {
-                skipped++
-                continue
+            coroutineScope {
+                batch.map { i ->
+                    async {
+                        if (s.sessionId != currentSessionId) {
+                            return@async Triple(i, 0L, false)
+                        }
+                        val seg = playlist.segments[i]
+                        if (doneKeys.contains(seg.uri)) {
+                            return@async Triple(i, 0L, true)
+                        }
+                        val contentLength = cache.contentLength(seg.uri)
+                        if (contentLength > 0L && cache.isCached(seg.uri, 0L, contentLength)) {
+                            return@async Triple(i, 0L, true)
+                        }
+                        val taskStart = clock.nowMs()
+                        var taskWritten = 0L
+                        val bytes = try {
+                            writer.write(seg.uri, writeHeaders, 0L, MAX_SEGMENT_WRITE_BYTES)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            AppLog.putDebug("[Prefetch] seg fail idx=$i error=${e.javaClass.simpleName}")
+                            recordFailure("write")
+                            return@async Triple(i, 0L, false)
+                        }
+                        taskWritten += bytes
+                        if (taskWritten > 0L) {
+                            val wait = PrefillThrottle.waitMs(
+                                totalRead = taskWritten,
+                                elapsedMs = clock.nowMs() - taskStart,
+                                limitBytesPerSec = budgetBps,
+                            )
+                            if (wait > 0L) delay(wait)
+                        }
+                        Triple(i, bytes, bytes > 0L)
+                    }
+                }.awaitAll().forEach { (i, bytes, ready) ->
+                    if (!ready) return@forEach
+                    if (bytes <= 0L) {
+                        skipped++
+                        return@forEach
+                    }
+                    val uri = playlist.segments[i].uri
+                    if (doneKeys.size < MAX_DONE_KEYS) doneKeys.add(uri)
+                    written += bytes
+                    writtenSegs++
+                    episodeWrittenBytes.addAndGet(bytes)
+                    consecutiveFailures.set(0)
+                    if (segDoneLogCount < 30 || segDoneLogCount % 10 == 0) {
+                        AppLog.putDebug("[Prefetch] seg_done idx=$i bytes=$bytes")
+                    }
+                    segDoneLogCount++
+                }
             }
-            val contentLength = cache.contentLength(seg.uri)
-            if (contentLength > 0 && cache.isCached(seg.uri, 0L, contentLength)) {
-                skipped++
-                continue
-            }
-            val bytes = try {
-                writer.write(seg.uri, writeHeaders, 0L, MAX_SEGMENT_WRITE_BYTES)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                AppLog.putDebug("[Prefetch] seg fail idx=$i error=${e.javaClass.simpleName}")
-                recordFailure("write")
-                if (circuitOpen.get()) return
-                continue
-            }
-            if (bytes <= 0L) {
-                recordFailure("empty")
-                if (circuitOpen.get()) return
-                continue
-            }
-            consecutiveFailures.set(0)
-            doneKeys.add(seg.uri)
-            written += bytes
-            writtenSegs++
-            if (segDoneLogCount < 30 || segDoneLogCount % 10 == 0) {
-                AppLog.putDebug("[Prefetch] seg_done idx=$i bytes=$bytes")
-            }
-            segDoneLogCount++
-            // 限速：保持 budgetBps，把带宽让给播放
-            val wait = PrefillThrottle.waitMs(
-                totalRead = written,
-                elapsedMs = clock.nowMs() - roundStart,
-                limitBytesPerSec = budgetBps,
-            )
-            if (wait > 0) delay(wait)
+            if (circuitOpen.get()) return
         }
+
+        // 完成标记：窗口已覆盖到片尾，且窗口内分片全部就绪
+        val fullyCovered = window.endIndexExclusive >= playlist.segments.size
+        val allReady = indexes.all { i ->
+            val uri = playlist.segments[i].uri
+            doneKeys.contains(uri) || run {
+                val len = cache.contentLength(uri)
+                len > 0L && cache.isCached(uri, 0L, len)
+            }
+        }
+        if (fullyCovered && allReady) {
+            completedPlaylists.add(playlist.uri)
+        } else {
+            completedPlaylists.remove(playlist.uri)
+        }
+
         AppLog.put(
-            "[Prefetch] window_done segs=$writtenSegs skipped=$skipped bytes=$written " +
-                "budgetBps=$budgetBps pl=${playlist.uri.substringAfterLast('/').take(24)}"
+            "[Prefetch] window_done tier=${tier.name} state=${window.state} segs=$writtenSegs " +
+                "skipped=$skipped bytes=$written near=$nearCount far=${ordered.size - nearCount} " +
+                "poolFree=$poolFree budgetBps=$budgetBps " +
+                "pl=${playlist.uri.substringAfterLast('/').take(24)}"
         )
     }
 
     private fun recordFailure(reason: String) {
         val count = consecutiveFailures.incrementAndGet()
-        if (count >= MAX_CONSECUTIVE_FAILURES && circuitOpen.compareAndSet(false, true)) {
-            AppLog.put("[Prefetch] circuit reason=$reason failCount=$count")
+        if (count < MAX_CONSECUTIVE_FAILURES) return
+        if (circuitOpen.compareAndSet(false, true)) {
+            val strikes = circuitStrikes.incrementAndGet()
+            if (strikes >= 2) {
+                // 冷却后再次达到阈值：本会话停用
+                circuitDisabled.set(true)
+                circuitCooldownUntil.set(0L)
+                AppLog.put("[Prefetch] circuit disabled reason=$reason failCount=$count strikes=$strikes")
+            } else {
+                // 第一次：降并发 + 冷却 60s（冷却后自动重试）
+                circuitCooldownUntil.set(clock.nowMs() + CIRCUIT_COOLDOWN_MS)
+                AppLog.put(
+                    "[Prefetch] circuit open reason=$reason failCount=$count " +
+                        "cooldownMs=$CIRCUIT_COOLDOWN_MS"
+                )
+            }
         }
     }
 
     /**
-     * 下一集预填：解析清单并预取前 [count] 个分片。
+     * 下一集预填：解析清单并预取 [count] 个尚未缓存的分片（增量语义）。
      *
-     * 返回值：写入字节数；失败返回 0。清单本身不写缓存。
+     * @param limitBytesPerSec 限速；调用方应传当前档位预算（倒计时预热不再落默认 1.5MB/s）
+     * @return 写入字节数；失败返回 0。清单本身不写缓存。
      */
     suspend fun prefillSegments(
         playlistUri: String,
         headers: Map<String, String>,
         count: Int = 3,
+        limitBytesPerSec: Long = PrefillThrottle.DEFAULT_LIMIT_BYTES_PER_SEC,
     ): Int = withContext(Dispatchers.IO) {
         if (playlistUri.isBlank() || count <= 0) return@withContext 0
         var mediaUri = playlistUri
@@ -571,10 +756,11 @@ object VideoSegmentPrefetcher {
             }
             total += bytes
             done++
-            // 与当前播放让路：下一集预填同样限速
+            // 与当前播放让路：下一集预填同样限速（按调用方档位预算）
             val wait = PrefillThrottle.waitMs(
                 totalRead = total,
                 elapsedMs = clock.nowMs() - startedAt,
+                limitBytesPerSec = limitBytesPerSec,
             )
             if (wait > 0) delay(wait)
         }
@@ -602,105 +788,12 @@ object VideoSegmentPrefetcher {
             cacheSizeBytes = cacheSizeBytes,
             bitrateBps = bitrateBps,
             bandwidthEstimateBps = bandwidthEstimateBps,
+            bucketDepthMs = bucketDepthMs,
+            episodeWrittenBytes = episodeWrittenBytes,
+            hasMeasuredSample = hasMeasuredSample,
+            previousTier = previousTier,
+            msSinceTierSwitch = msSinceTierSwitch,
+            allowFullEpisode = allowFullEpisode,
         )
 
-    // ===================== 生产端口实现 =====================
-
-    private object DefaultPrefetchCache : PrefetchCache {
-        override fun isCached(key: String, position: Long, length: Long): Boolean =
-            kotlin.runCatching { ExoPlayerHelper.cache.isCached(key, position, length) }.getOrDefault(false)
-
-        override fun contentLength(key: String): Long = kotlin.runCatching {
-            ContentMetadata.getContentLength(ExoPlayerHelper.cache.getContentMetadata(key))
-        }.getOrDefault(0L)
-
-        override fun removeResource(key: String) {
-            kotlin.runCatching { ExoPlayerHelper.cache.removeResource(key) }
-        }
-
-        override fun removeSpan(key: String, position: Long, length: Long) {
-            kotlin.runCatching {
-                val spans = ExoPlayerHelper.cache.getCachedSpans(key)
-                val target = spans.firstOrNull { it.position == position && it.length == length }
-                    ?: spans.firstOrNull {
-                        it.length > 0 && it.position <= position && it.position + it.length >= position + length
-                    }
-                if (target != null) ExoPlayerHelper.cache.removeSpan(target)
-            }
-        }
-
-        override fun cachedSpans(key: String): List<CachedSpan> = kotlin.runCatching {
-            ExoPlayerHelper.cache.getCachedSpans(key)
-                .filter { it.length > 0 }
-                .map { CachedSpan(position = it.position, length = it.length) }
-        }.getOrDefault(emptyList())
-    }
-
-    private object DefaultSegmentWriter : SegmentWriter {
-        override suspend fun write(
-            uri: String,
-            headers: Map<String, String>,
-            position: Long,
-            maxBytes: Long,
-        ): Long = withContext(Dispatchers.IO) {
-            val upstream = OkHttpDataSource.Factory(videoStreamClient)
-                .setUserAgent(ExoPlayerHelper.BROWSER_UA)
-                .setDefaultRequestProperties(headers)
-            val factory = CacheDataSource.Factory()
-                .setCache(ExoPlayerHelper.cache)
-                .setUpstreamDataSourceFactory(upstream)
-                .setCacheReadDataSourceFactory(FileDataSource.Factory())
-                .setCacheWriteDataSinkFactory(
-                    CacheDataSink.Factory()
-                        .setCache(ExoPlayerHelper.cache)
-                        .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
-                )
-            val length = if (maxBytes <= 0L || maxBytes >= Long.MAX_VALUE / 2) {
-                C.LENGTH_UNSET.toLong()
-            } else {
-                maxBytes
-            }
-            val dataSpec = DataSpec(Uri.parse(uri), position, length, null)
-            val dataSource = factory.createDataSource()
-            var total = 0L
-            try {
-                dataSource.open(dataSpec)
-                val buffer = ByteArray(16 * 1024)
-                while (true) {
-                    val read = dataSource.read(buffer, 0, buffer.size)
-                    if (read == C.RESULT_END_OF_INPUT || read <= 0) break
-                    total += read
-                    if (length != C.LENGTH_UNSET.toLong() && total >= length) break
-                }
-            } finally {
-                kotlin.runCatching { dataSource.close() }
-            }
-            total
-        }
-    }
-
-    private object DefaultManifestFetcher : ManifestFetcher {
-        override suspend fun fetch(uri: String, headers: Map<String, String>): String? =
-            withContext(Dispatchers.IO) {
-                try {
-                    val builder = okhttp3.Request.Builder()
-                        .url(uri)
-                        .header("User-Agent", ExoPlayerHelper.BROWSER_UA)
-                    headers.forEach { (k, v) -> builder.header(k, v) }
-                    videoStreamClient.newCall(builder.build()).execute().use { response ->
-                        if (!response.isSuccessful) return@withContext null
-                        val body = response.body ?: return@withContext null
-                        val source = body.source()
-                        source.request(MAX_MANIFEST_BYTES.toLong())
-                        val buffer = source.buffer
-                        val size = minOf(buffer.size, MAX_MANIFEST_BYTES.toLong()).toInt()
-                        if (size <= 0) null else buffer.clone().readUtf8(size.toLong())
-                    }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    AppLog.putDebug("[Prefetch] manifest fetch fail error=${e.javaClass.simpleName}")
-                    null
-                }
-            }
-    }
 }

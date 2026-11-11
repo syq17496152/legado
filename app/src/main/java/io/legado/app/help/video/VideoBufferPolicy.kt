@@ -41,6 +41,34 @@ object VideoBufferPolicy {
         else -> 1.0
     }
 
+    /** 内存桶条件提升后的目标 maxBuffer（180s） */
+    const val DEEPENED_MAX_BUFFER_MS = 180_000
+
+    /** 内存桶提升所需最小物理内存（MB） */
+    const val DEEPEN_MIN_RAM_MB = 8_000L
+
+    /** 内存桶提升允许的最大码率（bps） */
+    const val DEEPEN_MAX_BITRATE_BPS = 8_000_000L
+
+    /**
+     * 是否允许加深内存桶（R42 / AD-22 v1.2）。
+     *
+     * 必须同时满足：档位 ≥ FAST、物理内存 ≥8GB、码率 ∈ (0, 8Mbps]、目标字节 ≤256MB。
+     * 码率未知（≤0）按「不满足」处理；调用方负责按「实测 → 上次实测 → 默认 8Mbps」取值。
+     */
+    fun shouldDeepenBucket(
+        tier: io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier,
+        ramMb: Long,
+        bitrateBps: Long,
+        targetBufferBytes: Int,
+    ): Boolean {
+        if (!tier.isFullEpisodeCapable) return false
+        if (ramMb < DEEPEN_MIN_RAM_MB) return false
+        if (bitrateBps <= 0L || bitrateBps > DEEPEN_MAX_BITRATE_BPS) return false
+        if (targetBufferBytes <= 0 || targetBufferBytes > MAX_TARGET_BUFFER_BYTES) return false
+        return true
+    }
+
     /**
      * 计算实际缓冲参数（毫秒）
      *

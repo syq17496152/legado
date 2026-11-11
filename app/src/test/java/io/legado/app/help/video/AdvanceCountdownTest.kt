@@ -1,5 +1,6 @@
 package io.legado.app.help.video
 
+import io.legado.app.help.exoplayer.SegmentPrefetchPolicy.NetworkTier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,5 +50,21 @@ class AdvanceCountdownTest {
         assertEquals(0, AdvanceCountdown.secondsLeft(5000L, 3000L))
         assertEquals(0, AdvanceCountdown.secondsLeft(0L, 0L))
         assertEquals(0, AdvanceCountdown.secondsLeft(0L, -1L))
+    }
+
+    @Test
+    fun `倒计时预热片数按档位映射`() {
+        assertEquals(3, AdvanceCountdown.warmupPlan(NetworkTier.WEAK, false, 100).count)
+        assertEquals(8, AdvanceCountdown.warmupPlan(NetworkTier.STANDARD, false, 100).count)
+        assertEquals(12, AdvanceCountdown.warmupPlan(NetworkTier.FAST, false, 100).count)
+        assertEquals(20, AdvanceCountdown.warmupPlan(NetworkTier.ULTRA, false, 100).count)
+        assertEquals(20, AdvanceCountdown.warmupPlan(NetworkTier.EXTREME, false, 100).count)
+        assertEquals(8, AdvanceCountdown.warmupPlan(null, false, 100).count)
+    }
+
+    @Test
+    fun `短视频预热片数不超过剩余片数`() {
+        assertEquals(5, AdvanceCountdown.warmupPlan(NetworkTier.ULTRA, isShort = true, remainingSegments = 5).count)
+        assertEquals(0, AdvanceCountdown.warmupPlan(NetworkTier.ULTRA, isShort = true, remainingSegments = 0).count)
     }
 }

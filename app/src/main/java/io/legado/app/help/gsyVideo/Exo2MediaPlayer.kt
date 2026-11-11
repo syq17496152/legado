@@ -332,6 +332,10 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             if (player.playbackState != Player.STATE_READY) return
             updatePrefetchSnapshot()
             VideoSegmentPrefetcher.topUp(force = false)
+            // 完成度联动（R37/AD-26）：本集预取完成后把带宽转下一集（仅 FAST+，每集一次）
+            if (VideoSegmentPrefetcher.isEpisodeComplete(prefetchSessionId)) {
+                io.legado.app.model.VideoPlay.onEpisodePrefetchComplete(prefetchSessionId)
+            }
             maybeTrimBackCache()
             prefetchTickHandler.postDelayed(this, 5_000L)
         }
@@ -1788,7 +1792,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // READY 时 currentTracks 可能尚未就绪（HLS 首片到达前）⇒ 用首个媒体加载的 trackFormat 补码率
             if (knownBitrateBps <= 0L) {
                 val trackBitrate = mediaLoadData.trackFormat?.bitrate ?: 0
-                if (trackBitrate > 0) knownBitrateBps = trackBitrate.toLong()
+                if (trackBitrate > 0) {
+                    knownBitrateBps = trackBitrate.toLong()
+                    // R42/AD-22 v1.2：跨会话保留最近码率，供下一次 prepare 的内存桶判定使用
+                    ExoPlayerHelper.lastKnownBitrateBps = knownBitrateBps
+                }
             }
             while (recentRebufferAt.isNotEmpty() && now - recentRebufferAt.first() > 30_000L) {
                 recentRebufferAt.removeFirst()
@@ -1930,8 +1938,43 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 },
                 contentType = currentSniffResult.contentType,
                 supportsRange = currentSniffResult.supportsRange,
+                bucketDepthMs = ExoPlayerHelper.currentMaxBufferMs.toLong().coerceAtLeast(0L),
+                episodeWrittenBytes = VideoSegmentPrefetcher.episodeWrittenBytes(),
+                hasMeasuredSample = observedThroughputBps > 0L,
+                allowFullEpisode = allowFullEpisodeGate(),
             )
         )
+    }
+
+    /**
+     * 整集全量的运行时闸门（R44 / AD-32）：
+     * 后台 / 电量 <20% 未充电 / 系统热节流 / 近 30s 卡顿 ⇒ 不允许整集，仅保留窗口预取。
+     */
+    private fun allowFullEpisodeGate(): Boolean {
+        if (!io.legado.app.help.ForegroundState.isForeground()) return false
+        val ctx = splitties.init.appCtx
+        val battery = runCatching {
+            ctx.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
+        }.getOrNull()
+        if (battery != null) {
+            val percent = battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (percent in 0..19 && !battery.isCharging) return false
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val power = runCatching {
+                ctx.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            }.getOrNull()
+            if (power != null &&
+                power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_MODERATE
+            ) {
+                return false
+            }
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (recentRebufferAt.isNotEmpty() && now - recentRebufferAt.last() < 30_000L) {
+            return false
+        }
+        return true
     }
 
     /** READY 期间每 5s 补水 */

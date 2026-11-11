@@ -1,5 +1,6 @@
 package io.legado.app
 
+import android.app.Activity
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
@@ -9,6 +10,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.os.Build
+import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.graphics.toColorInt
 import com.bumptech.glide.Glide
@@ -46,6 +48,7 @@ import io.legado.app.help.crash.ExitInfoRecorder
 import io.legado.app.help.llm.LlmCircuitBreaker
 import io.legado.app.help.DefaultData
 import io.legado.app.help.DispatchersMonitor
+import io.legado.app.help.ForegroundState
 import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.MemoryPressure
 import io.legado.app.help.RuleBigDataHelp
@@ -204,6 +207,22 @@ class App : Application() {
             return
         }
         injectAppCtxIfNeeded(this)
+        // 预取闸门（review P0-1）：维护进程前后台状态，后台/锁屏时停止分片预取
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                ForegroundState.onActivityStarted()
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                ForegroundState.onActivityStopped()
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
         CrashHandler(this)
         // MCP 内腿服务（8765）· debug 变体专属（release 为空实现）：web-mcp-productization 二期 tasks 5.1
         DebugAppHook.onAppCreate()

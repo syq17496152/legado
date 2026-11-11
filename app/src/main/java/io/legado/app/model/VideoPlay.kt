@@ -36,6 +36,8 @@ import io.legado.app.help.exoplayer.VideoPreloader
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.video.VideoTrace
 import io.legado.app.help.exoplayer.VideoPrefiller
+import io.legado.app.help.exoplayer.VideoSegmentPrefetcher
+import io.legado.app.help.exoplayer.SegmentPrefetchPolicy
 import io.legado.app.data.entities.RssStar
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.getDanmaku
@@ -56,6 +58,7 @@ import io.legado.app.help.video.EntryModeResolver
 import io.legado.app.help.video.EpisodeAdvancePolicy
 import io.legado.app.help.video.LocalMediaResolver
 import io.legado.app.help.video.NextEpisodeResolver
+import io.legado.app.help.video.NextEpisodeWarmup
 import io.legado.app.help.video.PlaybackMode
 import io.legado.app.help.video.PlaybackModeState
 import io.legado.app.help.video.VideoFavoriteResolver
@@ -2053,6 +2056,186 @@ object VideoPlay : CoroutineScope by MainScope(){
      *
      * 从 [advanceEpisode] 抽出，供「倒计时到点」与「无倒计时宿主」两条路径共用。
      */
+    /** 最近一次「完成度 → 下一集预热」的集标识（每集只触发一次） */
+    @Volatile
+    private var completionSignaledFor: String? = null
+
+    /**
+     * 完成度联动（R37 / AD-26）：本集预取完成后，把带宽转给下一集预热（仅 FAST+，每集一次）。
+     *
+     * 由 `Exo2MediaPlayer` 5s tick 在 `isEpisodeComplete` 为真时调用。
+     */
+    fun onEpisodePrefetchComplete(sessionId: Long) {
+        val tier = VideoSegmentPrefetcher.lastTier() ?: return
+        if (!tier.isFullEpisodeCapable) return
+        val key = "${book?.bookUrl ?: source?.getKey()}#$chapterInVolumeIndex/$rssEpisodeIndex/$rssArticleIndex"
+        if (key == completionSignaledFor) return
+        completionSignaledFor = key
+        val target = when {
+            book != null -> AdvanceTarget.NextEpisode(chapterInVolumeIndex + 1)
+            !rssEpisodes.isNullOrEmpty() -> AdvanceTarget.NextEpisode(rssEpisodeIndex + 1)
+            !rssArticles.isNullOrEmpty() -> AdvanceTarget.NextArticle(rssArticleIndex + 1)
+            else -> return
+        }
+        VideoTrace.event("prefetch_complete", "session" to sessionId, "tier" to tier.name)
+        startNextEpisodeWarmup(target)
+    }
+
+    /**
+     * 启动下一集增量预热（倒计时 / 完成度两条路径共用）。
+     *
+     * 预算取当前档位预算（不再落默认 1.5MB/s）；目标片数按 [AdvanceCountdown.warmupPlan]。
+     */
+    private fun startNextEpisodeWarmup(target: AdvanceTarget) {
+        val bandwidth = maxOf(
+            ExoPlayerHelper.bandwidthMeter.bitrateEstimate,
+            ExoPlayerHelper.lastObservedThroughputBps,
+        )
+        val tier = VideoSegmentPrefetcher.lastTier() ?: SegmentPrefetchPolicy.tierOf(bandwidth)
+        val plan = AdvanceCountdown.warmupPlan(tier, isShort = false, remainingSegments = Int.MAX_VALUE)
+        if (plan.count <= 0) return
+        val limit = if (bandwidth > 0L) {
+            (bandwidth * tier.budgetRatio).toLong().coerceIn(
+                SegmentPrefetchPolicy.MIN_BUDGET_BPS,
+                tier.maxBudgetBps,
+            )
+        } else {
+            SegmentPrefetchPolicy.MIN_BUDGET_BPS
+        }
+        val ctx = buildWarmupContext(target, plan.count, limit) ?: return
+        NextEpisodeWarmup.start(ctx)
+    }
+
+    /**
+     * 构造预热上下文（目标集/文章的解析器注入，避免 [NextEpisodeWarmup] 读全局状态）。
+     */
+    private fun buildWarmupContext(
+        target: AdvanceTarget,
+        count: Int,
+        limitBytesPerSec: Long,
+    ): NextEpisodeWarmup.Context? {
+        if (target !is AdvanceTarget.NextEpisode && target !is AdvanceTarget.NextArticle) return null
+        // 书源：下一章
+        if (book != null) {
+            val chapter = episodes?.getOrNull(chapterInVolumeIndex + 1) ?: return null
+            if (chapter.url.isBlank()) return null
+            val src = source ?: return null
+            val b = book ?: return null
+            val key = NextEpisodeResolver.key(chapter.url, src.getKey(), null)
+            return NextEpisodeWarmup.Context(
+                key = key,
+                targetUrl = chapter.url,
+                count = count,
+                limitBytesPerSec = limitBytesPerSec,
+                resolve = resolve@{
+                    NextEpisodeResolver.get(key)?.let {
+                        return@resolve NextEpisodeWarmup.Resolved(it.finalUrl, it.headers)
+                    }
+                    val result = SniffEngine.play(
+                        SniffRequest(targetUrl = chapter.url, source = src, ruleData = b)
+                    )
+                    val candidate = result.selected ?: return@resolve null
+                    val baseHeaders = kotlin.runCatching {
+                        AnalyzeUrl(chapter.url, source = src, ruleData = b, chapter = chapter).headerMap
+                    }.getOrNull() ?: emptyMap()
+                    val headers = HeaderResolver.merge(candidate, baseHeaders, chapter.url, candidate.url)
+                    NextEpisodeResolver.put(
+                        key,
+                        NextEpisodeResolver.PreResolved(
+                            finalUrl = candidate.url,
+                            headers = headers,
+                            resolvedAt = android.os.SystemClock.uptimeMillis(),
+                            engine = candidate.source,
+                        )
+                    )
+                    NextEpisodeWarmup.Resolved(candidate.url, headers)
+                },
+            )
+        }
+        // 订阅源集数
+        val episodesList = rssEpisodes
+        if (!episodesList.isNullOrEmpty()) {
+            val episode = episodesList.getOrNull(rssEpisodeIndex + 1) ?: return null
+            if (episode.url.isBlank()) return null
+            val src = source ?: return null
+            val article = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+                ?: rssArticles?.getOrNull(rssArticleIndex) ?: return null
+            val key = NextEpisodeResolver.key(episode.url, src.getKey(), article.link)
+            return NextEpisodeWarmup.Context(
+                key = key,
+                targetUrl = episode.url,
+                count = count,
+                limitBytesPerSec = limitBytesPerSec,
+                resolve = resolve@{
+                    NextEpisodeResolver.get(key)?.let {
+                        return@resolve NextEpisodeWarmup.Resolved(it.finalUrl, it.headers)
+                    }
+                    val result = SniffEngine.play(
+                        SniffRequest(targetUrl = episode.url, source = src, ruleData = article)
+                    )
+                    val candidate = result.selected ?: return@resolve null
+                    val baseHeaders = kotlin.runCatching {
+                        AnalyzeUrl(episode.url, source = src, ruleData = article).headerMap
+                    }.getOrNull() ?: emptyMap()
+                    val headers = HeaderResolver.merge(candidate, baseHeaders, article.link, candidate.url)
+                    NextEpisodeResolver.put(
+                        key,
+                        NextEpisodeResolver.PreResolved(
+                            finalUrl = candidate.url,
+                            headers = headers,
+                            resolvedAt = android.os.SystemClock.uptimeMillis(),
+                            engine = candidate.source,
+                        )
+                    )
+                    NextEpisodeWarmup.Resolved(candidate.url, headers)
+                },
+            )
+        }
+        // 文章模式：下一篇
+        val articles = rssArticles
+        if (!articles.isNullOrEmpty()) {
+            val article = articles.getOrNull(rssArticleIndex + 1) ?: return null
+            if (article.link.isBlank()) return null
+            val src = source ?: return null
+            val key = NextEpisodeResolver.key(article.link, src.getKey(), article.link)
+            return NextEpisodeWarmup.Context(
+                key = key,
+                targetUrl = article.link,
+                count = count,
+                limitBytesPerSec = limitBytesPerSec,
+                resolve = resolve@{
+                    NextEpisodeResolver.get(key)?.let {
+                        return@resolve NextEpisodeWarmup.Resolved(it.finalUrl, it.headers)
+                    }
+                    val result = SniffEngine.play(
+                        SniffRequest(targetUrl = article.link, source = src, ruleData = article)
+                    )
+                    val candidate = result.selected ?: return@resolve null
+                    val baseHeaders = kotlin.runCatching {
+                        AnalyzeUrl(article.link, source = src, ruleData = article).headerMap
+                    }.getOrNull() ?: emptyMap()
+                    val headers = HeaderResolver.merge(candidate, baseHeaders, article.link, candidate.url)
+                    NextEpisodeResolver.put(
+                        key,
+                        NextEpisodeResolver.PreResolved(
+                            finalUrl = candidate.url,
+                            headers = headers,
+                            resolvedAt = android.os.SystemClock.uptimeMillis(),
+                            engine = candidate.source,
+                        )
+                    )
+                    NextEpisodeWarmup.Resolved(candidate.url, headers)
+                },
+            )
+        }
+        return null
+    }
+
+    /**
+     * 立即执行续播分派（书源章节 / 订阅源集数 / 文章）
+     *
+     * 从 [advanceEpisode] 抽出，供「倒计时到点」与「无倒计时宿主」两条路径共用。
+     */
     private fun dispatchAdvance(
         target: AdvanceTarget,
         origin: String,
@@ -2165,6 +2348,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             val start = android.os.SystemClock.uptimeMillis()
             try {
                 notifyAdvanceCountdown(seconds)
+                // R36 / AD-24：倒计时一开始就并行预热下一集（独立 scope，取消续播不中断）
+                startNextEpisodeWarmup(target)
                 while (true) {
                     delay(AdvanceCountdown.TICK_MS)
                     val left = AdvanceCountdown.secondsLeft(
@@ -2511,6 +2696,8 @@ object VideoPlay : CoroutineScope by MainScope(){
     private fun startPlayBookChapter(player: GSYBaseVideoPlayer, book: Book, chapter: BookChapter) {
         // 2026-10-25 用户真机反馈：切集后采集/嗅探空窗只有黑屏（流量在跑）⇒ 先亮加载反馈。
         // 收起点：Pipeline.setUpAndPlay（setUp 完成）与 VIDEO_PLAY_ERROR 观察者（失败）。
+        // 本期 AD-24：切集入口取消旧目标的预热（新集起播后由整集模式/triggerBookPreload 接管）
+        NextEpisodeWarmup.cancelAll("book_switch")
         postEvent(EventBus.VIDEO_SWITCH_LOADING, true)
         // 4.8b（Z9）：嗅探前捕获原始 URL（书源正文链接可重嗅），作为播放历史键
         originalPlayUrl = chapter.url
@@ -2825,6 +3012,8 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 采集链已委托 VideoPlaybackPipeline.playEpisode（AnalyzeUrl/setUp/startPlayLogic 由 Pipeline 统一实现）
      */
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
+        // 本期 AD-24：切集入口取消旧目标的预热（新集起播后由整集模式/triggerPreload 接管）
+        NextEpisodeWarmup.cancelAll("rss_switch")
         markPlaybackSetup()
         VideoTrace.event(
             stage = "switch_req",

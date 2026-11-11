@@ -144,6 +144,34 @@ object ExoPlayerHelper {
     var lastObservedThroughputBps: Long = 0L
 
     /**
+     * 上一次会话最近一次实测码率（bps）。
+     *
+     * 用途：`prepare` 构建 LoadControl 时本会话码率尚未可知（R42 时序卡点），
+     * 用上次值参与「内存桶是否加深」判定；首个实测样本出现后由播放器回写更新。
+     */
+    @Volatile
+    var lastKnownBitrateBps: Long = 0L
+
+    /** 当前网络档位（五档；供内存桶加深判定，纯映射有效带宽） */
+    fun currentNetworkTier(): SegmentPrefetchPolicy.NetworkTier =
+        SegmentPrefetchPolicy.tierOf(
+            maxOf(bandwidthMeter.bitrateEstimate, lastObservedThroughputBps)
+        )
+
+    /** 内存桶判定用码率：上次实测优先，否则默认 8Mbps（AD-22 v1.2 取值顺序的兜底段） */
+    private fun bitrateForBucket(): Long =
+        if (lastKnownBitrateBps > 0L) lastKnownBitrateBps else 8_000_000L
+
+    /**
+     * 当前播放器实际生效的 maxBuffer（媒体毫秒）。
+     *
+     * 供预取器做磁盘池 NEAR 分区（`bucketDepthMs`）；由 [createLoadControlByTier] 写入。
+     */
+    @Volatile
+    var currentMaxBufferMs: Int = 0
+        private set
+
+    /**
      * T2.1: 获取当前带宽档位
      *
      * FR-5: 若 forceTier 非 null，优先返回 forceTier（TTFB 降档机制）
@@ -192,7 +220,7 @@ object ExoPlayerHelper {
             BandwidthTier.MEDIUM -> Triple(8_000, 90_000, 800)
             BandwidthTier.GOOD -> Triple(8_000, 120_000, 500)
         }
-        val profile = VideoBufferPolicy.resolve(
+        val baseProfile = VideoBufferPolicy.resolve(
             tierMinBufferMs = tierMinMs,
             tierMaxBufferMs = tierMaxMs,
             tierBufferForPlaybackMs = tierPlayMs,
@@ -202,6 +230,24 @@ object ExoPlayerHelper {
         // §13.5（B3）：不再用 -1 不限字节——按 maxBuffer 秒数×基准码率×安全系数封顶，防 allocator 无界增长
         // video-buffer-prefetch-v2 §1.15：按当前倍速放大 maxBuffer（只放大不缩小，上限 300s）
         val speed = playbackSpeedSnapshot
+        // R42 / AD-22 v1.2：内存桶条件加深（好网 + ≥8GB + 码率≤8Mbps + 目标字节≤256MB）
+        val networkTier = currentNetworkTier()
+        val deepenTargetBytes = VideoBufferPolicy.targetBufferBytes(
+            VideoBufferPolicy.DEEPENED_MAX_BUFFER_MS
+        )
+        val deepenBucket = VideoBufferPolicy.shouldDeepenBucket(
+            tier = networkTier,
+            ramMb = CacheSizePolicy.totalRamMb(),
+            bitrateBps = bitrateForBucket(),
+            targetBufferBytes = deepenTargetBytes,
+        )
+        val profile = if (deepenBucket) {
+            baseProfile.copy(
+                maxBufferMs = maxOf(baseProfile.maxBufferMs, VideoBufferPolicy.DEEPENED_MAX_BUFFER_MS)
+            )
+        } else {
+            baseProfile
+        }
         // 高倍速下 min/max 同步放大，保证加载器不会过早停止；min 不超过 max/2
         val scaledMin = minOf(
             SpeedBufferPolicy.scaledMinBufferMs(profile.minBufferMs, speed),
@@ -213,19 +259,22 @@ object ExoPlayerHelper {
         )
         val targetBytes = VideoBufferPolicy.targetBufferBytes(effectiveProfile.maxBufferMs)
         builder.setTargetBufferBytes(targetBytes)
-        // 时间优先于字节，确保 maxBuffer 时长真正生效
-        builder.setPrioritizeTimeOverSizeThresholds(true)
+        // 加深时按字节优先（保证 256MB 上限真正生效）；否则保持基线「时间优先」
+        builder.setPrioritizeTimeOverSizeThresholds(!deepenBucket)
+        currentMaxBufferMs = effectiveProfile.maxBufferMs
         val loadControl = builder.setBufferDurationsMs(
             effectiveProfile.minBufferMs,
             effectiveProfile.maxBufferMs,
             effectiveProfile.bufferForPlaybackMs,
             effectiveProfile.bufferForPlaybackAfterRebufferMs
         ).build()
-        // 日志验证 LoadControl 实际参数生效（含策略/倍速归因）
+        // 日志验证 LoadControl 实际参数生效（含策略/倍速/加深归因）
         AppLog.put(
             "[BufferSpeed] LoadControl tier=$tier strategy=$strategy speed=$speed " +
                 "minBufferMs=${effectiveProfile.minBufferMs} maxBufferMs=${effectiveProfile.maxBufferMs} " +
-                "playMs=${effectiveProfile.bufferForPlaybackMs} targetBufferBytes=$targetBytes prioritizeTime=true"
+                "playMs=${effectiveProfile.bufferForPlaybackMs} targetBufferBytes=$targetBytes " +
+                "prioritizeTime=${!deepenBucket} deepen=$deepenBucket netTier=$networkTier " +
+                "bitrate=${bitrateForBucket()}"
         )
         return loadControl
     }
