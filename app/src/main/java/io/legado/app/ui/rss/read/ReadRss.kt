@@ -13,6 +13,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.model.VideoPlay
 import io.legado.app.ui.image.ImageGalleryActivity
 import io.legado.app.ui.image.ImagePlay
+import io.legado.app.help.video.PlaybackMode
 import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.postEvent
@@ -110,7 +111,8 @@ object ReadRss {
         sortName: String?,
         sortUrl: String?,
         nextPageUrl: String?,
-        page: Int
+        page: Int,
+        modeHint: String? = null
     ) {
         fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
             rssArticles.forEach { article ->
@@ -126,10 +128,21 @@ object ReadRss {
             putExtra("sourceType", SourceType.rss)
             putExtra("record", rssArticle.link)
             putExtra("videoTitle", rssArticle.title) // R3 title 修复：传递标题给 VideoPlayerActivity
+            modeHint?.let { putExtra(VideoPlayerActivity.EXTRA_MODE_HINT, it) }
         }
     }
 
-    /** 启动视频播放页（Activity 入口；同时服务列表路径与历史记录路径） */
+    /**
+     * 收藏/历史/单篇直入的初始模式 hint（design §1.13 #8：无列表注入 ⇒ SERIES 下一集）。
+     *
+     * 列表页/搜索列表已带多篇上下文时不注入，交由 `EntryModeResolver` 推导为 FEED（上一部/上一篇）。
+     */
+    internal fun rssEntryModeHint(providedArticles: List<RssArticle>?): String? =
+        if (providedArticles == null || providedArticles.size <= 1) PlaybackMode.SERIES.name else null
+
+    /**
+     * 启动视频播放页（Activity 入口；同时服务列表路径与历史记录路径）
+     */
     private fun startVideoFromActivity(
         activity: AppCompatActivity,
         rssArticle: RssArticle,
@@ -137,7 +150,8 @@ object ReadRss {
         sortName: String?,
         sortUrl: String?,
         nextPageUrl: String?,
-        page: Int
+        page: Int,
+        modeHint: String? = null
     ) {
         prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
         activity.startActivity<VideoPlayerActivity> {
@@ -145,6 +159,7 @@ object ReadRss {
             putExtra("sourceType", SourceType.rss)
             putExtra("record", rssArticle.link)
             putExtra("videoTitle", rssArticle.title)
+            modeHint?.let { putExtra(VideoPlayerActivity.EXTRA_MODE_HINT, it) }
         }
     }
 
@@ -163,7 +178,8 @@ object ReadRss {
                 withContext(Dispatchers.Main) {
                     startVideoFromActivity(
                         activity, article, articles,
-                        sortName = article.sort, sortUrl = null, nextPageUrl = null, page = 1
+                        sortName = article.sort, sortUrl = null, nextPageUrl = null, page = 1,
+                        modeHint = rssEntryModeHint(null)
                     )
                 }
             }
@@ -215,7 +231,8 @@ object ReadRss {
                 withContext(Dispatchers.Main) {
                     startVideoFromActivity(
                         activity, rssArticle, articles,
-                        sortName = sortName, sortUrl = sortUrl, nextPageUrl = nextPageUrl, page = page
+                        sortName = sortName, sortUrl = sortUrl, nextPageUrl = nextPageUrl, page = page,
+                        modeHint = rssEntryModeHint(rssArticles)
                     )
                 }
             }
@@ -265,7 +282,10 @@ object ReadRss {
                 // 上下文缺失：Room suspend 查询自带线程切换，`launch` 默认 Main 不会阻塞 UI
                 fragment.viewLifecycleOwner.lifecycleScope.launch {
                     val articles = resolveVideoArticles(rssArticle, rssArticles)
-                    startVideoFromFragment(fragment, rssArticle, articles, sortName, sortUrl, nextPageUrl, page)
+                    startVideoFromFragment(
+                        fragment, rssArticle, articles, sortName, sortUrl, nextPageUrl, page,
+                        modeHint = rssEntryModeHint(rssArticles)
+                    )
                 }
             }
             return

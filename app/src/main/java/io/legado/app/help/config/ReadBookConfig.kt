@@ -14,8 +14,6 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
-import io.legado.app.utils.getPrefString
-import io.legado.app.utils.putPrefString
 import io.legado.app.utils.compress.ZipUtils
 import io.legado.app.utils.createFolderReplace
 import io.legado.app.utils.externalCache
@@ -302,16 +300,6 @@ object ReadBookConfig {
         set(value) {
             config.bgAlpha = value
         }
-
-    /** R1：眼动翻页首次开启帮助是否已展示（只提示一次，避免每次开开关都弹长文） */
-    var eyePageTurnHelpShown: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.eyePageTurnHelpShown, false)
-        set(value) = appCtx.putPrefBoolean(PreferKey.eyePageTurnHelpShown, value)
-
-    /** R1：眼动三点校准结果（JSON，设备本地；备份恢复时被忽略，见 DEVICE_LOCAL_IGNORE_PREF_KEYS） */
-    var eyePageCalibration: String?
-        get() = appCtx.getPrefString(PreferKey.eyePageCalibration)
-        set(value) = appCtx.putPrefString(PreferKey.eyePageCalibration, value)
 
     var pageAnim: Int
         get() = config.curPageAnim()

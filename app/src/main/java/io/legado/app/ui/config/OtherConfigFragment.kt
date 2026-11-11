@@ -18,6 +18,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.EpubLoadingTemplateManager
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.NavigationBarIconConfig
+import io.legado.app.help.storage.StorageAccess
 import io.legado.app.model.CheckRssSource
 import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
@@ -64,7 +65,12 @@ class OtherConfigFragment : ComposeSettingFragment() {
     )
     private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { treeUri ->
-            AppConfig.defaultBookTreeUri = treeUri.toString()
+            val uri = treeUri.toString()
+            // 选中的目录同时进入「已授权目录」并成为默认保存位置。
+            // 旧实现只写 defaultBookTreeUri ⇒ 目录无法复用到多目录浏览（storage-permission-full-access）
+            StorageAccess.addSafeDir(uri)
+            StorageAccess.setDefaultSaveDir(uri)
+            refreshSettings()
         }
     }
 
@@ -270,6 +276,17 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 summary = getString(R.string.custom_hosts_summary),
                 onClick = ::showCustomHostsDialog
             ),
+            // 存储访问分组（全盘权限 + 多目录授权）拆至 StorageAccessSettingsUi，避免单文件超行数上限
+            *StorageAccessSettingsUi.items(
+                fragment = this,
+                onChanged = ::refreshSettings,
+                requestPickDir = { hint ->
+                    localBookTreeSelect.launch {
+                        title = hint
+                        mode = HandleFileContract.DIR_SYS
+                    }
+                }
+            ).toTypedArray(),
             SettingActionSpec(
                 key = PreferKey.defaultBookTreeUri,
                 title = getString(R.string.book_tree_uri_t),

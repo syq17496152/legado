@@ -46,12 +46,21 @@ class TlsFallbackDataSourceFactory(
         private var active: DataSource? = null
 
         override fun open(dataSpec: DataSpec): Long {
+            val host = dataSpec.uri.host.orEmpty()
+            // video-buffer-prefetch-v2 AD-07：主机级负缓存（10 分钟），避免「站点拒 Cronet」时
+            // 每个分片都先失败一次 TLS 握手再回退（2~4s 短分片会被这 200~600ms/片拖死）。
+            if (host.isNotEmpty() && TlsHostNegativeCache.shouldSkipPrimary(host)) {
+                AppLog.putDebug("TlsFallback: host negative cache hit, skip primary, host=$host")
+                active = fallback
+                return fallback.open(dataSpec)
+            }
             try {
                 val length = primary.open(dataSpec)
                 active = primary
                 return length
             } catch (e: IOException) {
                 if (!isTlsMismatch(e)) throw e
+                if (host.isNotEmpty()) TlsHostNegativeCache.markFailed(host)
                 AppLog.put("TlsFallback: primary TLS mismatch, fallback to okhttp, urlPath=${ExoPlayerHelper.sanitizeUrl(dataSpec.uri.toString())}")
                 val length = fallback.open(dataSpec)
                 active = fallback
@@ -70,6 +79,36 @@ class TlsFallbackDataSourceFactory(
             active = null
         }
     }
+}
+
+/**
+ * 主机级 TLS 回退负缓存（video-buffer-prefetch-v2 AD-07）。
+ *
+ * 同一主机首次 Cronet 握手失败后，[TTL_MS] 内后续请求直接走回退栈；
+ * TTL 到期再试一次 Cronet（避免永久放弃其 TLS 指纹优势）。
+ */
+internal object TlsHostNegativeCache {
+
+    const val TTL_MS = 10 * 60 * 1000L
+
+    private val hosts = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    fun shouldSkipPrimary(host: String, nowMs: Long = android.os.SystemClock.elapsedRealtime()): Boolean {
+        if (host.isBlank()) return false
+        val expireAt = hosts[host] ?: return false
+        if (nowMs - expireAt < TTL_MS) return true
+        hosts.remove(host)
+        return false
+    }
+
+    fun markFailed(host: String, nowMs: Long = android.os.SystemClock.elapsedRealtime()) {
+        if (host.isBlank()) return
+        hosts[host] = nowMs
+    }
+
+    fun clear() = hosts.clear()
+
+    internal fun size(): Int = hosts.size
 }
 
 /**

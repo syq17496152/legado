@@ -10,9 +10,13 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import io.legado.app.constant.AppLog
 import io.legado.app.help.http.videoStreamClient
 import io.legado.app.model.VideoPlay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
@@ -34,12 +38,16 @@ import java.util.concurrent.ConcurrentHashMap
  *   videoPreloadCount（预填记录 LRU 容量）、playerFirstFramePreload（预加载总开关）。
  * - 上游 client 复用 videoStreamClient（强制 HTTP/1.1，与嗅探链路一致，规避 HTTP/2 协议错误）。
  *
- * 已知上限：预填 .m3u8 时仅预填清单本体首段（分片级预填属 Phase 4 M3u8Parser 消费范畴）。
+ * 已知上限：HLS 已改为「解析清单后预取真实分片 3 个」（video-buffer-prefetch-v2）；
+ * 分行级（BYTERANGE/LL-HLS/直播）仍不预取。
  */
 object VideoPrefiller {
 
     /** 预填记录：finalUrl → 预填时间戳（去重 + LRU 淘汰） */
     private val prefillRecords = ConcurrentHashMap<String, Long>()
+
+    /** §13.7：在途预填任务（会话结束时统一取消，避免退出后仍占带宽） */
+    private val prefillJobs = ConcurrentHashMap<String, Job>()
 
     /** 协程作用域：预填任务在 IO 线程执行，失败静默（不影响播放主链路） */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -54,12 +62,13 @@ object VideoPrefiller {
         // 复用 AD-01 预加载总开关（关闭时不预填）
         if (!VideoPlay.playerFirstFramePreload) return
         if (finalUrl.isBlank()) return
-        // 去重：同一 finalUrl 已预填则跳过（换集快速滑动防重复下载）
-        if (prefillRecords.containsKey(finalUrl)) {
+        // 去重：同一 finalUrl 已预填或已在途则跳过（换集快速滑动防重复下载）
+        if (prefillRecords.containsKey(finalUrl) || prefillJobs.containsKey(finalUrl)) {
             AppLog.putDebug("VideoPrefiller: cache hit, skip prefill, urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}")
             return
         }
-        scope.launch {
+        // 先登记再启动（LAZY）：避免任务极快完成时 finally 先删除、随后又被写回形成僵尸记录
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val bytes = prefillSync(finalUrl, headers)
                 prefillRecords[finalUrl] = System.currentTimeMillis()
@@ -68,13 +77,21 @@ object VideoPrefiller {
                     "VideoPrefiller: prefill success, bytes=$bytes, " +
                         "urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}"
                 )
+            } catch (e: CancellationException) {
+                // §13.7：会话结束取消属正常路径，不记为失败
+                AppLog.putDebug("VideoPrefiller: prefill cancelled, urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}")
+                throw e
             } catch (e: Exception) {
                 AppLog.put(
                     "VideoPrefiller: prefill failed, urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}, " +
                         "error=${e.javaClass.simpleName}"
                 )
+            } finally {
+                prefillJobs.remove(finalUrl)
             }
         }
+        prefillJobs[finalUrl] = job
+        job.start()
     }
 
     /**
@@ -84,7 +101,35 @@ object VideoPrefiller {
      * 工厂与 DataSource 均为本次预填局部新建，setDefaultRequestProperties 仅作用于局部实例，
      * 全局 cronetDataFactory/okhttpDataFactory 的默认头不受影响，当前播放分片请求头零污染。
      */
-    private fun prefillSync(finalUrl: String, headers: Map<String, String>): Int {
+    private suspend fun prefillSync(finalUrl: String, headers: Map<String, String>): Int {
+        // video-buffer-prefetch-v2 §1.6：HLS 清单不再只预填 97B 清单（且清单已被
+        // ManifestBypass 绕过缓存 ⇒ 永远读不到）；改为解析清单后预取真实分片 3 个。
+        if (isManifestUrl(finalUrl) || M3u8UrlShape.matches(finalUrl)) {
+            // 档位预算（本期 AD-35：不再落默认 1.5MB/s）
+            val bandwidth = maxOf(
+                ExoPlayerHelper.bandwidthMeter.bitrateEstimate,
+                ExoPlayerHelper.lastObservedThroughputBps,
+            )
+            val tier = SegmentPrefetchPolicy.tierOf(bandwidth)
+            val limit = if (bandwidth > 0L) {
+                (bandwidth * tier.budgetRatio).toLong().coerceIn(
+                    SegmentPrefetchPolicy.MIN_BUDGET_BPS,
+                    tier.maxBudgetBps,
+                )
+            } else {
+                PrefillThrottle.DEFAULT_LIMIT_BYTES_PER_SEC
+            }
+            val bytes = VideoSegmentPrefetcher.prefillSegments(
+                playlistUri = finalUrl,
+                headers = headers,
+                count = 3,
+                limitBytesPerSec = limit,
+            )
+            AppLog.put(
+                "VideoPrefiller: hls prefill segs, bytes=$bytes, urlPath=${ExoPlayerHelper.sanitizeUrl(finalUrl)}"
+            )
+            return bytes
+        }
         val prefillBytes = getPrefillBytes()
         // 独立 DataSource 工厂实例（per-prefill 局部），per-request 头注入不触碰全局工厂（F-04/Z2）
         val localUpstreamFactory = OkHttpDataSource.Factory(videoStreamClient)
@@ -103,6 +148,7 @@ object VideoPrefiller {
         val dataSpec = DataSpec(Uri.parse(finalUrl), 0, prefillBytes.toLong(), null)
         val dataSource = cacheFactory.createDataSource()
         var totalRead = 0
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         try {
             dataSource.open(dataSpec)
             val buffer = ByteArray(8 * 1024)
@@ -111,6 +157,12 @@ object VideoPrefiller {
                 val read = dataSource.read(buffer, 0, toRead)
                 if (read == C.RESULT_END_OF_INPUT || read <= 0) break
                 totalRead += read
+                // §13.7 限速：超前目标速率时主动让出带宽，避免抢占当前播放供给
+                val wait = PrefillThrottle.waitMs(
+                    totalRead = totalRead.toLong(),
+                    elapsedMs = android.os.SystemClock.elapsedRealtime() - startedAt
+                )
+                if (wait > 0) delay(wait)
             }
         } finally {
             try {
@@ -169,7 +221,14 @@ object VideoPrefiller {
 
     /** 清除预填记录（退出播放器释放时调用） */
     fun clearCache() {
+        // §13.7：会话结束取消在途预填，避免退出后仍占带宽/写缓存
+        prefillJobs.values.forEach { it.cancel() }
+        prefillJobs.clear()
         prefillRecords.clear()
+        // 当前集分片预取同样必须随会话结束清理（video-buffer-prefetch-v2）
+        VideoSegmentPrefetcher.clearAll()
+        // 本期 AD-24：下一集预热随会话结束统一取消
+        io.legado.app.help.video.NextEpisodeWarmup.cancelAll("clear_cache")
         AppLog.putDebug("VideoPrefiller: prefill records cleared")
     }
 }

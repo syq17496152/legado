@@ -17,6 +17,9 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.storage.FullAccessState
+import io.legado.app.help.storage.StorageAccess
+import io.legado.app.help.storage.isRestrictedPath
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
@@ -26,6 +29,7 @@ import io.legado.app.ui.book.import.ImportBookScreen
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.components.MenuAction
 import androidx.compose.material.icons.Icons
@@ -39,6 +43,7 @@ import io.legado.app.utils.FileDoc
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isUri
 import io.legado.app.utils.launch
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.putPrefInt
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -68,9 +73,15 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     private var currentItems = listOf<ImportBook>()
     private var selectedIndexes = linkedSetOf<Int>()
 
+    // 存储引导在单个进程内只提示一次（不阻断，后续从顶部常驻入口进入）
+    private var storageGuideShown = false
+
     private val selectFolder = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            AppConfig.importBookPath = uri.toString()
+            val value = uri.toString()
+            // 用户主动选择的目录同时登记为可浏览目录（多目录切换复用）
+            StorageAccess.addSafeDir(value)
+            AppConfig.importBookPath = value
             initRootDoc(true)
         }
     }
@@ -85,9 +96,22 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
         initComposeHost()
         lifecycleScope.launch {
             if (setBookStorage() && AppConfig.importBookPath.isNullOrBlank()) {
-                AppConfig.importBookPath = AppConfig.defaultBookTreeUri
+                // 首次进入：优先默认保存目录，其次是任一已授权目录（多目录入口）
+                AppConfig.importBookPath =
+                    AppConfig.defaultBookTreeUri ?: StorageAccess.safeDirs().firstOrNull()
             }
             initData()
+        }
+    }
+
+    /**
+     * 从系统设置返回后重新判定根：权限被撤销或目录失效时回退，避免停留在不可访问的根上。
+     */
+    override fun onResume() {
+        super.onResume()
+        val root = viewModel.rootDoc ?: return
+        if (!isRootAccessible(root)) {
+            resetRoot()
         }
     }
 
@@ -132,6 +156,23 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             // topbar-icon-semantics-fix 3.3：选目录恢复一级图标（原版 import_book.xml menu_select_folder always）
             alwaysShow = true,
             onClick = { selectFolder.launch() }
+        ),
+        MenuAction(
+            icon = Icons.Default.FolderOpen,
+            title = if (StorageAccess.fullAccessState() == FullAccessState.GRANTED) {
+                getString(R.string.storage_all_files_access_on)
+            } else {
+                getString(R.string.storage_open_full_access)
+            },
+            // 常驻入口：任何权限状态下都可触达（storage-permission-full-access R3）
+            alwaysShow = true,
+            onClick = {
+                if (StorageAccess.fullAccessState() == FullAccessState.GRANTED) {
+                    toastOnUi(R.string.storage_all_files_access_on)
+                } else {
+                    requestFullAccess()
+                }
+            }
         ),
         MenuAction(
             icon = Icons.Default.Sort,
@@ -265,22 +306,110 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     private fun initRootDoc(changedFolder: Boolean = false) {
         if (viewModel.rootDoc != null && !changedFolder) {
             upPath()
-        } else {
-            val lastPath = AppConfig.importBookPath
-            if (lastPath.isNullOrBlank()) {
-                selectFolder.launch()
-            } else {
-                val rootUri = if (lastPath.isUri()) {
-                    lastPath.toUri()
-                } else {
-                    Uri.fromFile(File(lastPath))
-                }
+            return
+        }
+        val lastPath = AppConfig.importBookPath
+        if (!lastPath.isNullOrBlank()) {
+            if (lastPath.isUri()) {
+                val rootUri = lastPath.toUri()
                 when {
                     rootUri.isContentScheme() -> initRootPath(rootUri)
                     else -> initRootPath(rootUri.path!!)
                 }
+            } else {
+                initRootPath(lastPath)
             }
+            return
         }
+        // 没有上次浏览位置：按当前能力取第一个可浏览根（全盘权限 → 设备根；否则 → 已授权目录）
+        val root = StorageAccess.browseRoots().firstOrNull()
+        if (root != null) {
+            AppConfig.importBookPath = root.toString()
+            viewModel.subDocs.clear()
+            viewModel.rootDoc = root
+            upPath()
+        } else {
+            showStorageGuide()
+        }
+    }
+
+    /**
+     * 无任何可用存储通道时的引导：开启所有文件访问权限 / 选择目录。
+     * 同一进程只提示一次，之后从顶部常驻入口进入（不阻断返回）。
+     */
+    private fun showStorageGuide() {
+        if (storageGuideShown) return
+        storageGuideShown = true
+        val actions = ArrayList<CharSequence>()
+        if (StorageAccess.supportsAllFilesAccess()) {
+            actions.add(getString(R.string.storage_guide_positive))
+        }
+        actions.add(getString(R.string.storage_guide_choose_dir))
+        showComposeActionListDialog(
+            title = getString(R.string.storage_guide_title),
+            message = getString(R.string.storage_guide_message),
+            labels = actions,
+            negativeText = getString(R.string.storage_guide_later),
+            onSelected = { index ->
+                val openFullAccessFirst = StorageAccess.supportsAllFilesAccess()
+                when {
+                    openFullAccessFirst && index == 0 -> requestFullAccess()
+                    else -> selectFolder.launch {
+                        title = getString(R.string.storage_guide_choose_dir)
+                        mode = HandleFileContract.DIR_SYS
+                    }
+                }
+            }
+        )
+    }
+
+    /** 跳系统「所有文件访问权限」；返回后由 onResume 重新判定根目录 */
+    private fun requestFullAccess() {
+        if (!StorageAccess.supportsAllFilesAccess()) {
+            toastOnUi(R.string.storage_all_files_access_unsupported)
+            return
+        }
+        PermissionsCompat.Builder()
+            .addPermissions(Permissions.MANAGE_EXTERNAL_STORAGE)
+            .rationale(R.string.storage_all_files_access_rationale)
+            .onGranted { onStorageStateMaybeChanged() }
+            .onDenied { onStorageStateMaybeChanged() }
+            .request()
+    }
+
+    /**
+     * 权限态可能变化后刷新根：当前根已不可访问（权限被撤销/目录被删）时回退；
+     * 刚开启全盘权限时把 SAF 根升级为设备存储根。
+     */
+    private fun onStorageStateMaybeChanged() {
+        val root = viewModel.rootDoc
+        if (root == null) {
+            resetRoot()
+            return
+        }
+        if (!isRootAccessible(root)) {
+            resetRoot()
+            return
+        }
+        if (root.isContentScheme && StorageAccess.fullAccessState() == FullAccessState.GRANTED) {
+            resetRoot()
+        }
+    }
+
+    private fun resetRoot() {
+        viewModel.rootDoc = null
+        viewModel.subDocs.clear()
+        AppConfig.importBookPath = null
+        initRootDoc(true)
+    }
+
+    /** 当前根是否仍然可访问（含全盘权限与 SAF 授权双重判定） */
+    private fun isRootAccessible(root: FileDoc): Boolean {
+        // 文件路径根依赖全盘权限：权限被撤销后 File.canRead 仍可能为 true，必须显式判定
+        if (!root.isContentScheme && StorageAccess.fullAccessState() != FullAccessState.GRANTED) {
+            return false
+        }
+        return StorageAccess.isDirAvailable(root.uri.toString())
     }
 
     private fun initRootPath(rootUri: Uri) {
@@ -330,10 +459,11 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     @Synchronized
     private fun upPath() {
         composeCanGoBack = viewModel.subDocs.isNotEmpty()
-        viewModel.rootDoc?.let {
-            scanDocJob?.cancel()
-            upDocs(it)
-        }
+        // 加载「当前所在目录」而非永远是根目录：rootDoc 只代表浏览起点，
+        // 子目录导航全部记在 subDocs 中（原实现固定传 rootDoc ⇒ 进入子目录后列表不刷新）
+        val currentDoc = viewModel.subDocs.lastOrNull() ?: viewModel.rootDoc ?: return
+        scanDocJob?.cancel()
+        upDocs(currentDoc)
     }
 
     private fun upDocs(rootDoc: FileDoc) {
@@ -376,8 +506,23 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
 
     @Synchronized
     fun nextDoc(fileDoc: FileDoc) {
+        if (isRestrictedDoc(fileDoc)) {
+            toastOnUi(R.string.storage_restricted_path)
+            return
+        }
         viewModel.subDocs.add(fileDoc)
         upPath()
+    }
+
+    /**
+     * Android/data 与 Android/obb 是系统级硬禁区（Android 11+ 任何权限都不可读）。
+     * 这里在发起读取前拦截：file 路径用路径判定，SAF 树 URI 用名称 + "Android" 兜底。
+     */
+    private fun isRestrictedDoc(doc: FileDoc): Boolean {
+        if (!doc.isDir) return false
+        if (doc.name != "data" && doc.name != "obb") return false
+        val text = doc.toString()
+        return isRestrictedPath(text) || text.contains("Android")
     }
 
     @Synchronized

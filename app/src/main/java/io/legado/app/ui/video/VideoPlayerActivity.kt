@@ -64,6 +64,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
+import com.shuyu.gsyvideoplayer.GSYVideoManager
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
@@ -115,7 +116,10 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.model.VideoPlaybackQueue
+import io.legado.app.help.video.NextEpisodeResolver
+import io.legado.app.help.video.PlaybackMode
 import io.legado.app.help.video.VideoPlaylistHolder
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.service.VideoPlayService
 import io.legado.app.service.DlnaCastService
 import io.legado.app.ui.video.cast.DlnaCastDialog
@@ -138,6 +142,7 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.text.ScrollTextView
+import com.google.android.material.snackbar.Snackbar
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
@@ -202,6 +207,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     companion object {
         const val EXTRA_PREPARE_BOOK_INFO = "prepareBookInfo"
+
+        /** §12.5：入口显式播放模式（值取 [PlaybackMode] 名称；缺省按列表上下文推导） */
+        const val EXTRA_MODE_HINT = "modeHint"
 
         /**
          * F182：布局切换提示的保持时长。
@@ -351,6 +359,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * T2.8: initSource 协程 Job 引用（onPause 时取消，解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
      */
     private var initSourceJob: Job? = null
+
+    /** 选集补播重试世代号：连续切集时旧的重试协程自动失效 */
+    private var pickerResumeGeneration = 0
 
     /**
      * 会话初始化是否已完成（含 dispatchLayoutMode/upView/restorePlayHistory）。
@@ -610,6 +621,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             snapshotInBookshelf = VideoPlay.inBookshelf
             AppLog.put("VideoPlayerActivity state snapshot saved: singleUrl=$snapshotSingleUrl, inBookshelf=$snapshotInBookshelf")
             // T2.8: 保存 initSource 协程 Job 引用，onPause 时取消
+            // §12.5：入口可显式注入播放模式（FEED/SERIES/SINGLE）；未注入时由 initSource 按列表上下文推导。
+            // 必须在 initSource 之前写入 —— initSource 末尾会消费并清空 VideoPlay.modeHint。
+            intent.getStringExtra(EXTRA_MODE_HINT)?.let { hint ->
+                VideoPlay.modeHint = parsePlaybackModeHint(hint)
+                AppLog.put("VideoPlayerActivity modeHint=${VideoPlay.modeHint?.name}")
+            }
             initSourceJob = lifecycleScope.launch {
                 if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
                     // V-004-P0-2: initSource 失败记录日志（VideoPlay.initSource 内部已记录详细原因）
@@ -687,8 +704,48 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             kotlin.runCatching { VideoPlay.videoManager.currentPosition }.getOrDefault(0L)
     }
 
+    // ==================== §7.1 播完续播倒计时提示（3 秒可取消） ====================
+
+    private var advanceSnackbar: Snackbar? = null
+
+    /** 前台注册 / 离屏注销的幂等协调（纯行为，单测锁定） */
+    private val advanceCountdownHost = AdvanceCountdownHost(
+        register = { VideoPlay.addAdvanceCountdownListener(advanceCountdownListener) },
+        unregister = { VideoPlay.removeAdvanceCountdownListener(advanceCountdownListener) }
+    )
+
+    /**
+     * 倒计时宿主：Snackbar 文案随剩余秒数刷新，点「取消」终止本次续播。
+     * 仅在 Activity 前台注册；悬浮窗/后台播放仍由 VideoPlay 立即续播。
+     */
+    private val advanceCountdownListener = object : VideoPlay.AdvanceCountdownListener {
+        override fun onAdvanceCountdown(secondsLeft: Int) {
+            val text = getString(R.string.video_advance_countdown, secondsLeft)
+            val bar = advanceSnackbar ?: Snackbar.make(
+                binding.root,
+                text,
+                Snackbar.LENGTH_INDEFINITE
+            ).apply {
+                setAction(R.string.video_advance_cancel) {
+                    VideoPlay.cancelPendingAdvance("user")
+                }
+                show()
+            }.also { advanceSnackbar = it }
+            bar.setText(text)
+        }
+
+        override fun onAdvanceCountdownFinished() {
+            advanceSnackbar?.dismiss()
+            advanceSnackbar = null
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        // §7.1：离开前台时注销倒计时宿主（悬浮窗/后台无提示载体 ⇒ VideoPlay 恢复立即续播）
+        advanceCountdownHost.onPause()
+        advanceSnackbar?.dismiss()
+        advanceSnackbar = null
         // add-dlna-cast AD-14：Activity 离开前台即注销通道，防止单例持有 Activity
         DlnaCastManager.playerControl = null
         if (initSourceJob?.isActive == true) {
@@ -709,6 +766,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     override fun onResume() {
         super.onResume()
+        // §7.1：注册播完续播倒计时宿主（有宿主才延迟；见 AdvanceCountdown.plan）
+        advanceCountdownHost.onResume()
         FirstFramePreloader.cancelDelayedClear()
         // 兜底补跑：onPause 取消 initSourceJob 后若会话仍未就绪（含「onResume→onPause→onResume」
         // 瞬态把刚起的协程打断），必须重新初始化，否则界面停在无播放器的白屏（播放不了）。
@@ -773,8 +832,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.viewPager.apply {
             orientation = ViewPager2.ORIENTATION_VERTICAL
             offscreenPageLimit = 1
-            // 书源/单URL模式禁用滑动
-            isUserInputEnabled = !isSinglePage
+            // §12.6：SERIES 禁翻页（切集走上滑分派），FEED/降级后 SINGLE 有列表才允许翻页
+            isUserInputEnabled = pagerUserInputEnabled(
+                mode = VideoPlay.playbackModeState.mode,
+                isSinglePage = isSinglePage,
+                listSize = VideoPlay.rssArticles?.size ?: 0
+            )
             adapter = videoPagerAdapter
             pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageScrollStateChanged(state: Int) {
@@ -1336,15 +1399,18 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     /**
-     * video-booksource-align-rss AD-02/AD-05：书源单页模式垂直滑动接线
+     * video-booksource-align-rss AD-02/AD-05：垂直滑动统一入口（书源 + §12.6 RSS SERIES）
      *
-     * VideoFragment 手势层检测到垂直 fling 时回调（书源模式 ViewPager 已禁滑，
-     * 由本方法驱动列表切换）；上滑(velocityY<0)=列表下一影片，下滑=上一影片。
-     * 订阅源文章/集数模式不走此路径（其垂直滑动由 ViewPager2 翻页消费）。
+     * VideoFragment 手势层检测到垂直 fling 时回调（ViewPager 已禁滑的场景）。
+     * 上滑(velocityY<0)=下一集/下一影片，下滑=上一集/上一影片；具体语义由
+     * `VideoPlay.dispatchVerticalSwitch` 按会话模式分派（FEED=换作品 / SERIES=切本剧集数）。
      */
     fun onBookVerticalFling(velocityY: Float) {
         if (!useViewPagerMode) return
-        if (VideoPlay.book == null) return
+        // 书源与「有集数上下文的订阅源」都可能走到这里；两者都没有则无事可做
+        if (VideoPlay.book == null && VideoPlay.rssArticles.isNullOrEmpty() &&
+            VideoPlay.rssEpisodes.isNullOrEmpty()
+        ) return
         // add-dlna-cast REQ-08：投屏中竖滑切影片先终止会话再放行
         endCastForLocalSwitch()
         // video-regression-fix-0906 AD-04：播放器未就绪时 toast 明示，不再静默无反应
@@ -1353,9 +1419,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             return
         }
         if (velocityY < 0) {
-            VideoPlay.switchToBookFromList(+1, player)
+            // §12.3：按会话模式分派（FEED=下一部 / SERIES=下一集 / SINGLE=提示）
+            VideoPlay.dispatchVerticalSwitch(+1, player)
         } else {
-            VideoPlay.switchToBookFromList(-1, player)
+            VideoPlay.dispatchVerticalSwitch(-1, player)
         }
     }
 
@@ -1774,6 +1841,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val html = intro.substring(8, lastIndex)
             val pooledWebView = this.pooledWebView ?: let{
                 val pooledWebView = WebViewPool.acquire(this)
+                // crash-hardening AD-02：播放页的嗅探/解析 WebView 属关键会话，CRITICAL 压力下也不回收
+                WebViewPool.protect(pooledWebView.id, true)
                 val webView = pooledWebView.realWebView
                 webView.onResume()
                 webView.webViewClient = CustomWebViewClient()
@@ -2027,14 +2096,50 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             VideoPlay.chapterInVolumeIndex = position
             VideoPlay.saveRead(0)
             upEpisodesView()
-            VideoPlay.startPlay(playerView)
+            if (currentFragment?.restartCurrentEpisode() != true) {
+                VideoPlay.startPlay(playerView)
+            }
+            schedulePickerResume()
         } else {
             val episodes = VideoPlay.rssEpisodes ?: return
             if (position == VideoPlay.rssEpisodeIndex) return
             endCastForLocalSwitch()
             VideoPlay.rssEpisodeIndex = position
-            VideoPlay.playRssEpisode(playerView, episodes[position])
+            if (currentFragment?.restartCurrentEpisode() != true) {
+                VideoPlay.playRssEpisode(playerView, episodes[position])
+            }
             upRssEpisodesView()
+            schedulePickerResume()
+        }
+    }
+
+    /**
+     * 选集切集补播：弹框关闭的焦点丢失会暂停刚起播的播放器（真机：黑屏 + 播放键）。
+     * 沉浸式布局的活跃播放器在 [VideoFragment] 内（Activity 的 `playerView` 不是它），
+     * 故优先委托 `currentFragment.resumeIfPaused()`；传统布局再走本页 playerView。
+     * 短窗口内最多检查 3 次，一旦在播放立即结束；连续切集时旧协程因世代号失效。
+     */
+    private fun schedulePickerResume() {
+        val generation = ++pickerResumeGeneration
+        lifecycleScope.launch {
+            repeat(3) { attempt ->
+                delay(if (attempt == 0) 1_200L else 1_000L)
+                if (generation != pickerResumeGeneration || isFinishing || isDestroyed) return@launch
+                val playing = runCatching {
+                    GSYVideoManager.instance()?.isPlaying() == true
+                }.getOrDefault(false)
+                if (!needResumeAfterPickerSwitch(switched = true, playerPlaying = playing)) {
+                    return@launch
+                }
+                val fragmentHandled = currentFragment?.ensurePlaying() == true
+                if (!fragmentHandled && playerView.currentState == GSYVideoView.CURRENT_STATE_PAUSE) {
+                    playerView.startAfterPrepared()
+                }
+                AppLog.put(
+                    "VideoPickerResume: attempt=${attempt + 1} playing=$playing " +
+                        "fragmentHandled=$fragmentHandled"
+                )
+            }
         }
     }
 
@@ -2060,6 +2165,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     internal fun currentEpisodeIndex(): Int =
         if (useViewPagerMode) binding.viewPager.currentItem else -1
+
+    /**
+     * 垂直手势层是否应接管（design §12.6：与 ViewPager2 输入能力严格互补）。
+     *
+     * VideoFragment 的 onFling / 触摸拦截都以此为准，避免「ViewPager 已禁滑、手势层又放行」
+     * 的双重空档导致上滑无任何响应。
+     */
+    internal fun shouldHandleVerticalFling(): Boolean =
+        useViewPagerMode && !binding.viewPager.isUserInputEnabled
 
     /**
      * 多集选集弹框（video-cache-and-multiep R7 / AD-03）。
@@ -2153,6 +2267,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // 2026-10-25：内嵌面板高亮跟随（切线路/切集后同步）
             episodePanelBinder?.updateSelection(VideoPlay.rssEpisodeIndex)
         }
+        // §12.6/§12.9：模式可能已降级（SERIES→SINGLE），翻页能力随之刷新
+        binding.viewPager.isUserInputEnabled = pagerUserInputEnabled(
+            mode = VideoPlay.playbackModeState.mode,
+            isSinglePage = VideoPlay.singleUrl || VideoPlay.book != null,
+            listSize = VideoPlay.rssArticles?.size ?: 0
+        )
     }
 
     private fun showVolumes(volumes: List<BookChapter>) {
@@ -2423,19 +2543,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
             override fun onAutoComplete(url: String?, vararg objects: Any?) {
                 super.onAutoComplete(url, *objects)
-                // video-player-dual-layout K5：传统布局末集播完自动连播（R5 跨影片语义）
-                // 书源：upDurIndex 末集自动切列表下一影片（无下一影片时内部 toast 边界提示）；
-                // 订阅源集数模式：顺延下一集（有队列才推进）
-                if (VideoPlay.book != null) {
-                    VideoPlay.upDurIndex(+1, playerView.getCurrentPlayer())
-                } else {
-                    val episodes = VideoPlay.rssEpisodes
-                    val next = VideoPlay.rssEpisodeIndex + 1
-                    if (!episodes.isNullOrEmpty() && next < episodes.size) {
-                        VideoPlay.rssEpisodeIndex = next
-                        VideoPlay.playRssEpisode(playerView, episodes[next])
-                        upRssEpisodesView()
-                    }
+                VideoTrace.event(
+                    stage = "ended",
+                    "entry" to "activity",
+                    "isBook" to (VideoPlay.book != null),
+                    "rssIndex" to VideoPlay.rssEpisodeIndex,
+                    "chapterInVolumeIndex" to VideoPlay.chapterInVolumeIndex
+                )
+                // §3.4：统一续播入口（原「书源 upDurIndex / 订阅源手动顺延」双分支已收敛）
+                if (VideoPlay.advanceEpisode(playerView, "activity")) {
+                    upRssEpisodesView()
                 }
             }
         })
@@ -2723,9 +2840,24 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
         }
 
+        observeEvent<String>(EventBus.VIDEO_PLAY_TIP) { tip ->
+            // video-buffer-prefetch-v2：解码过重等非阻断提示（浮层，不弹错误框）
+            kotlin.runCatching {
+                currentFragment?.playerView?.currentPlayer?.showOverlayTip(tip, 3_000L)
+            }
+        }
+
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
             // 失败必须收起加载反馈，避免遮罩残留（spec Drawbacks 兜底闭环之一）
             binding.switchLoading.gone()
+            // §6.5：播放失败 ⇒ 当前集预解析结果失效（地址/token 过期后不得在下次切集继续命中）
+            NextEpisodeResolver.invalidate(
+                NextEpisodeResolver.key(
+                    VideoPlay.originalPlayUrl.orEmpty(),
+                    VideoPlay.source?.getKey(),
+                    VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
+                )
+            )
             // R3 阶段5：同步更新设置面板的调试日志
             settingsPanel?.appendDebugLog(it)
             // W2 / REQ-13（AD-04）：**首线路失败自动换线** —— 播放器终端点已把错误大类写入
@@ -3014,6 +3146,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     override fun onDestroy() {
+        VideoTrace.event(
+            stage = "destroy",
+            "activityId" to System.identityHashCode(this),
+            "mode" to if (useViewPagerMode) "viewpager" else "legacy"
+        )
         releaseListenWakeLock()
         // app-stability-round2 P2-2: 先取消抓取协程（含嗅探 WebView），再释放播放器资源
         // 根因：原顺序 destroyWeb 先执行、stopLoading 后置，嗅探协程取消时序混乱，且 runCatching 误捕获 CancellationException

@@ -408,7 +408,10 @@ fun DocumentFile.checkWrite(): Boolean {
     var file: DocumentFile? = null
     return try {
         val filename = System.currentTimeMillis().toString()
-        file = createFile(FileUtils.getMimeType(filename), filename)
+        // 探针写的是纯文本文件 ⇒ MIME 必须给**具体类型**：`FileUtils.getMimeType` 对无扩展名
+        // 返回 `*/*`，Android 10+ 的部分 DocumentsProvider 会拒绝通配 MIME ⇒ 可写目录被误判为不可写
+        // （真机 2026-11-01 实测：选中 Download 目录后每次点「备份」都被重新拉起选择器）。
+        file = createFile(writeProbeMimeType(), filename)
         file?.openOutputStream()?.let { out ->
             out.bufferedWriter().use { it.write(filename) }
             file.openInputStream()?.let { input ->
@@ -424,3 +427,6 @@ fun DocumentFile.checkWrite(): Boolean {
         file?.delete()
     }
 }
+
+/** 可写探针的 MIME（见 [checkWrite]，不可为空串/通配符） */
+internal fun writeProbeMimeType(): String = "text/plain"

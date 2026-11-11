@@ -152,6 +152,17 @@ class SearchActivity : VMBaseActivity<ViewBinding, SearchViewModel>(),
     private var stopFabVisible by mutableStateOf(false)
     private var stopFabIconRes by mutableIntStateOf(R.drawable.ic_stop_black_24dp)
     private var inputHelpVisible by mutableStateOf(true)
+    /**
+     * 外部 intent (`--es key`) 直达搜索时，抑制「自动聚焦 → 重新弹出输入帮助层」的截止时间。
+     *
+     * 真机取证（2026-11-08 00:34）：`am start ... SearchActivity --es key <词>` 后
+     * 在线搜索确实返回 10 条（`SourceGuard observeClass SearchBook count=10`），
+     * 但界面仍停在「书架 + 搜索历史」——首次聚焦回调在 `progressLoading` 回落后
+     * 再次 `visibleInputHelp(true)`，把已返回的结果盖住。
+     *
+     * 用时间窗而非布尔标记：避免「本次没有聚焦事件 ⇒ 标记残留 ⇒ 用户下次点输入框看不到历史」。
+     */
+    private var suppressHelpUntilMs = 0L
     private val searchFocusRequester = FocusRequester()
     // 原 receiptIntent 中 `searchEditText?.requestFocus()` 的等价物：自增信号驱动组合内聚焦。
     // 直接调用会早于组合挂载 ⇒ FocusRequester 未初始化抛异常，故经 LaunchedEffect 在挂载后触发。
@@ -248,13 +259,14 @@ class SearchActivity : VMBaseActivity<ViewBinding, SearchViewModel>(),
                                 focusRequester = searchFocusRequester,
                                 // 原 searchView.setOnQueryTextFocusChangeListener 等价物
                                 onFocusChanged = { hasFocus ->
-                                    if (progressLoading ||
-                                        (!hasFocus && searchResults.isNotEmpty() && composeSearchQuery.isNotBlank())
-                                    ) {
-                                        visibleInputHelp(false)
-                                    } else {
-                                        visibleInputHelp(true)
-                                    }
+                                    val hideHelp = shouldHideInputHelp(
+                                        hasFocus = hasFocus,
+                                        progressLoading = progressLoading,
+                                        hasResult = searchResults.isNotEmpty(),
+                                        intentWindowActive = android.os.SystemClock.elapsedRealtime() <
+                                            suppressHelpUntilMs
+                                    )
+                                    if (hideHelp) visibleInputHelp(false) else visibleInputHelp(true)
                                 }
                             )
                         }
@@ -275,6 +287,15 @@ class SearchActivity : VMBaseActivity<ViewBinding, SearchViewModel>(),
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
+                        // 结果变化时收起输入帮助层。
+                        // 必须用副作用而非仅靠聚焦回调：`progressLoading`/结果数变化不会触发
+                        // `onFocusChanged`，早先只监听焦点会导致「intent 直达 + 已聚焦」时
+                        // 帮助层始终盖住结果（真机 2026-11-08 01:02 复现）。
+                        LaunchedEffect(searchRunning, searchResults.size, composeSearchQuery) {
+                            if (shouldCollapseHelpOnResults(searchResults.size, composeSearchQuery)) {
+                                visibleInputHelp(false)
+                            }
+                        }
                         SearchResultScreen(
                             books = searchResults,
                             isLoading = searchRunning,
@@ -585,6 +606,8 @@ class SearchActivity : VMBaseActivity<ViewBinding, SearchViewModel>(),
             autoFocusSignal++
         } else {
             // 原实现 `searchView.setQuery(key, true)`：onNewIntent 重入必须重新消费 query 并直接发起搜索
+            // 外部 intent 直达：抑制随后的自动聚焦把输入帮助层重新盖到结果上（真机 2026-11-08 取证）
+            suppressHelpUntilMs = android.os.SystemClock.elapsedRealtime() + 3000L
             applyQuery(key, submit = true)
         }
     }
@@ -676,6 +699,10 @@ class SearchActivity : VMBaseActivity<ViewBinding, SearchViewModel>(),
      */
     private fun searchFinally() {
         progressLoading = false
+        // 结果已返回 ⇒ 收起输入帮助层（否则 intent 直达时「聚焦回调晚于搜索完成」会把结果盖住）
+        if (searchResults.isNotEmpty() && composeSearchQuery.isNotBlank()) {
+            visibleInputHelp(false)
+        }
         if (!isManualStopSearch && viewModel.hasMore) {
             stopFabIconRes = R.drawable.ic_play_24dp
         } else {

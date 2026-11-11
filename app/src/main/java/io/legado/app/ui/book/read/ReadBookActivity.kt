@@ -170,11 +170,7 @@ import io.legado.app.ui.about.ReadRecordWidgetStore
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.bookmark.BookmarkDialog
-import android.Manifest
-import android.content.pm.PackageManager
-import android.view.Surface
 import io.legado.app.help.book.SourceSwitchHistory
-import io.legado.app.ui.book.read.eye.EyePageTurner
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
 import io.legado.app.ui.book.character.BookCharacterManageActivity
@@ -417,22 +413,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     override val imgBgPaddingStart: Int get() = binding.readView.curPage.imgBgPaddingStart
     private val nextPageDebounce by lazy { Debounce { keyPage(PageDirection.NEXT) } }
     private val prevPageDebounce by lazy { Debounce { keyPage(PageDirection.PREV) } }
-
-    // ---- R1 眼动翻页（实验性，默认关闭；仅主动开启后加载模型并打开摄像头）----
-    private var eyePageTurner: EyePageTurner? = null
-    /** 阅读页是否在前台（替代竞品的 readerResumed：眼动累计只在可见时进行） */
-    private var eyeReaderVisible = false
-    private var eyeDisplayDegrees = 0
-    private var eyeReadyHintShown = false
-    private val eyeCameraPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                applyEyePageTurnEnabled(true)
-            } else {
-                AppConfig.eyePageTurnEnabled = false
-                toastOnUi(getString(R.string.eye_page_permission_required))
-            }
-        }
     private var bookChanged = false
     private var pageChanged = false
     private val handler by lazy { buildMainHandler() }
@@ -764,16 +744,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // R1：方向变化必须重建（摄像头帧旋转与校准姿势绑定原方向），失败即关闭开关
-        if (AppConfig.eyePageTurnEnabled) {
-            val degrees = currentDisplayDegrees()
-            if (degrees != eyeDisplayDegrees) {
-                eyeDisplayDegrees = degrees
-                eyePageTurner?.stop()
-                eyePageTurner = null
-                if (eyeReaderVisible) startEyePageTurner()
-            }
-        }
         val readerNightMode = if (AppConfig.themeMode == "0") {
             newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
                 Configuration.UI_MODE_NIGHT_YES
@@ -834,9 +804,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAloudPlayerPanel.post {
             consumeGlobalReadAloudPanelOpen()
         }
-        // R1：阅读页回到前台才允许眼动累计（后台/菜单/朗读等由 readingBlockReason 另行拦截）
-        eyeReaderVisible = true
-        if (AppConfig.eyePageTurnEnabled) startEyePageTurner()
         // 动效生命周期（4.15 C6）：回到前台恢复装饰动效（离页时已停）
         templateBackend?.setMotionPaused(false)
         // 「设置完立刻看到变化」：从模板管理页/主题设置返回时按契约键比对，变化即重载当前章
@@ -850,8 +817,6 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 只在 DOWN/UP/CANCEL 三点下发（每次一条白名单消息，不是每帧），代价可忽略。
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        // R1：任何手动触摸都清除已累计的"向上注视"（仅点底后上视为翻页，防误触叠加）
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN) eyePageTurner?.resetGesture()
         if (templateActive) {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> templateBackend?.setMotionPaused(true)
@@ -864,10 +829,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onPause() {
         super.onPause()
-        // R1：离页即停眼动（摄像头与模型不在后台空转；再次进入需手动重新开启）
-        eyeReaderVisible = false
-        eyePageTurner?.stop()
-        eyePageTurner = null
         binding.readAloudPlayerPanel.setForegroundActive(false)
         autoPageStop()
         backupJob?.cancel()
@@ -2241,8 +2202,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun keyPage(direction: PageDirection) {
-        // R1：任何翻页都清除眼动手势累计（翻完立即重新开始"底部停留→上看"判定）
-        eyePageTurner?.resetGesture()
         if (epubCoreActive) {
             when (direction) {
                 PageDirection.NEXT -> nextEpubPage()
@@ -6103,121 +6062,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         )
     }
 
-    // ---- R1 眼动翻页接线（判定逻辑全部在 eye/ 包内，这里只做生命周期与菜单协调）----
-
-    /** R1：菜单/设置入口统一走这里；首次开启先展示隐私与用法说明 */
-    override fun setEyePageTurn(enabled: Boolean) {
-        if (!enabled) {
-            applyEyePageTurnEnabled(false)
-            return
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            toastOnUi(R.string.eye_page_unsupported)
-            return
-        }
-        if (!ReadBookConfig.eyePageTurnHelpShown) {
-            ReadBookConfig.eyePageTurnHelpShown = true
-            showComposeConfirmDialog(
-                title = getString(R.string.eye_page_turn),
-                message = getString(R.string.eye_page_help),
-                positiveText = getString(R.string.eye_page_enable),
-                onPositive = { requestEyePageTurn() }
-            )
-            return
-        }
-        requestEyePageTurn()
-    }
-
-    private fun requestEyePageTurn() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            applyEyePageTurnEnabled(true)
-        } else {
-            eyeCameraPermission.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    private fun applyEyePageTurnEnabled(enabled: Boolean) {
-        AppConfig.eyePageTurnEnabled = enabled
-        if (enabled) {
-            autoPageStop()
-            binding.readMenu.runMenuOut(anim = false)
-            startEyePageTurner()
-        } else {
-            eyePageTurner?.stop()
-            eyePageTurner = null
-        }
-    }
-
-    private fun currentDisplayDegrees(): Int = when (windowManager.defaultDisplay.rotation) {
-        Surface.ROTATION_90 -> 90
-        Surface.ROTATION_180 -> 180
-        Surface.ROTATION_270 -> 270
-        else -> 0
-    }
-
-    private fun startEyePageTurner() {
-        if (!eyeReaderVisible || !AppConfig.eyePageTurnEnabled) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            applyEyePageTurnEnabled(false)
-            return
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            applyEyePageTurnEnabled(false)
-            toastOnUi(getString(R.string.eye_page_permission_required))
-            return
-        }
-        eyeDisplayDegrees = currentDisplayDegrees()
-        if (eyePageTurner == null) {
-            eyePageTurner = EyePageTurner(
-                this,
-                binding.root,
-                readingBlockReason = {
-                    when {
-                        !eyeReaderVisible -> "not_resumed"
-                        !window.decorView.hasWindowFocus() -> "window_unfocused"
-                        binding.readMenu.canShowMenu -> "menu_visible"
-                        !isInitFinish -> "initializing"
-                        isAutoPage -> "auto_paging"
-                        BaseReadAloudService.isRun -> "read_aloud"
-                        binding.readView.pageDelegate == null -> "no_page_delegate"
-                        else -> null
-                    }
-                },
-                canCalibrate = {
-                    eyeReaderVisible && window.decorView.hasWindowFocus() && !binding.readMenu.canShowMenu
-                },
-                onReadyChanged = { ready ->
-                    if (ready && !eyeReadyHintShown) {
-                        eyeReadyHintShown = true
-                        toastOnUi(getString(R.string.eye_page_ready))
-                    }
-                    if (!ready) eyeReadyHintShown = false
-                },
-                onNextPage = {
-                    // 与手动翻页走同一入口（清选择态/停自动翻页语义完全一致）
-                    keyPage(PageDirection.NEXT)
-                    screenOffTimerStart()
-                },
-                onError = { error ->
-                    AppLog.put("眼动翻页启动或识别失败", error)
-                    applyEyePageTurnEnabled(false)
-                    toastOnUi(
-                        getString(
-                            R.string.eye_page_error,
-                            error.localizedMessage ?: getString(R.string.eye_page_unsupported)
-                        )
-                    )
-                },
-                onCancel = { applyEyePageTurnEnabled(false) }
-            )
-        }
-        eyePageTurner?.start()
-    }
-
     override fun showRefreshOptions() {
         val labels = listOf(
             getString(R.string.menu_refresh_dur),
@@ -6457,9 +6301,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun onDestroy() {
-        // R1：页面销毁务必释放摄像头与 MediaPipe 推理线程
-        eyePageTurner?.stop()
-        eyePageTurner = null
         if (!isChangingConfigurations) {
             ReadAloudAppCapsuleHost.updateReadBookPanelActive(false)
         }

@@ -14,8 +14,10 @@ import splitties.init.appCtx
 internal val DEVICE_LOCAL_IGNORE_PREF_KEYS = arrayOf(
     // 字体目录存 content URI 或绝对路径，换机后不可读
     PreferKey.fontFolder,
-    // R1：眼动校准绑定当次摄像头/握持姿势，换机后必然失效（写回会造成"看似已校准却翻不了页"）
-    PreferKey.eyePageCalibration,
+    // storage-permission-full-access：多目录 SAF 授权 URI 换机后必然失效，
+    // 与 defaultBookTreeUri 同策略 —— 不写入备份，避免恢复后出现一批"需重新授权"的幽灵目录
+    PreferKey.safeDirs,
+    PreferKey.safeDirsMigrated,
 )
 
 /**

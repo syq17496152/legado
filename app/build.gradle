@@ -58,6 +58,10 @@ def gitCommitsProvider = providers.of(GitCommitsValueSource) {
 }
 
 def name = "legado"
+// S1 单 ABI 分包（offline-tts-llm-productization 1.5）：显式 -PabiTarget 时产物名带 ABI 后缀，
+// 让 arm64（真机）与 x86_64（模拟器）测试包可并存于同一目录、互不覆盖。
+def abiTargetProp = (project.findProperty("abiTarget") ?: "").toString().toLowerCase()
+def abiTag = (abiTargetProp in ['arm64', 'x86_64', 'arm32']) ? "_${abiTargetProp}" : ""
 // 版本号支持 -PappVersion 显式覆盖（双包同版本发版），缺省按构建时间生成（执行期求值）
 def releaseTime = releaseTimeProvider.get()
 def version = (project.findProperty("appVersion") as String) ?: "3.${releaseTime}"
@@ -71,6 +75,16 @@ def buildVersionCode = Math.max(
         10000 + releaseTime.replace(".", "").toInteger(),
         10000 + gitCommits
 )
+// 版本号显式覆盖（测试/应急：设备已装更高 versionCode 但构建机时钟回拨时，覆盖安装会报
+// INSTALL_FAILED_VERSION_DOWNGRADE）。用法：-PversionCodeOverride=26130000
+def versionCodeOverrideRaw = project.findProperty("versionCodeOverride")
+def versionCodeOverride = (versionCodeOverrideRaw != null &&
+        versionCodeOverrideRaw.toString().isInteger())
+        ? versionCodeOverrideRaw.toString().toInteger()
+        : null
+// 仅测试/排障：-PdebugNoMinify=true 跳过测试包 R8（构建更快、日志不混淆）。
+// 产物不得交付；默认仍走 optimize 裁剪，交付质量不变。
+def debugNoMinify = project.findProperty("debugNoMinify")?.toString()?.toBoolean() ?: false
 
 // cronet-dynamic-download（2026-09-15）：构建期下载 Cronet 官方 jar/so + ASM 改写注入自定义加载器
 apply from: 'download.gradle'       // downloadCronet 任务：7 jar + 5 ABI so + assets/cronet.json MD5 清单
@@ -120,7 +134,7 @@ android {
         println "=================================="
         minSdk 23
         targetSdk 36
-        versionCode buildVersionCode
+        versionCode versionCodeOverride ?: buildVersionCode
         versionName version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         project.ext.set("archivesBaseName", name + "_" + version)
@@ -128,17 +142,36 @@ android {
         buildConfigField "String", "Cronet_Version", "\"$CronetVersion\""
         buildConfigField "String", "Cronet_Main_Version", "\"$CronetMainVersion\""
 
-        // ⑩ 按构建类型选择 ABI：debug = arm64-v8a + x86_64（测试包需覆盖 x86_64 模拟器，
-        // 否则 quickjs-sandbox 等 native 依赖在模拟器上必然加载失败 → BIND_TIMEOUT）；
-        // release 双 ABI（arm64-v8a + armeabi-v7a）保旧机型兼容。IDE 同步无显式任务时默认双 ABI（release-safe），
-        // 避免误删 release 兼容性；CLI 走 `assembleAppDebug`/`assembleAppRelease` 即按目标精简。
+        // ⑩ 按构建类型 + 显式 -PabiTarget 选择 ABI（单 ABI 分包，2026-11-03）。
+        // 体积铁证（2026-11-03 实测 3.26.110321 双 ABI 测试包 161.4MB）：
+        //   单 ABI 可直接省掉另一 ABI 的 native 重复体积。
+        // 取值：
+        //   arm64（默认测试包：真机交付）  → arm64-v8a
+        //   x86_64（模拟器 L1 验证）       → x86_64
+        //   arm32（旧机型专用）            → armeabi-v7a
+        //   both（仅排障对比，禁止交付）    → 按构建类型回退历史双 ABI
+        // 未显式传参时：debug=arm64（交付默认单 ABI）、release=arm64+arm32（保旧机型兼容）。
         ndk {
             def gradleTasks = project.gradle.startParameter.taskNames*.toLowerCase()
             def releaseBuild = gradleTasks.empty || gradleTasks.any { it.contains('release') }
-            if (releaseBuild) {
-                abiFilters 'arm64-v8a', 'armeabi-v7a'
-            } else {
-                abiFilters 'arm64-v8a', 'x86_64'
+            switch (abiTargetProp) {
+                case 'arm64':
+                    abiFilters 'arm64-v8a'
+                    break
+                case 'x86_64':
+                    abiFilters 'x86_64'
+                    break
+                case 'arm32':
+                    abiFilters 'armeabi-v7a'
+                    break
+                case 'both':
+                default:
+                    if (releaseBuild) {
+                        abiFilters 'arm64-v8a', 'armeabi-v7a'
+                    } else {
+                        abiFilters 'arm64-v8a'
+                    }
+                    break
             }
         }
 
@@ -194,13 +227,16 @@ android {
             // 调试日志铁律：BuildConfig.DEBUG=true 分支可达，DebugLog/AppLog 不被裁剪。
             // ABI 已按构建类型精简为仅 arm64-v8a（见上方 ndk 块）
             //
-            // 2026-09-15 裁决：测试包 debuggable=true 供 IDE attach/调试器使用；
-            // 注意：debuggable=true 会使 R8 走 debug compilation mode（优化受限，体积回升至 ~37MB），
-            // 用户知情选择"测试包调试器优先"。
-            debuggable true
+            // 2026-11-03 体积裁决（offline-tts-llm-productization 1.5 / S2）：
+            // 交付用测试包默认 debuggable=false —— R8 才走 optimize 模式。
+            // 铁证（同一份源码 3.26.110321 实测）：debuggable=true ⇒ dex 30.3MB（R8 debug 模式几乎不优化）；
+            // debuggable=false ⇒ dex ≈ 12.5MB（与正式包同量级）⇒ 单此一项省 ~18MB。
+            // 仍可显式 `-PtestDebuggable=true` 还原 IDE attach 能力（仅排障用，产物不得交付）。
+            // 调试日志铁律不受影响：BUILD_DEBUG=true 分支与 AppLog 保留（见 proguard-debug-rules.pro）。
+            debuggable (project.findProperty("testDebuggable")?.toString()?.toBoolean() ?: false)
             buildConfigField "boolean", "BUILD_DEBUG", "true"
-            minifyEnabled true
-            shrinkResources = true
+            minifyEnabled !debugNoMinify
+            shrinkResources = !debugNoMinify
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-debug-rules.pro'
         }
     }
@@ -219,7 +255,7 @@ android {
             def appId = variant.applicationId
             // 从applicationId提取包名标识: io.legado.miss.app → miss
             def appIdSuffix = "miss"
-            outputFileName = "${name}_${appIdSuffix}_${flavor}_${defaultConfig.versionName}.apk"
+            outputFileName = "${name}_${appIdSuffix}_${flavor}_${defaultConfig.versionName}${abiTag}.apk"
         }
     }
 
@@ -356,8 +392,6 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     //Archive UI 迁移（Phase 0 地基补齐）：4 个 Compose 生态库
     implementation(libs.miuix)
-    // R1 眼动翻页：MediaPipe Face Landmarker（全本地推理，不上传摄像头帧）
-    implementation(libs.mediapipe.tasks.vision)
     implementation(libs.reorderable)
     implementation(libs.liquidglass)
     implementation(libs.lazycolumnscrollbar)

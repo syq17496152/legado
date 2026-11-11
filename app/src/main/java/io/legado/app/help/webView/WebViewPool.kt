@@ -13,6 +13,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import io.legado.app.constant.AppLog
+import io.legado.app.help.MemoryPressure
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.rss.read.VisibleWebView
 import io.legado.app.utils.runOnUI
@@ -66,6 +67,15 @@ object WebViewPool {
     private val cleanupScope by lazy { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
     private val pools = mutableMapOf<Scope, ScopePool>()
 
+    /**
+     * crash-hardening AD-02：压力期间的缓存上限覆盖值。
+     * CRITICAL 时置 0（释放即销毁），回到 NORMAL 后清空恢复原策略。
+     */
+    private var maxCachedOverride: Int? = null
+
+    private fun effectiveMaxCached(scopePool: ScopePool): Int =
+        maxCachedOverride ?: scopePool.maxCached
+
     private fun pool(scope: Scope): ScopePool {
         return pools.getOrPut(scope) {
             when (scope) {
@@ -112,6 +122,9 @@ object WebViewPool {
             realWebView.resumeTimers()
             isDestroyed = false
             isInUse = true
+            // crash-hardening AD-02：新宿主接管后清空上一轮的压力标记（保护位由宿主自行声明）
+            pendingDestroy = false
+            protected = false
         }
         scopePool.inUsePool[pooledWebView.id] = pooledWebView
         pooledWebView.realWebView.setBackgroundColor(Color.TRANSPARENT)
@@ -123,6 +136,15 @@ object WebViewPool {
     fun release(pooledWebView: PooledWebView) {
         if (pooledWebView.isDestroyed) return
         val scopePool = pool(pooledWebView.scope)
+        // crash-hardening AD-02：CRITICAL 压力回收标记 ⇒ 直接销毁，不回流 idle（防止立刻又占内存）
+        if (pooledWebView.pendingDestroy) {
+            scopePool.inUsePool.remove(pooledWebView.id)
+            scopePool.resettingPool.remove(pooledWebView.id)
+            pooledWebView.pendingDestroy = false
+            pooledWebView.isDestroyed = true
+            destroyOnMainThread(pooledWebView.realWebView)
+            return
+        }
         if (scopePool.inUsePool.remove(pooledWebView.id) == null) {
             scopePool.resettingPool.remove(pooledWebView.id)
             pooledWebView.isDestroyed = true
@@ -156,7 +178,7 @@ object WebViewPool {
             clearDisappearingChildren() //清除消失中的子视图
             clearAnimation() //清除动画
             pooledWebView.upContext(appCtx)
-            if (scopePool.idlePool.size >= scopePool.maxCached - scopePool.inUsePool.size) {
+            if (scopePool.idlePool.size >= effectiveMaxCached(scopePool) - scopePool.inUsePool.size) {
                 // 池子已满，直接销毁
                 scopePool.resettingPool.remove(pooledWebView.id)
                 pooledWebView.isDestroyed = true
@@ -245,6 +267,57 @@ object WebViewPool {
             toRemove.forEach { pooled ->
                 destroyNow(pooled)
             }
+        }
+    }
+
+    /**
+     * crash-hardening AD-02：按压力档位回收。
+     *
+     * - MODERATE：清 idle（等价旧 [trimMemory]）
+     * - LOW：同 MODERATE（更激进的动作由能力位承担：解码缩放 / 停预取）
+     * - CRITICAL：清 idle + 把**未受保护**的在用实例标记 [PooledWebView.pendingDestroy]，
+     *   并回调宿主自行移除容器；宿主 release 时直接销毁，不回流 idle
+     *
+     * ⚠️ 有意不对在用实例调用 `pauseTimers/stopLoading`：`pauseTimers` 是进程级 API，
+     * 历史上曾冻结其它页面的 JS 定时器导致嗅探超时（见本文件 resumeTimers 注释），
+     * 不能作为压力动作使用。
+     */
+    fun trim(level: MemoryPressure.PressureLevel) = synchronized(this) {
+        when (level) {
+            MemoryPressure.PressureLevel.NORMAL -> {
+                maxCachedOverride = null
+            }
+
+            MemoryPressure.PressureLevel.MODERATE,
+            MemoryPressure.PressureLevel.LOW -> trimMemory()
+
+            MemoryPressure.PressureLevel.CRITICAL -> {
+                trimMemory()
+                maxCachedOverride = 0
+                forEachInUse { pooled ->
+                    if (pooled.protected) return@forEachInUse
+                    pooled.pendingDestroy = true
+                    val callback = pooled.onRecycleRequest
+                    if (callback != null) {
+                        mainHandler.post {
+                            kotlin.runCatching { callback() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 声明/解除关键会话保护（视频播放中 / 嗅探会话中 / 表单有未提交输入） */
+    fun protect(id: String, isProtected: Boolean) = synchronized(this) {
+        pools.values.forEach { pool ->
+            pool.inUsePool[id]?.protected = isProtected
+        }
+    }
+
+    private inline fun forEachInUse(block: (PooledWebView) -> Unit) {
+        pools.values.forEach { pool ->
+            pool.inUsePool.values.toList().forEach(block)
         }
     }
 

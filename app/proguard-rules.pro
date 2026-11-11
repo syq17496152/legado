@@ -276,8 +276,3 @@ cn.hutool.core.util.**{*;}
 -keep class io.legado.app.help.exoplayer.HlsKeyDataSourceFactory$AuthKeyDataSource { *; }
 -keep class io.legado.app.help.http.RedirectCacheInterceptor { *; }
 -keep class io.legado.app.help.http.RedirectCacheInterceptor$RedirectEntry { *; }
-
-# R1 眼动翻页：MediaPipe JNI/反射入口与 protobuf 消息字段需保留（上游同源规则）
--keep class com.google.mediapipe.** { *; }
--dontwarn com.google.mediapipe.proto.**
-

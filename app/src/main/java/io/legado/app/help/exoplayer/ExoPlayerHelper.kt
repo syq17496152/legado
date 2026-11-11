@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSink
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.FileDataSource
@@ -42,6 +43,7 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.videoStreamClient
 import io.legado.app.help.player.SniffRace
 import io.legado.app.help.player.SniffRaceLimiter
+import io.legado.app.help.video.VideoBufferPolicy
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
@@ -132,6 +134,44 @@ object ExoPlayerHelper {
     var forceTier: BandwidthTier? = null
 
     /**
+     * §1.19：最近一次 per-load 实测吞吐（bps，跨会话保留）。
+     *
+     * 用途：DefaultBandwidthMeter 在起播阶段只有初始估计值，下一次 prepare 分档会偏保守；
+     * 这里保留上一次实测值，配合 [getCurrentBandwidthTier] 取较大者，让「网快的设备」
+     * 从第二个视频起就用上更深的缓冲。网络切换变慢时由下一次实际加载样本纠正。
+     */
+    @Volatile
+    var lastObservedThroughputBps: Long = 0L
+
+    /**
+     * 上一次会话最近一次实测码率（bps）。
+     *
+     * 用途：`prepare` 构建 LoadControl 时本会话码率尚未可知（R42 时序卡点），
+     * 用上次值参与「内存桶是否加深」判定；首个实测样本出现后由播放器回写更新。
+     */
+    @Volatile
+    var lastKnownBitrateBps: Long = 0L
+
+    /** 当前网络档位（五档；供内存桶加深判定，纯映射有效带宽） */
+    fun currentNetworkTier(): SegmentPrefetchPolicy.NetworkTier =
+        SegmentPrefetchPolicy.tierOf(
+            maxOf(bandwidthMeter.bitrateEstimate, lastObservedThroughputBps)
+        )
+
+    /** 内存桶判定用码率：上次实测优先，否则默认 8Mbps（AD-22 v1.2 取值顺序的兜底段） */
+    private fun bitrateForBucket(): Long =
+        if (lastKnownBitrateBps > 0L) lastKnownBitrateBps else 8_000_000L
+
+    /**
+     * 当前播放器实际生效的 maxBuffer（媒体毫秒）。
+     *
+     * 供预取器做磁盘池 NEAR 分区（`bucketDepthMs`）；由 [createLoadControlByTier] 写入。
+     */
+    @Volatile
+    var currentMaxBufferMs: Int = 0
+        private set
+
+    /**
      * T2.1: 获取当前带宽档位
      *
      * FR-5: 若 forceTier 非 null，优先返回 forceTier（TTFB 降档机制）
@@ -141,7 +181,8 @@ object ExoPlayerHelper {
     fun getCurrentBandwidthTier(): BandwidthTier {
         // FR-5: 优先返回强制档位（TTFB 降档）
         forceTier?.let { return it }
-        val bitrateEstimate = bandwidthMeter.bitrateEstimate
+        // §1.19：带宽计起播阶段只有初始值，与上次实测吞吐取较大者，避免高速网络被低估
+        val bitrateEstimate = maxOf(bandwidthMeter.bitrateEstimate, lastObservedThroughputBps)
         return when {
             bitrateEstimate < 1_000_000 -> BandwidthTier.WEAK   // <1Mbps
             bitrateEstimate < 5_000_000 -> BandwidthTier.MEDIUM // 1-5Mbps
@@ -150,58 +191,90 @@ object ExoPlayerHelper {
     }
 
     /**
-     * R3: 按带宽档位构建 LoadControl（激进策略，优化当前视频快速缓冲）
+     * 按带宽档位 + 用户策略构建 LoadControl（唯一参数来源见 [VideoBufferPolicy]）
      *
-     * 分档策略（R3 大幅提升 maxBuffer，减少当前视频卡顿）：
-     * - 弱网（<1Mbps）：minBuffer=10s, maxBuffer=30s, bufferForPlayback=500ms, bufferForPlaybackAfterRebuffer=1s
-     * - 中网（1-5Mbps）：minBuffer=8s, maxBuffer=90s（原30s→90s，提升3倍）, bufferForPlayback=1s, bufferForPlaybackAfterRebuffer=2s
-     * - 好网（≥5Mbps）：minBuffer=8s, maxBuffer=120s（原50s→120s，提升2.4倍）, bufferForPlayback=1s, bufferForPlaybackAfterRebuffer=2s
+     * 档位基准：
+     * - 弱网（<1Mbps）：minBuffer=5s, maxBuffer=30s, 起播阈值 500ms
+     * - 中网（1-5Mbps）：minBuffer=8s, maxBuffer=90s, 起播阈值 800ms
+     * - 好网（≥5Mbps）：minBuffer=8s, maxBuffer=120s, 起播阈值 500ms
      *
-     * R3 用户可配置：videoMaxBufferSec >0 时覆盖档位默认值（秒转毫秒）
+     * 用户策略（`playerBufferStrategy`）：自动/均衡保持档位；激进 maxBuffer×1.5 且起播阈值≤500ms；
+     * 保守 maxBuffer×0.6 且起播阈值 1.5s（弱网省流）。`videoMaxBufferSec>0` 时优先于档位基准。
      *
-     * 首帧优化（2026-07-28）：降低 minBufferMs 从 15s→8s（MEDIUM/GOOD）和 10s→5s（WEAK），
-     * 让首帧更快渲染（原 minBuffer=15s 导致首帧需缓冲 15s 才播放，用户感知卡顿）。
-     * maxBuffer 保持 90/120s 防播放中 rebuffer。
+     * 字节上限：不再 `-1` 不限，按 `maxBuffer秒数 × 基准码率 × 1.3` 计算并封顶 256MB（防 allocator 爆涨）。
      *
      * @param tier 带宽档位
      * @param allocator 共享内存分配器（T5.1 实例池场景传入共享 allocator，多实例共用同一缓冲内存池；null 则各实例独立）
-     * @return 对应档位的 DefaultLoadControl
+     * @return 对应档位与策略的 DefaultLoadControl
      */
     fun createLoadControlByTier(tier: BandwidthTier, allocator: DefaultAllocator? = null): DefaultLoadControl {
         val builder = DefaultLoadControl.Builder()
         allocator?.let { builder.setAllocator(it) }
         // R3: 用户可配置 maxBuffer（0=按档位自动，>0=用户指定秒数）
         val userMaxBufferSec = VideoPlay.videoMaxBufferSec
-        // 缓冲速度优化（P0）：解除字节上限，让缓冲完全由 maxBuffer 时长控制
-        // 默认 DEFAULT_TARGET_BUFFER_BYTES(~50MB) 会截断高码率视频的 maxBuffer 时长
-        // -1 表示不限制字节总量（对齐 Media3 官方推荐 Large buffer for high-bitrate content）
-        builder.setTargetBufferBytes(-1)
-        // 缓冲速度优化（P0）：时间优先于字节，确保 maxBuffer 时长真正生效
-        builder.setPrioritizeTimeOverSizeThresholds(true)
-        val loadControl = when (tier) {
-            BandwidthTier.WEAK -> {
-                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 30) * 1000
-                // 首帧优化：minBuffer 从 10s→5s，让弱网首帧更快渲染
-                builder.setBufferDurationsMs(5_000, maxBufferMs, 500, 1_000).build()
-            }
-            BandwidthTier.MEDIUM -> {
-                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 90) * 1000
-                // 首帧优化：minBuffer 从 15s→8s，bufferForPlayback 从 1s→800ms 加速起播
-                builder.setBufferDurationsMs(8_000, maxBufferMs, 800, 2_000).build()
-            }
-            BandwidthTier.GOOD -> {
-                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 120) * 1000
-                // 首帧优化：minBuffer 从 15s→8s，bufferForPlayback 从 1s→500ms 中高端机激进起播
-                builder.setBufferDurationsMs(8_000, maxBufferMs, 500, 2_000).build()
-            }
+        // §13.10：playerBufferStrategy 接线（原为死配置）；档位给出基准，策略只调 maxBuffer/起播阈值
+        val strategy = VideoPlay.playerBufferStrategy
+        val (tierMinMs, tierMaxMs, tierPlayMs) = when (tier) {
+            // 首帧优化：minBuffer 5s（弱网）/8s（中/好网），与历史优化保持一致
+            BandwidthTier.WEAK -> Triple(5_000, 30_000, 500)
+            BandwidthTier.MEDIUM -> Triple(8_000, 90_000, 800)
+            BandwidthTier.GOOD -> Triple(8_000, 120_000, 500)
         }
-        // 缓冲速度优化（P0）：日志验证 LoadControl 实际参数生效
+        val baseProfile = VideoBufferPolicy.resolve(
+            tierMinBufferMs = tierMinMs,
+            tierMaxBufferMs = tierMaxMs,
+            tierBufferForPlaybackMs = tierPlayMs,
+            strategy = strategy,
+            userMaxBufferSec = userMaxBufferSec
+        )
+        // §13.5（B3）：不再用 -1 不限字节——按 maxBuffer 秒数×基准码率×安全系数封顶，防 allocator 无界增长
+        // video-buffer-prefetch-v2 §1.15：按当前倍速放大 maxBuffer（只放大不缩小，上限 300s）
+        val speed = playbackSpeedSnapshot
+        // R42 / AD-22 v1.2：内存桶条件加深（好网 + ≥8GB + 码率≤8Mbps + 目标字节≤256MB）
+        val networkTier = currentNetworkTier()
+        val deepenTargetBytes = VideoBufferPolicy.targetBufferBytes(
+            VideoBufferPolicy.DEEPENED_MAX_BUFFER_MS
+        )
+        val deepenBucket = VideoBufferPolicy.shouldDeepenBucket(
+            tier = networkTier,
+            ramMb = CacheSizePolicy.totalRamMb(),
+            bitrateBps = bitrateForBucket(),
+            targetBufferBytes = deepenTargetBytes,
+        )
+        val profile = if (deepenBucket) {
+            baseProfile.copy(
+                maxBufferMs = maxOf(baseProfile.maxBufferMs, VideoBufferPolicy.DEEPENED_MAX_BUFFER_MS)
+            )
+        } else {
+            baseProfile
+        }
+        // 高倍速下 min/max 同步放大，保证加载器不会过早停止；min 不超过 max/2
+        val scaledMin = minOf(
+            SpeedBufferPolicy.scaledMinBufferMs(profile.minBufferMs, speed),
+            profile.maxBufferMs / 2,
+        )
+        val effectiveProfile = profile.copy(
+            minBufferMs = scaledMin,
+            maxBufferMs = SpeedBufferPolicy.scaledMaxBufferMs(profile.maxBufferMs, speed),
+        )
+        val targetBytes = VideoBufferPolicy.targetBufferBytes(effectiveProfile.maxBufferMs)
+        builder.setTargetBufferBytes(targetBytes)
+        // 加深时按字节优先（保证 256MB 上限真正生效）；否则保持基线「时间优先」
+        builder.setPrioritizeTimeOverSizeThresholds(!deepenBucket)
+        currentMaxBufferMs = effectiveProfile.maxBufferMs
+        val loadControl = builder.setBufferDurationsMs(
+            effectiveProfile.minBufferMs,
+            effectiveProfile.maxBufferMs,
+            effectiveProfile.bufferForPlaybackMs,
+            effectiveProfile.bufferForPlaybackAfterRebufferMs
+        ).build()
+        // 日志验证 LoadControl 实际参数生效（含策略/倍速/加深归因）
         AppLog.put(
-            "[BufferSpeed] LoadControl tier=$tier maxBufferMs=${when (tier) {
-                BandwidthTier.WEAK -> (userMaxBufferSec.takeIf { it > 0 } ?: 30) * 1000
-                BandwidthTier.MEDIUM -> (userMaxBufferSec.takeIf { it > 0 } ?: 90) * 1000
-                BandwidthTier.GOOD -> (userMaxBufferSec.takeIf { it > 0 } ?: 120) * 1000
-            }} targetBufferBytes=-1 prioritizeTime=true"
+            "[BufferSpeed] LoadControl tier=$tier strategy=$strategy speed=$speed " +
+                "minBufferMs=${effectiveProfile.minBufferMs} maxBufferMs=${effectiveProfile.maxBufferMs} " +
+                "playMs=${effectiveProfile.bufferForPlaybackMs} targetBufferBytes=$targetBytes " +
+                "prioritizeTime=${!deepenBucket} deepen=$deepenBucket netTier=$networkTier " +
+                "bitrate=${bitrateForBucket()}"
         )
         return loadControl
     }
@@ -254,16 +327,6 @@ object ExoPlayerHelper {
         val mediaItem = MediaItem.Builder()
             .setUri(url)
             .apply { sniff.mimeType?.let { setMimeType(it) } }
-            .apply {
-                // 缓冲速度优化（P0）：HLS 直播配置 3s 目标偏移，VOD 自动忽略
-                if (sniff.contentType == C.TYPE_HLS) {
-                    setLiveConfiguration(
-                        MediaItem.LiveConfiguration.Builder()
-                            .setTargetOffsetMs(3_000)
-                            .build()
-                    )
-                }
-            }
             .build()
         return when (sniff.contentType) {
             C.TYPE_HLS -> {
@@ -1124,21 +1187,24 @@ object ExoPlayerHelper {
     }
 
     fun createHttpExoPlayer(context: Context): ExoPlayer {
-        return ExoPlayer.Builder(context).setLoadControl(
-            DefaultLoadControl.Builder().setBufferDurationsMs(
-                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
-                DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
-                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS / 10,
-                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS / 10
+        return ExoPlayer.Builder(context)
+            // §1.19：绑定全局带宽计（否则读到的 bitrateEstimate 永远是另一实例的初始值）
+            .setBandwidthMeter(bandwidthMeter)
+            .setLoadControl(
+                DefaultLoadControl.Builder().setBufferDurationsMs(
+                    DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                    DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS / 10,
+                    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS / 10
+                ).build()
+            ).setMediaSourceFactory(
+                DefaultMediaSourceFactory(
+                    context,
+                    DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)
+                ).setDataSourceFactory(resolvingDataSource)
+                    .setLiveTargetOffsetMs(5000)
+                    .setDrmSessionManagerProvider(cencDrmSessionProvider)
             ).build()
-        ).setMediaSourceFactory(
-            DefaultMediaSourceFactory(
-                context,
-                DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)
-            ).setDataSourceFactory(resolvingDataSource)
-                .setLiveTargetOffsetMs(5000)
-                .setDrmSessionManagerProvider(cencDrmSessionProvider)
-        ).build()
     }
 
     /**
@@ -1177,6 +1243,63 @@ object ExoPlayerHelper {
 
 
     /**
+     * tasks §13.1：缓存读取指标出口。
+     *
+     * 由当前活跃的 `Exo2MediaPlayer` 在 attach 时注册、detach 时清空；`CacheDataSource`
+     * 每次命中缓存都会回调，用于输出「缓存命中率」（含 SimpleCache 预填链路的命中）。
+     */
+    @Volatile
+    var cacheMetricsSink: ((Long) -> Unit)? = null
+
+    /**
+     * tasks §13.3/§13.4：当前媒体时长供应器（毫秒，未知返回 0）。
+     *
+     * 由活跃的 `Exo2MediaPlayer` 在 attach 时注册。缓存写 sink 是**按请求懒创建**的
+     * （`CacheDataSource` 每次 open 都调 `Factory.createDataSink()`），因此 READY 后
+     * 拿到真实时长即可对后续分片生效——无需重建 media source。
+     */
+    @Volatile
+    var currentDurationProvider: (() -> Long)? = null
+
+    /** video-buffer-prefetch-v2：当前是否直播（写缓存 gate 用；由应用线程写入） */
+    @Volatile
+    var currentIsLiveSnapshot: Boolean = false
+
+    /** video-buffer-prefetch-v2：长视频回看窗口秒数（0=关闭；由应用线程写入） */
+    @Volatile
+    var currentBackCacheSecSnapshot: Int = 0
+
+    /** video-buffer-prefetch-v2：最近一次已知播放倍速（prepare 前由上层 setSpeed 下发） */
+    @Volatile
+    var playbackSpeedSnapshot: Float = 1f
+
+    /** 缓存键实证：只打印一次（video-buffer-prefetch-v2 tasks 1.1） */
+    private val segmentKeyLogged = AtomicBoolean(false)
+
+    /** tasks §13.4：缓存写开关的日志限频计数 */
+    @Volatile
+    private var cacheWriteLogCount = 0
+
+    /**
+     * tasks §13.4：上一次缓存写决策（null=尚未决策）。
+     *
+     * 真机取证（2026-11-08 02:41）：HLS 分片较大，播放数分钟仅创建个位数 sink，
+     * 「每 20 次」的限频会让「长视频由 on 转 off」这一关键事件长期不可见。
+     * 故改为**决策变化必打**，与限频并行。
+     */
+    @Volatile
+    private var lastCacheWriteDecision: Boolean? = null
+
+    /**
+     * 缓存键实证（仅一次）：确认播放侧分片 DataSpec.key 为空 ⇒ CacheDataSource 以 URI 为键，
+     * 与预取侧（key=null）一致。不一致时预取会自动熔断（AD-04 / tasks 1.1）。
+     */
+    private fun logSegmentKeyOnce(key: String?) {
+        if (!segmentKeyLogged.compareAndSet(false, true)) return
+        AppLog.put("[Prefetch] key_check keyNull=${key == null} cacheKeyIsUri=${key == null}")
+    }
+
+    /**
      * 支持缓存的DataSource.Factory
      */
     val cacheDataSourceFactory: DataSource.Factory by lazy {
@@ -1194,24 +1317,82 @@ object ExoPlayerHelper {
         val upstreamFactory: DataSource.Factory = cronetDataFactory?.let { cronet ->
             TlsFallbackDataSourceFactory(cronet, okhttpDataFactory)
         } ?: okhttpDataFactory
+        // fix-live-hls-manifest-cache：清单直连用的上游（不含 CacheDataSource）
+        val directFactory = DefaultDataSource.Factory(appCtx, upstreamFactory)
         // P0-3-cache-play 接线：视频缓存总开关（VideoPlay.videoCache，默认开启）
         // 开启：走 CacheDataSource + SimpleCache 边下边缓存（回看重播零流量、可秒拖缓存区间）
         // 关闭：仅直连播放，不写磁盘缓存（省存储）
         // 注意：cacheDataSourceFactory 为 lazy 单例，修改开关需重启 App 生效
-        if (!VideoPlay.videoCache) {
+        val cachedFactory: DataSource.Factory = if (!VideoPlay.videoCache) {
             // P2 修复：用 DefaultDataSource 包装，支持 file:// 等本地协议
-            DefaultDataSource.Factory(appCtx, upstreamFactory)
+            directFactory
         } else {
             CacheDataSource.Factory()
                 .setCache(cache)
-                .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, upstreamFactory))
+                .setUpstreamDataSourceFactory(directFactory)
                 .setCacheReadDataSourceFactory(FileDataSource.Factory())
-                .setCacheWriteDataSinkFactory(
-                    CacheDataSink.Factory()
+                .setCacheWriteDataSinkFactory(object : DataSink.Factory {
+                    private val cacheSinkFactory = CacheDataSink.Factory()
                         .setCache(cache)
                         .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
-                )
+
+                    /**
+                     * tasks §13.3/§13.4：长视频不落盘、短视频边下边存。
+                     *
+                     * **决策必须在 `DataSink.open(dataSpec)`（即每次请求）做，不能放在本方法**：
+                     * 真机铁证（2026-11-08 04:12）本方法一个会话只被调用 4 次，之后 sink 被复用，
+                     * 缓存文件仍按分片持续写入 ⇒ 放在这里等于永不生效。
+                     */
+                    override fun createDataSink(): DataSink =
+                        PolicySwitchDataSink(
+                            cacheSinkFactory = cacheSinkFactory,
+                            durationProvider = { currentDurationProvider?.invoke() ?: 0L },
+                            onDecision = { write, durationMs ->
+                                val changed = lastCacheWriteDecision != write
+                                lastCacheWriteDecision = write
+                                cacheWriteLogCount++
+                                if (shouldLogCacheWriteDecision(changed, cacheWriteLogCount)) {
+                                    val reason = when {
+                                        write -> ""
+                                        currentIsLiveSnapshot -> "(reason=live)"
+                                        else -> "(reason=long_video)"
+                                    }
+                                    AppLog.put(
+                                        "[BufferSpeed] cache_write=${if (write) "on" else "off"}$reason" +
+                                            ", durMs=$durationMs, req#$cacheWriteLogCount"
+                                    )
+                                }
+                            },
+                            // 审计 B3：isLive 优先于 duration（直播 duration<=0 不能当短视频写盘）
+                            writeDecider = { dur ->
+                                shouldWriteCache(
+                                    isLive = currentIsLiveSnapshot,
+                                    backCacheSec = currentBackCacheSecSnapshot,
+                                    durationMs = dur,
+                                )
+                            },
+                        )
+                })
+                // tasks §13.1：缓存命中率埋点（每次从 SimpleCache 读出字节即回调）
+                .setEventListener(object : CacheDataSource.EventListener {
+                    override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
+                        cacheMetricsSink?.invoke(cachedBytesRead)
+                    }
+
+                    override fun onCacheIgnored(reason: Int) {
+                        // 缓存条目不可用（过期/不可缓存）：不输出，避免分片级噪声
+                    }
+                })
         }
+        // fix-live-hls-manifest-cache：清单（.m3u8/.m3u/.mpd）绕过 SimpleCache。
+        // 直播清单若被缓存，滑动窗口冻结 ⇒ Media3 约 7 秒抛 PlaylistStuckException ⇒ 播放 6 秒即停。
+        // 分片仍走 cachedFactory，点播回看/拖动缓存行为不变。
+        ManifestBypassDataSourceFactory(
+            cachedFactory,
+            directFactory,
+            onManifestOpened = { uri -> ManifestObserver.onManifestOpened(uri) },
+            onSegmentKey = { key -> logSegmentKeyOnce(key) },
+        )
     }
 
     /**
@@ -1232,7 +1413,12 @@ object ExoPlayerHelper {
         } else {
             // P0-4: 注入防盗链默认请求头（UA + Referer 兜底）
             // 说明：setDefaultHeaders 被调用时会覆盖此默认值；此默认值仅用于未被 setDefaultHeaders 显式覆盖的请求
-            androidx.media3.datasource.cronet.CronetDataSource.Factory(engine, java.util.concurrent.Executors.newSingleThreadExecutor())
+            // §13.6（B4）：原 newSingleThreadExecutor 单线程供给不足（长视频高吞吐 + 缓存写调度共用）
+            // ⇒ 固定 3 线程；HTTP/1.1 与 TLS 回退策略不变
+            androidx.media3.datasource.cronet.CronetDataSource.Factory(
+                engine,
+                java.util.concurrent.Executors.newFixedThreadPool(3)
+            )
                 .setDefaultRequestProperties(buildAntiLeechHeaders())
         }
     }
@@ -1344,17 +1530,19 @@ object ExoPlayerHelper {
 
     /**
      * Exoplayer 内置的缓存
-     * P0-3：缓存容量从 VideoPlay.videoCacheSize 读取（首次 lazy 初始化时生效，修改后需重启 App）
-     * R3：容量范围保护从 50-500MB 调整为 50-2048MB（支持 HIGH 档位 1GB 缓存）
+     * video-buffer-prefetch-v2 AD-16：容量按设备内存/可用存储自适应（0=自动），
+     * 首次 lazy 初始化时生效；淘汰由 LRU 负责。
      */
     internal val cache: Cache by lazy {
         val databaseProvider = StandaloneDatabaseProvider(appCtx)
-        val cacheSizeMb = VideoPlay.videoCacheSize.coerceIn(50, 2048)  // R3: 容量范围保护 50-2048MB
+        // video-buffer-prefetch-v2 AD-16：按设备内存/可用存储自适应容量（0=自动）
+        // 淘汰仍由 LeastRecentlyUsedCacheEvictor 负责；写入量另受预取/回看预算约束
+        val cacheSizeMb = CacheSizePolicy.resolveNow(storageDir = appCtx.externalCache)
         return@lazy SimpleCache(
             //Exoplayer的缓存路径
             File(appCtx.externalCache, "exoplayer"),
-            //容量从配置读取（默认 100MB）
-            LeastRecentlyUsedCacheEvictor((cacheSizeMb * 1024 * 1024).toLong()),
+            //容量按设备自适应
+            LeastRecentlyUsedCacheEvictor(cacheSizeMb * 1024L * 1024L),
             //记录缓存的数据库
             databaseProvider
         )
