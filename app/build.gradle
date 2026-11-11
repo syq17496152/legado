@@ -67,13 +67,21 @@ def releaseTime = releaseTimeProvider.get()
 def version = (project.findProperty("appVersion") as String) ?: "3.${releaseTime}"
 def gitCommits = gitCommitsProvider.get()
 // versionCode 单调化（2026-10-28 修复「无法降级安装」）：
-// 原实现 versionCode = 10000 + git rev-list --count，而 git filter-repo 历史重写会让
+// 原实现 versionCode = 20000 + git rev-list --count，而 git filter-repo 历史重写会让
 // 提交数变小（实测 856 → 771）⇒ 新包 versionCode 反而低于已装包，覆盖安装报
 // INSTALL_FAILED_VERSION_DOWNGRADE。改为「时间编码」与「提交数」取较大值：
 // 时间项（yyMMddHH，如 26.102819 → 26102819）跨历史重写单调递增，提交数项仅作时钟回拨兜底。
+//
+// 2026-11-11 恢复 20000 基数（stable-release-split-without-tts 收尾）：
+// 实验分支测试包按 20000 + 26110110 = 26130110 装进了手机，10000 基数会得到
+// 26121121 < 26130110 ⇒ 无法覆盖升级。恢复 20000 后：
+//   26131121 > 26130110（已装实验包）且 > 26112921（已发布 3.26.102921）⇒ 两条升级路径都通。
+// versionCode 由 versionName 推导（去掉前缀 "3." 后拼接），保证「双包同版本」时 vc 严格一致；
+// 提交数项仅作时钟回拨兜底。
+def versionCodeBase = version.startsWith("3.") ? version.substring(2) : version
 def buildVersionCode = Math.max(
-        10000 + releaseTime.replace(".", "").toInteger(),
-        10000 + gitCommits
+        20000 + versionCodeBase.replace(".", "").toInteger(),
+        20000 + gitCommits
 )
 // 版本号显式覆盖（测试/应急：设备已装更高 versionCode 但构建机时钟回拨时，覆盖安装会报
 // INSTALL_FAILED_VERSION_DOWNGRADE）。用法：-PversionCodeOverride=26130000
