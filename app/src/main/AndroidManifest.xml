@@ -5,11 +5,9 @@
     <!-- Archive UI 迁移（Phase 0 地基补齐）：liquidglass(毛玻璃底栏) 要求 minSdk 24，本项目 minSdk 23，用 overrideLibrary 覆盖（与 Archive 一致）；运行时仅 API24+ 启用毛玻璃 -->
     <!-- Cronet 500 要求 minSdk 24，用 overrideLibrary 覆盖以保持项目 minSdk 23；API23 设备上 Cronet 不可用，请求自动回退 OkHttp（CronetInterceptor 已有降级路径）
         覆盖 cronet-bundled 传递引入的 cronet 家族全部子构件包名（cronet 聚合器/bundled/embedded/api/common/fallback/shared/httpengine-native-provider），未用到的包名被 manifest 合并器忽略，无害 -->
-    <uses-sdk tools:overrideLibrary="com.qmdeve.liquidglass,top.yukonga.miuix.kmp,com.google.mediapipe.tasks.vision,com.google.mediapipe.tasks.core,com.google.mediapipe.framework,com.google.mediapipe.tasks.vision.facelandmarker,org.chromium.net.bundled,org.chromium.net,com.google.net.cronet.granular.cronet,com.google.net.cronet.granular.cronet_api,com.google.net.cronet.granular.cronet_embedded,com.google.net.cronet.granular.cronet_common,com.google.net.cronet.granular.cronet_fallback,com.google.net.cronet.granular.cronet_shared,com.google.net.cronet.granular.httpengine_native_provider" />
+    <uses-sdk tools:overrideLibrary="com.qmdeve.liquidglass,top.yukonga.miuix.kmp,org.chromium.net.bundled,org.chromium.net,com.google.net.cronet.granular.cronet,com.google.net.cronet.granular.cronet_api,com.google.net.cronet.granular.cronet_embedded,com.google.net.cronet.granular.cronet_common,com.google.net.cronet.granular.cronet_fallback,com.google.net.cronet.granular.cronet_shared,com.google.net.cronet.granular.httpengine_native_provider" />
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- R1 眼动翻页（实验性）：仅用户主动开启后使用前置摄像头，帧不保存不上传 -->
-    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

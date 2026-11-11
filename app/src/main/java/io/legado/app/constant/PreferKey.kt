@@ -207,6 +207,9 @@ object PreferKey {
     const val doublePageHorizontal = "doubleHorizontalPage"
     const val readUrlOpenInBrowser = "readUrlInBrowser"
     const val defaultBookTreeUri = "defaultBookTreeUri"
+    // 多目录 SAF 授权：已授权目录集合（JSON 数组）与一次性迁移标记（设备本地键，不参与备份）
+    const val safeDirs = "safeDirs"
+    const val safeDirsMigrated = "safeDirsMigrated"
     const val checkSource = "checkSource"
 
     // NEW-33：订阅源校验设置（书源侧 checkSource 的同构入口）——设置页摘要由
@@ -281,6 +284,13 @@ object PreferKey {
     const val mouseWheelPage = "mouseWheelPage"
     const val recordHeapDump = "recordHeapDump"
     const val optimizeRender = "optimizeRender"
+
+    /**
+     * crash-hardening AD-09：内存降载/回收动作总开关。
+     * 首版默认 false（观测模式：只算档位与打点，行为与改造前一致）；
+     * 阈值经真机校准后再把默认值改为 true；用户手动关闭等价当前版本行为。
+     */
+    const val crashHardeningActionsEnabled = "crashHardeningActionsEnabled"
 
     /**
      * R18（B4）书源查询短时缓存开关（默认开）。

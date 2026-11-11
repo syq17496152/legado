@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.legado.app.constant.AppLog
+import io.legado.app.help.video.VideoTrace
 import splitties.init.appCtx
 
 /**
@@ -147,6 +148,40 @@ object PlayerInstancePool {
     }
 
     /**
+     * video-buffer-prefetch-v2：构建并登记一个播放器实例（供 [PrebuiltPlayerHolder] 预热复用）。
+     *
+     * 与池化无关：只负责 Builder + 独立 TrackSelector + LoadControl + MediaSourceFactory。
+     */
+    @Synchronized
+    internal fun buildPlayer(looper: Looper): ExoPlayer {
+        val selector = createTrackSelector()
+        val player = ExoPlayer.Builder(appCtx, sharedRendererFactory)
+            .setLooper(looper)
+            .setTrackSelector(selector)
+            // §1.19：显式绑定全局带宽计——Builder 默认会自建独立实例，
+            // 导致 ExoPlayerHelper.bandwidthMeter.bitrateEstimate 永远停在初始值（实测 2.4Mbps）
+            .setBandwidthMeter(ExoPlayerHelper.bandwidthMeter)
+            .setLoadControl(createLoadControl())
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(ExoPlayerHelper.resolvingDataSource)
+                    // video-buffer-prefetch-v2：不再硬编码 5s 直播偏移（2s 分片默认应为 6s）
+                    // CENC Clear-Key（AD-01）：条件式 DRM，未声明 cenc-aes-ctr 的媒体行为不变
+                    .setDrmSessionManagerProvider(ExoPlayerHelper.cencDrmSessionProvider)
+            )
+            .build()
+        selectorMap[player] = selector
+        return player
+    }
+
+    /** 释放一个未入池的实例（预建实例清理用） */
+    @Synchronized
+    internal fun releaseUnused(player: ExoPlayer) {
+        selectorMap.remove(player)
+        taintedPool.remove(player)
+        kotlin.runCatching { player.release() }
+    }
+
+    /**
      * 获取播放器实例（命中复用 / 未命中新建）
      *
      * @param looper 播放器工作 Looper（仅新建时生效；复用实例沿用其创建时 Looper，全链路同线程约束保证一致）
@@ -159,22 +194,31 @@ object PlayerInstancePool {
         // 25s BUFFERING 超时后释放 → 后续全部复用死实例 → 真机无一可播。
         // 实例池整体降级为直建直毁（丢失复用性能 ~100ms/次，换确定性可用），复用逻辑保留待排查后重启用
         if (!POOL_ENABLED) {
-            val selector = createTrackSelector()
-            val player = ExoPlayer.Builder(appCtx, sharedRendererFactory)
-                .setLooper(looper)
-                .setTrackSelector(selector)
-                .setLoadControl(createLoadControl())
-                .setMediaSourceFactory(
-                    DefaultMediaSourceFactory(ExoPlayerHelper.resolvingDataSource)
-                        .setLiveTargetOffsetMs(5000)
-                        // CENC Clear-Key（AD-01）：条件式 DRM，未声明 cenc-aes-ctr 的媒体行为不变
-                        .setDrmSessionManagerProvider(ExoPlayerHelper.cencDrmSessionProvider)
+            // video-buffer-prefetch-v2 §1.17：优先取用预建空闲实例（不开启池化，失败回退直建）
+            PrebuiltPlayerHolder.take(looper)?.let { spare ->
+                AppLog.put(
+                    "PlayerPool: prebuilt_hit, playerId=${System.identityHashCode(spare)}, thread=${Thread.currentThread().name}"
                 )
-                .build()
-            selectorMap[player] = selector
+                VideoTrace.event(
+                    stage = "player_acquire",
+                    "playerId" to System.identityHashCode(spare),
+                    "hit" to true,
+                    "prebuilt" to true,
+                    "thread" to Thread.currentThread().name
+                )
+                return spare
+            }
+            val player = buildPlayer(looper)
             AppLog.put(
                 "PlayerPool: POOL_DISABLED acquire (create new), " +
                     "playerId=${System.identityHashCode(player)}"
+            )
+            VideoTrace.event(
+                stage = "player_acquire",
+                "playerId" to System.identityHashCode(player),
+                "hit" to false,
+                "poolEnabled" to false,
+                "thread" to Thread.currentThread().name
             )
             return player
         }
@@ -185,26 +229,27 @@ object PlayerInstancePool {
                     "playerId=${System.identityHashCode(reused)}, " +
                     "selector=${System.identityHashCode(selectorMap[reused])}"
             )
+            VideoTrace.event(
+                stage = "player_acquire",
+                "playerId" to System.identityHashCode(reused),
+                "hit" to true,
+                "poolSize" to pool.size,
+                "thread" to Thread.currentThread().name
+            )
             return reused
         }
         // V-P0-1: 每实例独立 TrackSelector（共享单例并发二次 init 崩溃）
-        val selector = createTrackSelector()
-        val player = ExoPlayer.Builder(appCtx, sharedRendererFactory)
-            .setLooper(looper)
-            .setTrackSelector(selector)
-            .setLoadControl(createLoadControl())
-            .setMediaSourceFactory(
-                // 与原 Exo2MediaPlayer 配置一致：resolvingDataSource 支持 SPLIT_TAG per-request Header 注入
-                DefaultMediaSourceFactory(ExoPlayerHelper.resolvingDataSource)
-                    .setLiveTargetOffsetMs(5000) // 直播时延 5 秒
-                    // CENC Clear-Key（AD-01）：条件式 DRM，未声明 cenc-aes-ctr 的媒体行为不变
-                    .setDrmSessionManagerProvider(ExoPlayerHelper.cencDrmSessionProvider)
-            )
-            .build()
-        selectorMap[player] = selector
+        val player = buildPlayer(looper)
         AppLog.put(
             "PlayerPool: acquire miss (create new), " +
-                "selector=${System.identityHashCode(selector)}"
+                "selector=${System.identityHashCode(trackSelectorOf(player))}"
+        )
+        VideoTrace.event(
+            stage = "player_acquire",
+            "playerId" to System.identityHashCode(player),
+            "hit" to false,
+            "poolSize" to pool.size,
+            "thread" to Thread.currentThread().name
         )
         return player
     }
@@ -271,6 +316,12 @@ object PlayerInstancePool {
         }
         pool.addFirst(player)
         AppLog.put("PlayerPool: recycled, poolSize=${pool.size}")
+        VideoTrace.event(
+            stage = "player_recycle",
+            "playerId" to System.identityHashCode(player),
+            "poolSize" to pool.size,
+            "thread" to Thread.currentThread().name
+        )
     }
 
     /**
@@ -279,6 +330,8 @@ object PlayerInstancePool {
      */
     @Synchronized
     fun clear() {
+        // video-buffer-prefetch-v2：预建空闲实例同样必须随 Activity 销毁释放
+        PrebuiltPlayerHolder.clear()
         var count = 0
         while (pool.isNotEmpty()) {
             kotlin.runCatching { pool.removeFirst().release() }
@@ -296,5 +349,10 @@ object PlayerInstancePool {
         if (count > 0) {
             AppLog.put("PlayerPool: cleared $count instances on activity destroy")
         }
+        VideoTrace.event(
+            stage = "player_clear",
+            "released" to count,
+            "thread" to Thread.currentThread().name
+        )
     }
 }

@@ -408,6 +408,30 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             }
         }
 
+    /**
+     * 已授权的 SAF 浏览目录集合（JSON 数组）。
+     *
+     * 设备本地键：SAF 授权换机后必然失效，故不参与备份（见 BackupConfig.DEVICE_LOCAL_IGNORE_PREF_KEYS）。
+     * 迁移与上限由 `StorageAccess` 负责，此处只做存取。
+     */
+    var safeDirs: List<String>
+        get() {
+            val json = appCtx.getPrefString(PreferKey.safeDirs) ?: return emptyList()
+            return GSON.fromJsonArray<String>(json).getOrDefault(emptyList())
+        }
+        set(value) {
+            if (value.isEmpty()) {
+                appCtx.removePref(PreferKey.safeDirs)
+            } else {
+                appCtx.putPrefString(PreferKey.safeDirs, GSON.toJson(value))
+            }
+        }
+
+    /** 旧单值 [defaultBookTreeUri] 迁移到 [safeDirs] 的一次性标记 */
+    var safeDirsMigrated: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.safeDirsMigrated, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.safeDirsMigrated, value)
+
     val showDiscovery: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showDiscovery, true)
 
@@ -1161,6 +1185,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
           "soundEffectContextChars": 28
         }
     """.trimIndent()
+
+    /**
+     * crash-hardening AD-09：内存降载/回收动作总开关。
+     *
+     * 默认 **false**（观测模式）：只计算压力档位并打点，不执行任何降载/回收动作，
+     * 行为与改造前完全一致。真机档位分布校准通过后才把默认值改为 true。
+     * 关闭状态下所有动作退化为现状（仅保留既有 idle WebView / 缓存清理）。
+     */
+    var crashHardeningActionsEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.crashHardeningActionsEnabled, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.crashHardeningActionsEnabled, value)
 
     var aiReadAloudRoleEnabled: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.aiReadAloudRoleEnabled, false) &&

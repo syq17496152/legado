@@ -17,6 +17,10 @@ object EventBus {
     const val TIME_CHANGED = "timeChanged"
     const val UP_CONFIG = "upConfig"
     const val VIDEO_SUB_TITLE = "VideoSubTitle"
+
+    /** video-buffer-prefetch-v2：播放器浮层提示（String，例如解码过重建议换线路） */
+    const val VIDEO_PLAY_TIP = "videoPlayTip"
+
     /**
      * 切集加载反馈开关（Boolean）。
      *

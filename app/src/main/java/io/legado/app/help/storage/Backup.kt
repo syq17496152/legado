@@ -102,6 +102,11 @@ object Backup {
 
     private const val TAG = "Backup"
 
+    /** SAF 备份包的创建 MIME（不可为空串，见 `copyBackup(context, uri, fileName)` 注释） */
+    internal fun safMimeTypeFor(fileName: String): String =
+        if (fileName.endsWith(".zip", ignoreCase = true)) "application/zip"
+        else "application/octet-stream"
+
     // 🔴 已删除死清单 `backupFileNames`（2026-09-27 / REQ-05 对等性修复）
     // 该 lazy 数组**全仓零运行时引用**（仅被注释文字与本单测的历史 KDoc 提及），
     // 是「同一批文件名写在第 3 处」的漂移源头：它既不参与写出、也不参与还原，
@@ -761,7 +766,11 @@ object Backup {
     private fun copyBackup(context: Context, uri: Uri, fileName: String) {
         val treeDoc = DocumentFile.fromTreeUri(context, uri)!!
         treeDoc.findFile(fileName)?.delete()
-        val fileDoc = treeDoc.createFile("", fileName)
+        // MIME 不能为空串：Android 10+ 的 DocumentsContract 会直接抛
+        // IllegalArgumentException("mimeType can't be null") ⇒ 选系统文件夹导出备份必失败
+        // （真机 2026-11-01 实测：本方法在 treeDoc.createFile 处抛该异常，界面回执「创建文件失败」）。
+        // 本方法只写 ZIP 备份包，MIME 由扩展名派生（见 [safMimeTypeFor]）。
+        val fileDoc = treeDoc.createFile(safMimeTypeFor(fileName), fileName)
             ?: throw NoStackTraceException("创建文件失败")
         val outputS = fileDoc.openOutputStream()
             ?: throw NoStackTraceException("打开OutputStream失败")

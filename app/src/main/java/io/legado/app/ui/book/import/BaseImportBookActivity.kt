@@ -17,6 +17,10 @@ import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.storage.FullAccessState
+import io.legado.app.help.storage.StorageAccess
+import io.legado.app.lib.permission.Permissions
+import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.SelectActionBar
@@ -65,41 +69,61 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
 
     val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { treeUri ->
-            AppConfig.defaultBookTreeUri = treeUri.toString()
+            val uri = treeUri.toString()
+            AppConfig.defaultBookTreeUri = uri
+            // 选中的目录同时登记为可浏览目录，供多目录切换复用
+            StorageAccess.addSafeDir(uri)
             localBookTreeSelectListener?.invoke(true)
         } ?: localBookTreeSelectListener?.invoke(false)
     }
 
     /**
      * 设置书籍保存位置
+     *
+     * 判定顺序（storage-permission-full-access）：
+     * 1. 已开启「所有文件访问权限」⇒ 无需设置目录，保存走全盘公共目录
+     * 2. 已有任意 SAF 授权目录 ⇒ 无需再设置
+     * 3. 两者都没有 ⇒ 弹说明引导用户二选一
      */
     protected suspend fun setBookStorage() = suspendCancellableCoroutine sc@{ block ->
-        localBookTreeSelectListener = {
-            localBookTreeSelectListener = null
-            block.resume(it)
-        }
-        //测试书籍保存位置是否设置
-        if (!AppConfig.defaultBookTreeUri.isNullOrBlank()) {
+        if (StorageAccess.fullAccessState() == FullAccessState.GRANTED) {
             localBookTreeSelectListener = null
             block.resume(true)
             return@sc
         }
-        //测试读写??
+        if (StorageAccess.safeDirs().isNotEmpty()) {
+            localBookTreeSelectListener = null
+            block.resume(true)
+            return@sc
+        }
+        localBookTreeSelectListener = {
+            localBookTreeSelectListener = null
+            block.resume(it)
+        }
         val storageHelp = String(assets.open("storageHelp.md").readBytes())
         val hint = getString(R.string.select_book_folder)
         showComposeConfirmDialog(
             title = hint,
             message = storageHelp,
-            positiveText = getString(R.string.ok),
-            negativeText = getString(R.string.cancel),
+            positiveText = getString(R.string.storage_guide_positive),
+            negativeText = getString(R.string.storage_guide_choose_dir),
             onPositive = {
+                // 走既有权限通道跳系统设置；授权结果由 onResume 重新判定
+                PermissionsCompat.Builder()
+                    .addPermissions(Permissions.MANAGE_EXTERNAL_STORAGE)
+                    .rationale(R.string.storage_all_files_access_rationale)
+                    .onGranted {
+                        localBookTreeSelectListener?.invoke(true)
+                    }
+                    .onDenied {
+                        localBookTreeSelectListener?.invoke(false)
+                    }
+                    .request()
+            },
+            onNegative = {
                 localBookTreeSelect.launch {
                     title = hint
                 }
-            },
-            onNegative = {
-                localBookTreeSelectListener = null
-                block.resume(false)
             },
             onDismissAction = {
                 localBookTreeSelectListener = null

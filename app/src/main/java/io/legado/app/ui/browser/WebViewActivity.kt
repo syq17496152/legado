@@ -125,6 +125,8 @@ class WebViewActivity : VMBaseActivity<ViewBinding, WebViewModel>() {
 
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
+    /** crash-hardening AD-02：承载 WebView 的容器（压力回收时先摘容器再销毁/重建） */
+    private var webViewContainer: FrameLayout? = null
 
     // CE 5.2（compose 包）：原 activity_web_view.xml 已退役 ⇒ 改 composeShell 工厂创建合成壳，
     // Compose 全权接管页面骨架；**四个 View 内核一律 AndroidView 原样托管**（WebView 容器 /
@@ -175,6 +177,8 @@ class WebViewActivity : VMBaseActivity<ViewBinding, WebViewModel>() {
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
+        // crash-hardening AD-02：CRITICAL 压力时池子请求回收本页（宿主移除容器 → 销毁 → 重建）
+        pooledWebView.onRecycleRequest = { recycleForMemory() }
         // CE 5.2：原 `binding.webViewContainer.addView(currentWebView)` 改由组合内 AndroidView
         // 的 factory 完成（见 initComposeContent），避免在组合挂载前依赖 binding 子视图
         currentWebView.post {
@@ -335,7 +339,10 @@ class WebViewActivity : VMBaseActivity<ViewBinding, WebViewModel>() {
                         AndroidView(
                             modifier = Modifier.fillMaxSize(),
                             factory = { ctx ->
-                                FrameLayout(ctx).apply { addView(currentWebView) }
+                                FrameLayout(ctx).apply {
+                                    webViewContainer = this
+                                    addView(currentWebView)
+                                }
                             }
                         )
                         // 原 `gone(progress == 100)` ⇒ 进度 100 时该 1dp 条不再进入组合（同为不占位）
@@ -661,8 +668,44 @@ class WebViewActivity : VMBaseActivity<ViewBinding, WebViewModel>() {
     }
 
     override fun onDestroy() {
-        WebViewPool.release(pooledWebView)
+        // crash-hardening AD-02：先摘掉压力回收回调，避免销毁过程中被池子再次请求回收
+        if (::pooledWebView.isInitialized) {
+            pooledWebView.onRecycleRequest = null
+            WebViewPool.release(pooledWebView)
+        }
         super.onDestroy()
+    }
+
+    /**
+     * crash-hardening AD-02：CRITICAL 压力下的"回收并重建"。
+     *
+     * 只回收展示态：记录当前 URL 与滚动位置 → 摘容器 → 归还池（池内直接销毁）→
+     * 重新取实例 → 重挂客户端 → 重新加载并恢复位置。不触碰任何业务数据。
+     */
+    private fun recycleForMemory() {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            val container = webViewContainer ?: return@runOnUiThread
+            val url = currentWebView.url ?: viewModel.baseUrl
+            if (url.isNullOrBlank()) return@runOnUiThread
+            val headerMap = viewModel.headerMap
+            val scrollY = currentWebView.scrollY
+            AppLog.put("WebViewActivity 内存压力回收并重建：${currentWebView.url}")
+            kotlin.runCatching {
+                pooledWebView.onRecycleRequest = null
+                container.removeView(currentWebView)
+                WebViewPool.release(pooledWebView)
+                pooledWebView = WebViewPool.acquire(this)
+                currentWebView = pooledWebView.realWebView
+                pooledWebView.onRecycleRequest = { recycleForMemory() }
+                initWebView(url, headerMap)
+                container.addView(currentWebView)
+                currentWebView.loadUrl(url, headerMap)
+                currentWebView.post { kotlin.runCatching { currentWebView.scrollTo(0, scrollY) } }
+            }.onFailure {
+                AppLog.put("WebViewActivity 内存压力回收失败", it)
+            }
+        }
     }
 
     @Suppress("unused")
@@ -706,6 +749,10 @@ class WebViewActivity : VMBaseActivity<ViewBinding, WebViewModel>() {
             super.onProgressChanged(view, newProgress)
             // CE 5.2：原 ProgressBar 的 setDurProgress + gone(==100) 改由状态驱动（组合内 update 落地）
             webProgress = newProgress
+            // crash-hardening AD-02：加载中不回收（保护位），加载完成才允许压力回收
+            if (::pooledWebView.isInitialized) {
+                WebViewPool.protect(pooledWebView.id, newProgress < 100)
+            }
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {

@@ -2251,7 +2251,10 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun notifyAppCrash() {
-        if (LocalConfig.appCrash) {
+        // crash-hardening AD-06：Java 崩溃（LocalConfig.appCrash）之外，native 崩溃/ANR 由
+        // ExitInfoRecorder 冷启动转存后置位；两者任一成立都要回灌并提示，否则"上次怎么死的"用户无从得知。
+        val nativeCrash = io.legado.app.help.crash.ExitInfoRecorder.consumeRecentCrashOnStartup()
+        if (LocalConfig.appCrash || nativeCrash) {
             LocalConfig.appCrash = false
             // sniff-regression-rss-image-crash: 崩溃栈取证回灌——崩溃文件（cache/crash/crash-*.log）
             // 常不在用户导出的日志包内（logs.zip 只有 logcat + logs/appLog），启动时把最近崩溃栈

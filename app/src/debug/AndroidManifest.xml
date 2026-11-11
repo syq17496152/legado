@@ -3,11 +3,7 @@
   MCP 内腿（8765）· **debug 变体专属**（web-mcp-productization 二期 · tasks 5.1 / REQ-2-401/402）。
   与 main 的 `.service.WebService`（1122 对外腿）同款声明；release 变体无此符号 ⇒ 隔离由编译产物保证。
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    <!-- R1：MediaPipe tasks-vision/tasks-core 声明 minSdk 24，本项目 minSdk 23 ⇒ 与主清单同一份覆盖白名单；
-         运行时 EyePageTurner 仅 API24+ 启用（Build.VERSION 门控），API23 不会触达该库 -->
-    <uses-sdk tools:overrideLibrary="com.google.mediapipe.tasks.vision,com.google.mediapipe.tasks.core,com.google.mediapipe.framework,com.google.mediapipe.tasks.vision.facelandmarker" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <service
             android:name=".service.McpDebugService"

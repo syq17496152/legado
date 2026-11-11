@@ -4239,7 +4239,7 @@ private fun SceneAvatar(
                 )
             } else {
                 Icon(
-                    painter = painterResource(R.drawable.ic_bottom_person),
+                    painter = painterResource(R.drawable.ic_bottom_person_e),
                     contentDescription = segment.characterName,
                     tint = colors.subtleText,
                     modifier = Modifier.size(if (compact) 19.dp else 21.dp)

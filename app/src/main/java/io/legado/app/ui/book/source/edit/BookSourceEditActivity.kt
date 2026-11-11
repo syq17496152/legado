@@ -147,24 +147,30 @@ class BookSourceEditActivity :
     }
 
     /**
-     * 仅当带**非空** `sourceUrl` 且该 URL 命中 JS 源时重定向（新建规则书源不带 sourceUrl ⇒ 不受影响）。
+     * 仅当带**非空** `sourceUrl` 且该 URL 命中 JS 源时重定向到 JS 编排页；
+     * 其余情况（新建规则书源、声明式源、查库异常回落）一律进入规则编辑页。
      * 因先查库再决定是否建界面，规则页内容不会被构建 ⇒ 不产生可见闪烁。
      */
     private fun redirectJsSourceIfNeeded() {
-        val sourceUrl = intent.getStringExtra("sourceUrl") ?: return
-        if (sourceUrl.isBlank()) return
+        val sourceUrl = intent.getStringExtra("sourceUrl")
+        // 回归修复（2026-11-08）：原实现 `?: return` 把「无需重定向」误当成「不做任何动作」，
+        // 新建书源（无 sourceUrl）因此跳过 initRuleEditor()，页面只剩空白壳（af3dac84 引入）。
+        if (sourceUrl.isNullOrBlank()) {
+            initRuleEditor()
+            return
+        }
         lifecycleScope.launch {
             val isJsSource = withContext(IO) {
                 runCatching { appDb.bookSourceDao.hasJsSource(sourceUrl) }.getOrDefault(false)
             }
-            if (isJsSource) {
+            if (JsSourceEditRoute.decide(sourceUrl, isJsSource) == JsSourceEditRoute.Target.RedirectJs) {
                 startActivity<JsSourceEditActivity> {
                     putExtra("sourceUrl", sourceUrl)
                 }
                 finish()
-                return@launch
+            } else {
+                initRuleEditor()
             }
-            initRuleEditor()
         }
     }
 

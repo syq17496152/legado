@@ -34,7 +34,6 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.utils.toastOnUi
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
@@ -442,20 +441,6 @@ class MoreConfigDialog() : ComposeDialogFragment() {
                         key = PreferKey.showReadTitleAddition,
                         title = getString(R.string.show_read_title_addition),
                         defaultValue = true
-                    )
-                    // R1：眼动翻页（实验性）。开关仅持久化；真正启停与摄像头授权在阅读菜单内完成
-                    SwitchRow(
-                        key = PreferKey.eyePageTurnEnabled,
-                        title = getString(R.string.eye_page_turn),
-                        defaultValue = false
-                    )
-                    SettingActionRow(
-                        title = getString(R.string.eye_page_recalibrate),
-                        summary = getString(R.string.eye_page_recalibrate_summary),
-                        onClick = {
-                            ReadBookConfig.eyePageCalibration = null
-                            context?.toastOnUi(getString(R.string.eye_page_recalibrate_ready))
-                        }
                     )
                 }
             },

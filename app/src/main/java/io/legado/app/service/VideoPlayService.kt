@@ -44,6 +44,7 @@ import io.legado.app.help.MediaHelp
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.gsyVideo.FloatingPlayer
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.model.VideoPlay
 import io.legado.app.receiver.MediaButtonReceiver
 import io.legado.app.ui.video.VideoPlayerActivity
@@ -537,7 +538,14 @@ class VideoPlayService : BaseService() {
                 }
             }
             override fun onAutoComplete(url: String?, vararg objects: Any?) {
-                if (!VideoPlay.upDurIndex(1, playerView)) {
+                VideoTrace.event(
+                    stage = "ended",
+                    "entry" to "service",
+                    "isBook" to (VideoPlay.book != null),
+                    "rssIndex" to VideoPlay.rssEpisodeIndex,
+                    "chapterInVolumeIndex" to VideoPlay.chapterInVolumeIndex
+                )
+                if (!VideoPlay.advanceEpisode(playerView, "service")) {
                     stop()
                 }
             }

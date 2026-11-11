@@ -81,9 +81,6 @@ media3 = "1.10.1"
 #noinspection GradleDependency
 gsyvideoplayer = "11.3.0"
 
-# R1 眼动翻页：Google MediaPipe Face Landmarker 本地推理（3.76MB 模型随包，不上传帧）
-mediapipeTasksVision = "0.10.32"
-
 # 测试底座（B5·R23）：4.16.1 覆盖 Android 16 / API 36（= 本项目 targetSdk），
 # 避免默认 SDK 档位回落报 "targetSdkVersion > maxSdkVersion"
 robolectric = "4.16.1"
@@ -122,8 +119,6 @@ compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 # Archive UI 迁移（Phase 0 地基补齐）：4 个 Compose 生态库
 miuix = { module = "top.yukonga.miuix.kmp:miuix-android", version.ref = "miuix" }
-# R1 眼动翻页：MediaPipe Face Landmarker（本地推理）
-mediapipe-tasks-vision = { module = "com.google.mediapipe:tasks-vision", version.ref = "mediapipeTasksVision" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 liquidglass = { module = "com.qmdeve.liquidglass:core", version.ref = "liquidglass" }
 lazycolumnscrollbar = { module = "com.github.nanihadesuka:LazyColumnScrollbar", version.ref = "lazyColumnScrollbar" }

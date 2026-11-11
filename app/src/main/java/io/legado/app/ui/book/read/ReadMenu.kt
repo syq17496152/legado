@@ -401,9 +401,6 @@ class ReadMenu @JvmOverloads constructor(
                             onChangeSourceClick = { callBack.changeSource() },
                             onChangeSourceLongClick = { callBack.changeSourceSingle() },
                             onRollbackSourceClick = { callBack.rollbackSource() },
-                            onEyePageTurnClick = {
-                                callBack.setEyePageTurn(!AppConfig.eyePageTurnEnabled)
-                            },
                             onRefreshClick = { callBack.refreshContent() },
                             onRefreshLongClick = { callBack.showRefreshOptions() },
                             onCacheClick = { callBack.showCacheDialog() },
@@ -838,9 +835,6 @@ class ReadMenu @JvmOverloads constructor(
 
         /** R11：回滚上一书源 */
         fun rollbackSource()
-
-        /** R1：眼动翻页开关（默认空实现，避免其它实现类因新增回调而编译失败） */
-        fun setEyePageTurn(enabled: Boolean) = Unit
         fun showRefreshOptions()
         fun showCacheDialog()
         fun addBookmark()

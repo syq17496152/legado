@@ -30,6 +30,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.video.ImageEnhanceController
 import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.help.video.VideoTrace
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.postEvent
 import master.flame.danmaku.controller.DrawHandler
@@ -394,13 +395,28 @@ class VideoPlayer: StandardGSYVideoPlayer {
     }
 
     override fun onAutoCompletion() { //播放完成
+        VideoTrace.event(
+            stage = "ended",
+            "playerId" to System.identityHashCode(this),
+            "rssIndex" to VideoPlay.rssEpisodeIndex,
+            "chapterInVolumeIndex" to VideoPlay.chapterInVolumeIndex,
+            "isBook" to (VideoPlay.book != null),
+            "state" to mCurrentState
+        )
         super.onAutoCompletion()
-        VideoPlay.upDurIndex(1, this)
+        // §3.2：统一续播入口（书源/订阅源分派、去重、守卫均由 VideoPlay 单点负责）
+        VideoPlay.advanceEpisode(this, "player")
     }
 
     override fun onCompletion() {
+        VideoTrace.event(
+            stage = "completion_callback",
+            "playerId" to System.identityHashCode(this),
+            "state" to mCurrentState
+        )
         super.onCompletion()
-        releaseDanmaku(this)
+        // §14.2：本集播完不再即时释放弹幕视图——自动续播时下一集 setUp 会重建，
+        // 提前释放会让连播过程中弹幕消失；会话结束（release）统一释放。
     }
     fun releaseDanmaku(gsyVideoPlayer: VideoPlayer) {
         gsyVideoPlayer.mDanmakuView?.release()

@@ -85,8 +85,6 @@ data class ReadMenuTitleBarActions(
     val onChangeSourceLongClick: () -> Unit,
     /** R11：回滚上一书源（进程级单槽快照，换源成功后一次性有效） */
     val onRollbackSourceClick: () -> Unit,
-    /** R1：眼动翻页开关 */
-    val onEyePageTurnClick: () -> Unit,
     val onRefreshClick: () -> Unit,
     val onRefreshLongClick: () -> Unit,
     val onCacheClick: () -> Unit,
@@ -261,7 +259,6 @@ fun ReadMenuTitleBar(
                             onDelHTagClick = actions.onDelHTagClick,
                             onAiPurifyClick = actions.onAiPurifyClick,
                             onRollbackSourceClick = actions.onRollbackSourceClick,
-                            onEyePageTurnClick = actions.onEyePageTurnClick,
                             onEpubScheduleModeClick = actions.onEpubScheduleModeClick
                         )
                         popupHandle = ModernActionPopup.show(
@@ -861,9 +858,7 @@ private fun buildOverflowActions(
     /** Q-N4：AI 净化（读菜单溢出列表，紧邻「替换净化」） */
     onAiPurifyClick: () -> Unit,
     /** R11：回滚上一书源 */
-    onRollbackSourceClick: () -> Unit,
-    /** R1：眼动翻页开关 */
-    onEyePageTurnClick: () -> Unit
+    onRollbackSourceClick: () -> Unit
 ): List<ModernActionPopup.Action> {
     val actions = mutableListOf<ModernActionPopup.Action>()
     if (isLocalTxt) {
@@ -876,15 +871,6 @@ private fun buildOverflowActions(
     if (!isLocalBook) {
         actions.add(ModernActionPopup.Action(title = "回滚上一书源", invoke = onRollbackSourceClick))
     }
-    // R1：眼动翻页（实验性，默认关；checked 反映当前会话开关）
-    actions.add(
-        ModernActionPopup.Action(
-            title = "眼动翻页（实验）",
-            checked = io.legado.app.help.config.AppConfig.eyePageTurnEnabled,
-            persistent = true,
-            invoke = onEyePageTurnClick
-        )
-    )
     actions.add(ModernActionPopup.Action(title = "添加书签", invoke = onAddBookmarkClick))
     actions.add(ModernActionPopup.Action(title = "高亮规则管理", invoke = onHighlightRuleClick))
     actions.add(ModernActionPopup.Action(title = "编辑内容", invoke = onEditContentClick))
