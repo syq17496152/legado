@@ -148,7 +148,7 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 
 ### 10. 流程卡点体系（全局卡点总纲｜2026-09-23 用户裁定）
 **所有子规范必须登记到卡点归属矩阵；未登记 = 裸奔，须限期补卡点。** 卡点分六类 G1-G6（开工/提交/审核/发布/沉淀/交付），**每类必须写明「不做即停」**。
-- 总纲：`docs/project-rules/process-gate-architecture.md`（含 **26 份子规范**卡点归属矩阵 + 裸奔清单 + 六类卡点定义）
+- 总纲：`docs/project-rules/process-gate-architecture.md`（含 **30 条子规范**卡点归属矩阵 + 裸奔清单 + 六类卡点定义）
 - **统一门禁注册表**：`ai_tests/config/gate_registry.json`（**唯一登记处**；新增门禁只改注册表，挂载点自动生效）
 - **统一 runner**：`ai_tests\venv\Scripts\python.exe ai_tests/scripts/run_gates.py --stage commit|ci|publish|deliver`
 - **三类挂载点**：pre-commit hook（`ai_tests/scripts/hooks/pre-commit`）+ CI + 发布/交付链路
@@ -174,6 +174,13 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 - **Trae Stop Hook**：会话起始 HEAD → 当前 HEAD 含 `app/src/main` 等源码提交且无 `delivery_ran` 标记 ⇒ 阻断回合并给出单命令处置；多批次开发中途可用 `--defer "<理由>"` 登记可审计暂缓（HEAD 前进即失效）
 - **禁止**：只跑单测/门禁就宣称完成；用「编译成功」代替「装得上、起得来、0 FATAL」；删除或改弱 G-53 判据
 
+### 13. 开发基线（私仓优先｜2026-11-12 用户裁定）
+**任何代码开发前必须先跑 `python scripts/check_dev_baseline.py`，无 `[FAIL]` 才可开工**；本地上游必须是 `gitee/master`。
+- 铁律：本地 `master` 是唯一开发基线（最全）；公仓 `origin/master` 是**过滤快照**，禁止作为基线、禁止 `git pull origin master`
+- 卡点：统一门禁 **G-55**（登记 `ai_tests/config/gate_registry.json`，commit/ci 档），经 `.git/hooks/pre-commit` → `run_gates.py` 执行 —— detached / 上游指向公仓 → 提交被拒
+- 安装/校验：`python scripts/install_hooks.py`（或 `--check`，单一源清单：pre-commit 取 `ai_tests/scripts/hooks/`、pre-push 取 `scripts/hooks/`）
+- 规范全文：`docs/project-rules/dev-branch-baseline.md`；双仓准入与发版：`docs/project-rules/dual-remote-sync.md`
+
 ## 记忆系统（memory-mechanism-redesign，AD-11 已启用）
 | 配置项 | 值 |
 |--------|-----|
@@ -189,6 +196,7 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 | 任务类型/场景 | 必须加载的子规范 |
 |---------|----------------|
 | 新功能/优化/Bug修复/重构 | `openspec-workflow.md` |
+| **任何代码开发前（开工卡）** | `dev-branch-baseline.md`（私仓基线自检 + 禁止公仓快照开发） |
 | 代码变更任务 | `logging-during-refactoring.md` + `version-delivery-sync.md` + `ai_e2e_testing_workflow.md` + `real-device-test-reuse.md` |
 | 复杂任务（50+文件） | `complex-task-pipeline.md` |
 | 使用 Agent 子代理 | `sub-agent-quality-management.md` |
