@@ -1,0 +1,87 @@
+#!/bin/bash
+# pre-push 双仓策略闸门（2026-11-12 用户裁定：公私双仓同步子规范）
+#
+# 设计：按 remote 名称分流，而非一刀切
+#   origin（公仓 GitHub）  ：禁止 .trae/ / ai_tests/ 等私有路径（远端零私有资产口径）
+#   gitee （私仓 Gitee）   ：允许 .trae/ docs/ ai_tests/ 等私有资产，但仍禁止
+#                            真实书源/订阅源数据、密钥/抓包产物、逆向工具产物
+#
+# 安装：scripts/install_hooks.py（或手动 cp scripts/hooks/pre-push .git/hooks/pre-push）
+# 规范：docs/project-rules/dual-remote-sync.md
+#
+# 参数：$1=remote 名，$2=remote URL
+
+remote="$1"
+url="$2"
+
+PUSH_ALLOWED="${ALLOW_PUSH:-0}"
+
+# ---- 1. 默认拒绝所有推送（需用户明确授权）----
+if [ "$PUSH_ALLOWED" != "1" ]; then
+  echo "[BLOCKED] 远端推送已被本地闸门禁用（ALLOW_PUSH != 1）。"
+  echo "  如需推送，请先获得用户明确同意，再以 ALLOW_PUSH=1 执行："
+  echo "    ALLOW_PUSH=1 git push <remote> <branch>"
+  exit 1
+fi
+
+# ---- 2. 按 remote 选择敏感路径黑名单 ----
+if [ "$remote" = "gitee" ]; then
+  # 私仓：允许私有资产入库；仅拦逆向/取证产物与临时目录
+  SENSITIVE_PATHS=(
+    "tools/reverse/"
+    ".temp/"
+  )
+  SCOPE_DESC="私仓(gitee)"
+else
+  # 公仓：禁止私有资产路径（远端零私有资产）
+  SENSITIVE_PATHS=(
+    "tools/reverse/"
+    ".temp/"
+    "docs/specs/video-cenc-clearkey-playback/"
+    ".trae/"
+    "ai_tests/"
+  )
+  SCOPE_DESC="公仓($remote)"
+fi
+
+# ---- 3. 逐 ref 扫描 ----
+while read local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  # 扫描范围＝本次推送「新增/变更」的文件；新分支无对比基线时整树扫描
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    files=$(git ls-tree -r "$local_sha" --name-only 2>/dev/null)
+  else
+    files=$(git diff --name-only --diff-filter=d "$remote_sha" "$local_sha" 2>/dev/null)
+  fi
+  for p in "${SENSITIVE_PATHS[@]}"; do
+    if echo "$files" | grep -q "^$p"; then
+      echo "[BLOCKED] ${SCOPE_DESC} 推送包含敏感路径：$p"
+      if [ "$remote" != "gitee" ]; then
+        echo "  私有资产请推 gitee 私仓（ALLOW_PUSH=1 git push gitee <branch>）。"
+      fi
+      exit 1
+    fi
+  done
+  # 密钥/抓包产物文件名兜底（两仓都拦）
+  if echo "$files" | grep -Eq 'spade_keys|spade_urls|flows\.ndjson|verify_seg\.mp4'; then
+    echo "[BLOCKED] ${SCOPE_DESC} 推送包含密钥/抓包产物文件。"
+    exit 1
+  fi
+  # 真实书源/订阅源数据内容扫描（两仓都拦）
+  scan_tmp=$(mktemp)
+  printf '%s\n' "$files" > "$scan_tmp"
+  py="ai_tests/venv/Scripts/python.exe"
+  [ -f "$py" ] || py="python3"
+  if ! "$py" scripts/audit_source_data.py --rev "$local_sha" --paths-file "$scan_tmp" > "$scan_tmp.out" 2>/dev/null; then
+    while IFS= read -r bad; do
+      [ -z "$bad" ] && continue
+      echo "[BLOCKED] ${SCOPE_DESC} 推送包含真实书源/订阅源数据：$bad"
+    done < "$scan_tmp.out"
+    echo "  规则：真实源数据只留本地（output/ 已 gitignore）；测试必须用合成夹具（example.com 保留域）。"
+    rm -f "$scan_tmp" "$scan_tmp.out"
+    exit 1
+  fi
+  rm -f "$scan_tmp" "$scan_tmp.out"
+done
+
+exit 0
