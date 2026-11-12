@@ -108,6 +108,23 @@ def find_apks(cfg: dict, version: str) -> list[tuple[str, Path]]:
     return sorted(out, key=lambda x: x[0])
 
 
+def build_body(notes: str, plan: list[tuple[str, str]]) -> str:
+    """归一化发版正文：剥离手写「安装说明」，改为按实际上传名自动生成。
+
+    根因（2026-11-12）：手写安装说明容易与实际上传名漂移（曾写 _arm64.apk，
+    而实际上传名为 legado_miss_app_debug_{v}.apk），导致发版页展示错误文件名。
+    """
+    idx = notes.find("### 安装说明")
+    head = notes[:idx].rstrip() if idx > 0 else notes.rstrip()
+    lines = [head, "", "### 安装说明", ""]
+    for pkg_type, name in plan:
+        if pkg_type == "test":
+            lines.append(f"- 测试包：`{name}`（applicationId 带 `.debug`，可与正式包共存）")
+        else:
+            lines.append(f"- 正式包：`{name}`")
+    return "\n".join(lines) + "\n"
+
+
 def self_test() -> None:
     """上传命名规则断言：必须与 AppReleaseInfo 的解析/变体判定一致。"""
     test_name = upload_name("test", "3.26.111121")
@@ -120,7 +137,15 @@ def self_test() -> None:
     assert "debug" in test_name and "debug" not in rel_name
     # 禁止 ABI 后缀混入（否则 parseVersionName 会解析成 arm64）
     assert "_arm64" not in test_name and "_arm64" not in rel_name
-    print("[PASS] self-test（6 条断言）")
+    # 发版正文的安装说明必须使用实际上传名，剥离手写漂移内容
+    body = build_body(
+        "正文\n\n### 安装说明\n\n- 测试包：`legado_miss_app_3.26.111121_arm64.apk`",
+        [("release", rel_name), ("test", test_name)],
+    )
+    assert "### 安装说明" in body
+    assert "_arm64.apk" not in body, body
+    assert test_name in body and rel_name in body, body
+    print("[PASS] self-test（10 条断言）")
 
 
 def main() -> int:
@@ -149,7 +174,9 @@ def main() -> int:
         raise SystemExit(f"[FAIL] 未找到版本 {args.version} 的 APK（先跑 build-legado.bat）")
 
     notes_path = Path(args.notes_file) / f"{args.version}.md"
-    body = notes_path.read_text(encoding="utf-8") if notes_path.exists() else f"版本 {args.version}"
+    raw_notes = notes_path.read_text(encoding="utf-8") if notes_path.exists() else f"版本 {args.version}"
+    plan = [(pkg_type, upload_name(pkg_type, args.version)) for pkg_type, _ in apks]
+    body = build_body(raw_notes, plan)
     tag = f"v{args.version}"
 
     print(f"[INFO] 私仓 {owner}/{repo} tag={tag} target={target}")
