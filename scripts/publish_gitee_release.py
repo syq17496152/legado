@@ -54,10 +54,24 @@ def api(url: str, token: str, method: str = "GET", payload: dict | None = None):
         raise SystemExit(f"[FAIL] HTTP {e.code} {url} -> {detail}")
 
 
-def upload_asset(url: str, token: str, file: Path):
-    boundary = "----legado" + hashlib.md5(file.name.encode()).hexdigest()
+def upload_name(pkg_type: str, version: str) -> str:
+    """上传到 Release 的文件名（必须与 AppReleaseInfo 解析规则一致）。
+
+    规则（AppReleaseInfo.parseVersionName / resolveAppVariant）：
+    - 版本号 = 文件名去掉 .apk 后「最后一个 _ 之后」的段 → 版本号必须放最后
+    - 测试包必须含 "debug" 子串 → 判为 BETA_RELEASE；否则会被误判 OFFICIAL 污染正式渠道
+    - ABI 后缀（_arm64/_x86_64）不得出现在文件名中
+    """
+    if pkg_type == "test":
+        return f"legado_miss_app_debug_{version}.apk"
+    return f"legado_miss_app_{version}.apk"
+
+
+def upload_asset(url: str, token: str, file: Path, filename: str | None = None):
+    name = filename or file.name
+    boundary = "----legado" + hashlib.md5(name.encode()).hexdigest()
     head = (f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="file"; filename="{file.name}"\r\n'
+            f'Content-Disposition: form-data; name="file"; filename="{name}"\r\n'
             f"Content-Type: {mimetypes.guess_type(file.name)[0] or 'application/octet-stream'}\r\n\r\n").encode()
     tail = f"\r\n--{boundary}--\r\n".encode()
     body = head + file.read_bytes() + tail
@@ -81,25 +95,48 @@ def sha256(p: Path) -> str:
     return h.hexdigest()
 
 
-def find_apks(cfg: dict, version: str) -> list[Path]:
+def find_apks(cfg: dict, version: str) -> list[tuple[str, Path]]:
+    """返回 [(pkg_type, apk)]，pkg_type 取 apk_dirs 的键（test / release）。"""
     out = []
-    for _variant, d in (cfg.get("apk_dirs") or {}).items():
+    for variant, d in (cfg.get("apk_dirs") or {}).items():
         base = ROOT / d
         if not base.is_dir():
             continue
         for p in base.glob("*.apk"):
             if version in p.name:
-                out.append(p)
-    return sorted(out)
+                out.append((variant, p))
+    return sorted(out, key=lambda x: x[0])
+
+
+def self_test() -> None:
+    """上传命名规则断言：必须与 AppReleaseInfo 的解析/变体判定一致。"""
+    test_name = upload_name("test", "3.26.111121")
+    rel_name = upload_name("release", "3.26.111121")
+    assert test_name == "legado_miss_app_debug_3.26.111121.apk", test_name
+    assert rel_name == "legado_miss_app_3.26.111121.apk", rel_name
+    # parseVersionName 取最后一个 "_" 之后 → 版本号必须位于末尾
+    assert test_name.endswith("_3.26.111121.apk") and rel_name.endswith("_3.26.111121.apk")
+    # 测试包必须含 debug（判 BETA_RELEASE），正式包不得含
+    assert "debug" in test_name and "debug" not in rel_name
+    # 禁止 ABI 后缀混入（否则 parseVersionName 会解析成 arm64）
+    assert "_arm64" not in test_name and "_arm64" not in rel_name
+    print("[PASS] self-test（6 条断言）")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", required=True)
+    ap.add_argument("--version")
     ap.add_argument("--notes-file", default=str(ROOT / "output" / "release-notes"))
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-upload", action="store_true")
+    ap.add_argument("--self-test", action="store_true", help="只跑上传命名规则断言")
     args = ap.parse_args()
+
+    if args.self_test:
+        self_test()
+        return 0
+    if not args.version:
+        ap.error("--version 必需（除非 --self-test）")
 
     cfg = load_cfg()
     g = cfg["gitee"]
@@ -116,8 +153,10 @@ def main() -> int:
     tag = f"v{args.version}"
 
     print(f"[INFO] 私仓 {owner}/{repo} tag={tag} target={target}")
-    for p in apks:
-        print(f"       APK {p.name}  {p.stat().st_size / 1024 / 1024:.2f} MB  sha256={sha256(p)[:16]}…")
+    for pkg_type, p in apks:
+        target_name = upload_name(pkg_type, args.version)
+        print(f"       APK [{pkg_type}] {p.name} -> {target_name}  "
+              f"{p.stat().st_size / 1024 / 1024:.2f} MB  sha256={sha256(p)[:16]}…")
     if args.dry_run:
         print("[OK] 预演完成（未调用 API）")
         return 0
@@ -136,15 +175,20 @@ def main() -> int:
         print("[OK] 跳过附件上传")
         return 0
 
-    for p in apks:
-        res = upload_asset(f"{api_base}/repos/{owner}/{repo}/releases/{rid}/attach_files", token, p)
-        print(f"[OK] 已上传 {p.name} -> {res.get('browser_download_url', '')}")
+    assets = []
+    for pkg_type, p in apks:
+        target_name = upload_name(pkg_type, args.version)
+        res = upload_asset(f"{api_base}/repos/{owner}/{repo}/releases/{rid}/attach_files",
+                           token, p, target_name)
+        print(f"[OK] 已上传 {p.name} -> {target_name} -> {res.get('browser_download_url', '')}")
+        assets.append({"name": target_name, "local": p.name,
+                       "sha256": sha256(p), "size": p.stat().st_size})
 
     manifest = {
         "version": args.version,
         "tag": tag,
         "repo": f"{owner}/{repo}",
-        "assets": [{"name": p.name, "sha256": sha256(p), "size": p.stat().st_size} for p in apks],
+        "assets": assets,
     }
     out = ROOT / "output" / f"private-release-{args.version}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
