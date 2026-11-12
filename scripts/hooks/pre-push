@@ -68,6 +68,11 @@ while read local_ref local_sha remote_ref remote_sha; do
     exit 1
   fi
   # 真实书源/订阅源数据内容扫描（两仓都拦）
+  # 私仓豁免（2026-11-12 用户裁定）：私有仓需纳入审计文档/测试资料，其中必然包含历史源地址；
+  # 公仓仍强制扫描（对外零真实源数据）。
+  if [ "$remote" = "gitee" ]; then
+    continue
+  fi
   scan_tmp=$(mktemp)
   printf '%s\n' "$files" > "$scan_tmp"
   py="ai_tests/venv/Scripts/python.exe"
