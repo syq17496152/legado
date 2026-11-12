@@ -233,10 +233,10 @@ git_log.txt
 /logs/test_debugpage_tail.txt
 /logs/test_rhino_solo_tail.txt
 
-# === 品牌词合规清理（brand-name-sanitization v2，2026-09-15）：文档/测试/技能全部远端剥离，仅保留本地副本 ===
-/docs/
-/ai_tests/
-/.trae/skills/
+# === 本地最全口径（2026-11-12 用户裁定，dual-remote-sync v2）===
+# docs/ ai_tests/ .trae/skills 已由「远端剥离」改为「本地与私仓全量跟踪」：
+# 公仓改由 scripts/publish_public_snapshot.py 生成源码快照后推送，不再靠 .gitignore 排除。
+# 因此这里不再整目录忽略，仅保留各目录内的中间产物规则（见下方 ai_tests/*、.trae/*、docs/* 条目）。
 /app/src/test/java/io/legado/app/help/source/BookSourceVideoIdentityTest.kt
 /captcha_check.png
 /dashboard_v6_final.png
@@ -273,12 +273,19 @@ git_log.txt
 # Reverse-engineering local workspace (local only, never commit)
 /tools/reverse/
 
-# === 本地专属目录远端剥离（2026-10-28 用户裁定）===
-# .trae（规则/记忆/Hook 状态）、临时目录与 app/src/test（单测与夹具）仅保留本地副本，不得出现在远端。
-/.trae/
+# === 临时目录与本地产物（2026-10-28 用户裁定；2026-11-12 修订）===
+# 变更：.trae/ 与 app/src/test/ 改为「本地与私仓全量跟踪」，仅公仓快照排除（见 dual-remote-sync v2）。
+# 仍需忽略：临时目录、Hook 运行态、缓存与本地调试产物。
 /temp/
 /.temp/
-/app/src/test/
+/.trae/.hook-state/
+/app/src/test/**/build/
+
+# 私有资产中的中间产物（2026-11-12 全量入库时补充：二进制工具与压缩包不入库）
+/ai_tests/frida/cache/
+/ai_tests/**/*.xz
+/docs/**/*.zip
+/docs/**/Downloadslogs*
 
 # 本地研究素材（第三方 TTS 仓库克隆，仅本地参考，不入库；2026-10-29）
 /tts/
