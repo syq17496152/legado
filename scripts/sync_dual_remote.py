@@ -22,8 +22,7 @@ import sys
 
 PUBLIC = "origin"
 PRIVATE = "gitee"
-PRIVATE_ASSETS_BRANCH = "private/assets"
-PRIVATE_DEFAULT_BRANCHES = ["master", PRIVATE_ASSETS_BRANCH]
+PRIVATE_DEFAULT_BRANCHES = ["master"]
 
 
 def run(cmd: list[str], dry: bool = False, env_extra: dict | None = None) -> int:
@@ -77,8 +76,11 @@ def main() -> int:
     rc = 0
 
     if do_public:
-        # 公仓只推 master；hook 会拦截私有资产与真实源数据
-        if run(["git", "push", PUBLIC, "master:master"], args.dry_run) != 0:
+        # 公仓为「核心源码快照」：由 publish_public_snapshot.py 过滤生成后推送，本地文件不删
+        cmd = [sys.executable, str(ROOT / "scripts" / "publish_public_snapshot.py")]
+        if not args.dry_run:
+            cmd.append("--push")
+        if run(cmd, args.dry_run) != 0:
             rc = 1
 
     if do_private:
