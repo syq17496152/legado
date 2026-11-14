@@ -16,6 +16,28 @@ object LivePlaybackPolicy {
         isCurrentMediaItemLive || windowIsDynamic
 
     /**
+     * 直播判定（含点播误判兜底）。
+     *
+     * 背景（2026-11-13 模拟器实测）：fMP4 / 多码率 HLS 在起播与变体切换期间，
+     * Media3 会瞬态把窗口标成 dynamic（`windowIsDynamic=true`），导致 VOD 被判直播
+     * ⇒ 预取 `gate=live` 全程静默不启动（日志只有 tier，没有 plan）。
+     *
+     * 规则：
+     * - `isCurrentMediaItemLive=true`（播放器明确声明直播）⇒ 直播，**优先且不可推翻**；
+     * - 窗口非 dynamic ⇒ 点播；
+     * - dynamic 但**已知时长** ⇒ 视为点播（时长是 VOD 的强证据；真直播通常 duration 未知）。
+     */
+    fun resolveLive(
+        isCurrentMediaItemLive: Boolean,
+        windowIsDynamic: Boolean,
+        knownDurationMs: Long,
+    ): Boolean = when {
+        isCurrentMediaItemLive -> true
+        !windowIsDynamic -> false
+        else -> knownDurationMs <= 0L
+    }
+
+    /**
      * 直播目标偏移规划。
      *
      * 结论：**不覆盖 Media3 默认值**（默认 3×targetDuration），仅在日志里记录期望下限。

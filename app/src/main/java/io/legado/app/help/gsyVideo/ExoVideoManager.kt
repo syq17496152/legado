@@ -76,6 +76,17 @@ class ExoVideoManager: GSYVideoBaseManager() {
     }
 
     /**
+     * 播放就绪进度（0..100，含已落盘的预取分片）；无播放器返回 -1。
+     *
+     * AD-39：`playerManager` 为 protected，透传必须在管理器内部完成
+     * （同 getAudioTracks/releaseSniffResources 先例）。
+     */
+    @OptIn(UnstableApi::class)
+    fun readyPercentage(): Int {
+        return (playerManager as? ExoPlayerManager)?.getReadyPercentage() ?: -1
+    }
+
+    /**
      * 获取所有音轨
      */
     @OptIn(UnstableApi::class)

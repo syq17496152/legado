@@ -696,8 +696,13 @@ object ExoPlayerHelper {
 
                 val finalUrl = response.request.url.toString()
                 val contentType = response.header("Content-Type")
-                val acceptRanges = response.header("Accept-Ranges")
-                val supportsRange = acceptRanges?.equals("bytes", ignoreCase = true) == true
+                // AD-45：仅认 Accept-Ranges 会漏判「206/Content-Range 但无该头」的 CDN，
+                // 导致直链 MP4 整集预取被判定不适用（实测 vjs/大多数对象存储）
+                val supportsRange = RangeSupportPolicy.resolve(
+                    httpCode = response.code,
+                    acceptRanges = response.header("Accept-Ranges"),
+                    contentRange = response.header("Content-Range"),
+                )
 
                 // 维度1: Content-Type 提示（内容证据，WHATWG MIMESNIFF 权威信号之一）
                 // T5.3: URL 后缀提示已从 Range 成功路径移除（原维度2/3）——

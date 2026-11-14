@@ -42,6 +42,8 @@ import io.legado.app.help.exoplayer.ManifestObserver
 import io.legado.app.help.exoplayer.NetworkGate
 import io.legado.app.help.exoplayer.PlayerInstancePool
 import io.legado.app.help.exoplayer.PrebuiltPlayerHolder
+import io.legado.app.help.exoplayer.PrefetchSnapshot
+import io.legado.app.help.exoplayer.PrefetchNetPolicy
 import io.legado.app.help.exoplayer.SegmentPrefetchPolicy
 import io.legado.app.help.exoplayer.ThroughputEstimator
 import io.legado.app.help.exoplayer.VideoSegmentPrefetcher
@@ -294,6 +296,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
 
     /** 当前预取会话号（每次 prepare 递增并同步给 VideoSegmentPrefetcher） */
     private var prefetchSessionId = 0L
+
+    /** 灰条单调化基线（同一会话只进不退；seek/换集归零） */
+    private var readyPercentFloor = 0
+
+    /** IF-16 诊断：灰条回退日志限流（每会话最多 20 条） */
+    private var readyDropLogCount = 0
 
     /** 近 30s 的 rebuffer 时间戳（档位裁决用） */
     private val recentRebufferAt = ArrayDeque<Long>()
@@ -792,6 +800,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             ExoPlayerHelper.playbackSpeedSnapshot = mSpeedPlaybackParameters?.speed ?: 1f
             prefetchSessionId = ManifestObserver.newSession()
             VideoSegmentPrefetcher.beginSession(prefetchSessionId)
+            // 新会话：灰条从 0 重新起算（上一集的就绪基线不能串集）
+            readyPercentFloor = 0
             knownBitrateBps = 0L
             recentRebufferAt.clear()
             // §1.19：新会话沿用上次实测吞吐作为先验（换集不改变网络能力），
@@ -1680,6 +1690,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         if (isScopeCancelled.get()) return
         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
             rebufferTracker.markSeek()
+            // seek 后灰条按新位置重新起算（否则单调基线会把回退的灰条卡在高位）
+            readyPercentFloor = 0
             // video-buffer-prefetch-v2：seek 后取消在途预取并按新位置重算（1s 节流）
             updatePrefetchSnapshot()
             VideoSegmentPrefetcher.onSeek()
@@ -1891,7 +1903,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 w.isDynamic
             }
         }.getOrDefault(false)
-        return LivePlaybackPolicy.isLive(byFlag, dynamic)
+        return SnapshotLiveDecision.resolve(byFlag, dynamic, knownDurationMs)
     }
 
     /** 把应用线程快照写给预取器（预取线程只读，不触碰 Player） */
@@ -1911,7 +1923,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         ExoPlayerHelper.currentBackCacheSecSnapshot = if (live) 0 else VideoPlay.longVideoBackCacheSec
         val cacheSizeBytes = CacheSizePolicy.effectiveMb().toLong() * 1024L * 1024L
         VideoSegmentPrefetcher.updateSnapshot(
-            VideoSegmentPrefetcher.Snapshot(
+            PrefetchSnapshot(
                 sessionId = prefetchSessionId,
                 positionMs = runCatching { player.currentPosition }.getOrDefault(0L),
                 bufferedPositionMs = runCatching { player.bufferedPosition }.getOrDefault(0L),
@@ -1921,8 +1933,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 buffering = player.playbackState == Player.STATE_BUFFERING,
                 paused = !player.playWhenReady,
                 foreground = true,
-                // 计量网络门禁：用户显式开启「移动网络也预解析」时放行
-                isMetered = NetworkGate.isMeteredNow() && !VideoPlay.prefetchOnMobile,
+                // 计量网络门禁（AD-46）：默认允许移动网络预取；仅用户显式关闭时才拦
+                isMetered = PrefetchNetPolicy.blockedByMetered(
+                    meteredNow = NetworkGate.isMeteredNow(),
+                    prefetchOnMobile = VideoPlay.prefetchOnMobile,
+                ),
                 videoCacheEnabled = VideoPlay.videoCache,
                 prefetchEnabled = VideoPlay.segmentPrefetchEnabled,
                 cacheSizeBytes = cacheSizeBytes,
@@ -1944,6 +1959,35 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 allowFullEpisode = allowFullEpisodeGate(),
             )
         )
+    }
+
+    /**
+     * 播放就绪进度（0..100）：内存桶与磁盘预取游标取大者（AD-39）。
+     *
+     * 与 [getBufferedPercentage]（只反映内存桶，约数十秒）语义不同：
+     * 这里的「就绪」包含已落盘的分片，用户看到的灰条 == 可秒开的范围。
+     */
+    fun prefetchReadyPercentage(): Int {
+        // IF-16：时长未知/播放器暂不可用时返回上次值，禁止写 0（否则灰条归零再涨回 = 视觉「来回跳」）
+        val player = mInternalPlayer
+        if (knownDurationMs <= 0L || player == null) {
+            return readyPercentFloor.coerceIn(0, 100)
+        }
+        val buffered = runCatching { player.bufferedPosition }.getOrDefault(0L)
+        val cursor = VideoSegmentPrefetcher.prefetchCursorMs(prefetchSessionId)
+        val direct = io.legado.app.help.exoplayer.DirectRangePrefetcher.lastReadyMs
+        val current = ReadyProgress.percent(buffered, cursor, knownDurationMs, direct)
+        // 会话内只进不退：内存桶缺失/降级重建会让 bufferedPosition 回退，灰条不能跟着倒退
+        val stable = ReadyProgress.percentOrKeep(readyPercentFloor, buffered, cursor, knownDurationMs, direct)
+        if (current < readyPercentFloor && readyDropLogCount < 20) {
+            readyDropLogCount++
+            AppLog.put(
+                "ReadyPct: drop cur=$current floor=$readyPercentFloor buffered=$buffered " +
+                    "cursor=$cursor direct=$direct dur=$knownDurationMs"
+            )
+        }
+        readyPercentFloor = stable
+        return stable
     }
 
     /**

@@ -253,6 +253,16 @@ class ExoPlayerManager : BasePlayerManager() {
     }
 
     /**
+     * 播放就绪进度（0..100，含已落盘的预取分片）；无播放器返回 -1。
+     *
+     * AD-39：与 [getBufferedPercentage]（仅内存桶）语义不同，UI 灰条用本方法，
+     * 后者语义保持不变（其它调用方不受影响）。
+     */
+    fun getReadyPercentage(): Int {
+        return mediaPlayer?.prefetchReadyPercentage() ?: -1
+    }
+
+    /**
      * 上一集
      */
     fun previous() {

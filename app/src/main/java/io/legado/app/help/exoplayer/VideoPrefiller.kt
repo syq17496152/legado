@@ -112,7 +112,12 @@ object VideoPrefiller {
             )
             val tier = SegmentPrefetchPolicy.tierOf(bandwidth)
             val limit = if (bandwidth > 0L) {
-                (bandwidth * tier.budgetRatio).toLong().coerceIn(
+                // IF-14（D）：高倍速时预取让位给即时播放
+                val ratio = SpeedBufferPolicy.effectiveBudgetRatio(
+                    tier.budgetRatio,
+                    ExoPlayerHelper.playbackSpeedSnapshot,
+                )
+                (bandwidth * ratio).toLong().coerceIn(
                     SegmentPrefetchPolicy.MIN_BUDGET_BPS,
                     tier.maxBudgetBps,
                 )

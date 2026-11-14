@@ -1690,6 +1690,10 @@
     <string name="press_speed_summary">长按倍速 %.1f</string>
     <string name="full_bottom_progress">全屏时显示底部进度条</string>
     <string name="cache_play">播放时缓存</string>
+    <string name="video_prefetch_on_mobile">移动网络也预取</string>
+    <string name="video_prefetch_on_mobile_summary">移动网络下也提前缓存后续内容；关闭后仅在 Wi-Fi 预取</string>
+    <string name="video_advance_instant">播完立即续播</string>
+    <string name="video_advance_instant_summary">开启后播完直接下一集；关闭则先提示 3 秒，可点取消</string>
     <string name="video_cache_size">视频缓存容量</string>
     <string name="video_cache_size_summary">%1$d MB（重启生效）</string>
     <string name="mute_on_start">默认静音</string>

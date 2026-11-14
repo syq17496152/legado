@@ -35,11 +35,25 @@ object SegmentPrefetchPolicy {
     /** 整集模式兜底上限：防止异常超长时长导致无限遍历（4 小时） */
     const val FULL_WINDOW_GUARD_MS = 4 * 60 * 60 * 1000L
 
+    /**
+     * 单轮预取最多覆盖的媒体时长（3 分钟）。
+     *
+     * 为什么必须限制：整集/短视频模式曾一次规划整集（可达数十分钟），
+     * 受预算限速后单轮可写数分钟；期间游标/灰条不动、5s tick 被在飞任务拦掉，
+     * 用户观感就是「缓冲一会就不动了」。分轮推进 + 每轮结束续轮，进度始终可见。
+     */
+    const val MAX_ROUND_MEDIA_MS = 3 * 60 * 1000L
+
     /** 窗口兜底下限（避免全部为 0） */
     const val MIN_WINDOW_MS = 1_000L
 
-    /** 短视频阈值 */
-    const val SHORT_VIDEO_THRESHOLD_MS = 20 * 60 * 1000L
+    /**
+     * 短视频阈值（2 分钟）。
+     *
+     * 原 20 分钟会把 10 分钟剧集也当「短视频」整集规划，与整集模式叠加后
+     * 单轮窗口被拉到整集 → 见 [MAX_ROUND_MEDIA_MS] 的说明。
+     */
+    const val SHORT_VIDEO_THRESHOLD_MS = 2 * 60 * 1000L
 
     /** 短视频字节比上限（防止短视频写满池子） */
     const val BYTE_RATIO_SHORT = 0.25
@@ -78,7 +92,24 @@ object SegmentPrefetchPolicy {
     const val RAMP_FACTOR = 1.25
 
     /** 分片 */
-    data class Segment(val durationMs: Long, val uri: String)
+    /**
+     * 分片。
+     *
+     * `rangeLength>0` 表示 `#EXT-X-BYTERANGE` 字节区间分片：读取必须带 offset，
+     * 就绪判定也必须按 `[rangeOffset, rangeOffset+rangeLength)` 命中（同一 URI 多片共享文件）。
+     */
+    data class Segment(
+        val durationMs: Long,
+        val uri: String,
+        val rangeOffset: Long = -1L,
+        val rangeLength: Long = 0L,
+    ) {
+        val isRange: Boolean get() = rangeLength > 0L
+
+        /** 缓存键：字节区间分片必须带上区间，否则同一文件的多个分片会互相误判 */
+        val cacheKey: String
+            get() = if (isRange) "$uri#$rangeOffset#$rangeLength" else uri
+    }
 
     /**
      * 网络档位（唯一事实来源）。
@@ -137,6 +168,11 @@ object SegmentPrefetchPolicy {
         val segments: List<Segment>,
         val currentPositionMs: Long,
         val bufferedPositionMs: Long,
+        /**
+         * 预取锚点（媒体毫秒）：-1 = 按旧逻辑（缓冲头 + SKIP 片）。
+         * AD-35：磁盘预取游标；写入磁盘不会推进 bufferedPosition，必须由游标接管锚点。
+         */
+        val anchorMs: Long = -1L,
         val durationMs: Long,
         val speed: Float,
         val isLive: Boolean,
@@ -156,6 +192,8 @@ object SegmentPrefetchPolicy {
         val bucketDepthMs: Long = 0L,
         /** 本集已写入磁盘池的字节数（用于池子余量与整集判定） */
         val episodeWrittenBytes: Long = 0L,
+        /** 缓存当前已用字节（含本集，AD-37）；0=未知 */
+        val cacheUsedBytes: Long = 0L,
         /** 本会话是否已有有效实测吞吐样本（升档门槛） */
         val hasMeasuredSample: Boolean = false,
         /** 上一次档位（自调档滞回用；null=首次） */
@@ -247,7 +285,7 @@ object SegmentPrefetchPolicy {
         input.isMetered -> Gate("metered")
         input.isLive -> Gate("live")
         !input.hasEndList -> Gate("no_endlist")
-        input.hasByteRange -> Gate("byterange")
+        // 字节区间分片已支持（AD-43）：按 [offset,len) 写入/判定，不再整体放弃
         input.hasDrm -> Gate("drm")
         input.durationMs <= 0L -> Gate("no_duration")
         input.paused -> Gate("paused")
@@ -259,13 +297,12 @@ object SegmentPrefetchPolicy {
 
     // ===================== 完成度与整集模式 =====================
 
-    /** 跳过分片后剩余媒体时长（毫秒） */
+    /** 跳过分片后剩余媒体时长（毫秒）；AD-35：以预取游标为起点 */
     fun remainingMs(input: Input): Long {
         val segDur = averageSegmentDurationMs(input.segments)
         if (segDur <= 0L) return 0L
         val total = input.segments.sumOf { it.durationMs.coerceAtLeast(0L) }
-        val skipEnd = input.bufferedPositionMs + SKIP_SEGMENTS * segDur
-        return (total - skipEnd).coerceAtLeast(0L)
+        return (total - prefetchStartMs(input)).coerceAtLeast(0L)
     }
 
     /** 完成阈值：2 个分片或 15s 取大 */
@@ -283,15 +320,49 @@ object SegmentPrefetchPolicy {
         return (durationMs / 1000.0 * effectiveBitrate / 8.0 * 1.3).toLong()
     }
 
-    /** 池子可写余量字节（默认前向预取 65%，扣除本集已写） */
+    /** 池子可写余量字节（默认前向预取 65%，扣除本集已写与缓存真实占用） */
     fun poolFreeBytes(
         cacheSizeBytes: Long,
         episodeWrittenBytes: Long,
         ratio: Double = BYTE_RATIO_LONG,
+        /**
+         * 缓存当前已用字节（含本集）；用于 AD-37 扣除真实占用。
+         * 与 [episodeWrittenBytes] 不重复扣减：配额按本集、空间按整池分别计算后取小。
+         */
+        cacheUsedBytes: Long = 0L,
     ): Long {
         if (cacheSizeBytes <= 0L) return 0L
-        val quota = (cacheSizeBytes * ratio).toLong()
-        return (quota - episodeWrittenBytes).coerceAtLeast(0L)
+        val quotaLeft = (cacheSizeBytes * ratio).toLong() - episodeWrittenBytes
+        val spaceLeft = cacheSizeBytes - cacheUsedBytes
+        return minOf(quotaLeft, spaceLeft).coerceAtLeast(0L)
+    }
+
+    /**
+     * 预取起点的有效时间（AD-35）。
+     *
+     * - 无游标（anchor < 0）：缓冲头之后 [SKIP_SEGMENTS] 片；
+     * - 有游标：`max(游标, 缓冲头 + SKIP 片)`，保证不抢播放器正在取的分片，且可连续推进。
+     */
+    fun prefetchStartMs(input: Input): Long {
+        val segDur = averageSegmentDurationMs(input.segments)
+        val skipEnd = input.bufferedPositionMs + SKIP_SEGMENTS * segDur
+        return if (input.anchorMs >= 0L) maxOf(input.anchorMs, skipEnd) else skipEnd
+    }
+
+    /**
+     * 本次预取可用的字节比例（AD-36：状态判定与窗口计算必须同源）。
+     *
+     * - 短视频：0.25（防写满池子）；
+     * - 整集模式（FAST+ 且允许整集）：0.65；
+     * - 其余：档位比例。
+     */
+    fun effectiveRatio(input: Input, tier: NetworkTier = resolveTier(input)): Double {
+        val isShort = input.durationMs in 1..SHORT_VIDEO_THRESHOLD_MS
+        return when {
+            isShort -> BYTE_RATIO_SHORT
+            tier.isFullEpisodeCapable && input.allowFullEpisode -> BYTE_RATIO_LONG
+            else -> tier.byteRatio
+        }
     }
 
     /**
@@ -311,7 +382,12 @@ object SegmentPrefetchPolicy {
         val isShort = input.durationMs in 1..SHORT_VIDEO_THRESHOLD_MS
         if (!isShort && input.allowFullEpisode && tier.isFullEpisodeCapable && input.bitrateBps > 0L) {
             val need = episodeBytes(input.durationMs, input.bitrateBps)
-            val free = poolFreeBytes(input.cacheSizeBytes, input.episodeWrittenBytes)
+            val free = poolFreeBytes(
+                input.cacheSizeBytes,
+                input.episodeWrittenBytes,
+                effectiveRatio(input, tier),
+                input.cacheUsedBytes,
+            )
             if (need > 0L && need <= free) return PrefetchState.FULL_EPISODE
             return PrefetchState.FILL_TO_CAPACITY
         }
@@ -342,25 +418,33 @@ object SegmentPrefetchPolicy {
         }
         if (acc <= 0L) return null
 
-        val skipEndMs = input.bufferedPositionMs + SKIP_SEGMENTS * segDur
+        val skipEndMs = prefetchStartMs(input)
         if (skipEndMs >= acc) return null
 
         val remaining = (acc - skipEndMs).coerceAtLeast(0L)
         val isShort = input.durationMs in 1..SHORT_VIDEO_THRESHOLD_MS
         val speed = SpeedBufferPolicy.sanitizeSpeed(input.speed)
         val state = stateOf(input, tier)
-        val ratio = if (isShort) BYTE_RATIO_SHORT else tier.byteRatio
+        val ratio = effectiveRatio(input, tier)
 
         val targetMs = when {
-            isShort -> remaining
-            tier.isFullEpisodeCapable && input.allowFullEpisode -> remaining
+            // R2：整集/短视频同样受单轮上限约束（否则单轮数分钟、进度不可见）
+            isShort -> minOf(remaining, MAX_ROUND_MEDIA_MS)
+            tier.isFullEpisodeCapable && input.allowFullEpisode -> {
+                minOf(remaining, MAX_ROUND_MEDIA_MS)
+            }
             else -> minOf(
                 (tier.windowMs * speed).toLong().coerceAtLeast(tier.windowMs),
                 MAX_WINDOW_MS,
             )
         }
         val cacheWritableMs = writableMs(
-            poolFreeBytes(input.cacheSizeBytes, input.episodeWrittenBytes, ratio),
+            poolFreeBytes(
+                input.cacheSizeBytes,
+                input.episodeWrittenBytes,
+                ratio,
+                input.cacheUsedBytes,
+            ),
             input.bitrateBps,
         )
         val windowMs = minOf(
@@ -439,7 +523,7 @@ object SegmentPrefetchPolicy {
      *
      * - 水位 < [PAUSE_BUFFER_MS] ⇒ PAUSED（0 B/s）
      * - 水位 < [LOW_BUFFER_MS] 或 BUFFERING 或带宽 < [WEAK_BANDWIDTH_BPS] ⇒ THROTTLED（带宽×0.2）
-     * - 否则 RUNNING（档位预算比；倍速 ≥1.5 时 +0.05，上限 0.70）
+     * - 否则 RUNNING（档位预算比与倍速预算比取较小者；倍速越高预取让位越多）
      */
     fun budget(input: Input, tier: NetworkTier = resolveTier(input)): Budget {
         val bandwidth = if (input.bandwidthEstimateBps > 0L) {
@@ -458,12 +542,9 @@ object SegmentPrefetchPolicy {
                 BudgetState.THROTTLED,
             )
         }
-        val speed = SpeedBufferPolicy.sanitizeSpeed(input.speed)
-        val ratio = if (speed >= 1.5f) {
-            (tier.budgetRatio + 0.05).coerceAtMost(0.70)
-        } else {
-            tier.budgetRatio
-        }
+        // IF-14（D）：高倍速时即时播放需求带宽按「码率 × speed」放大，预取必须让位。
+        // 取档位比例与倍速比例的较小者（原「≥1.5x 预算 +0.05」方向相反，已废弃）。
+        val ratio = SpeedBufferPolicy.effectiveBudgetRatio(tier.budgetRatio, input.speed)
         return Budget(
             (bandwidth * ratio).toLong().coerceIn(MIN_BUDGET_BPS, tier.maxBudgetBps),
             BudgetState.RUNNING,

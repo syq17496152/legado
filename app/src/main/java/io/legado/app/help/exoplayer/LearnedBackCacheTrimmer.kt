@@ -7,6 +7,20 @@ package io.legado.app.help.exoplayer
  */
 internal object LearnedBackCacheTrimmer {
 
+    /** 已学习清单的分片时间轴 span（回看清理用） */
+    fun spans(playlists: Collection<MediaPlaylist>): List<RollingBackCache.Span> {
+        val result = ArrayList<RollingBackCache.Span>()
+        playlists.forEach { playlist ->
+            var acc = 0L
+            playlist.segments.forEach { seg ->
+                val start = acc
+                acc += seg.durationMs.coerceAtLeast(0L)
+                result.add(RollingBackCache.Span(key = seg.uri, startMs = start, endMs = acc))
+            }
+        }
+        return result
+    }
+
     /** HLS 分片级回看清理：按分片 key 删资源 */
     fun trim(
         cache: PrefetchCache,

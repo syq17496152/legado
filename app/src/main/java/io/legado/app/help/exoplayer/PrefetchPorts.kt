@@ -18,6 +18,13 @@ interface PrefetchCache {
 
     /** 已缓存 span（回看清理用；默认空实现便于测试假对象） */
     fun cachedSpans(key: String): List<CachedSpan> = emptyList()
+
+    /**
+     * 缓存当前已用字节（含本集）；未知返回 0。
+     *
+     * AD-37：池余量必须扣除真实占用，避免「以为能写、实际写不进」。
+     */
+    fun usedBytes(): Long = 0L
 }
 
 /** 分片写入器：把 URI 从 [position] 起的前 [maxBytes] 写入缓存（实现用 CacheDataSource） */

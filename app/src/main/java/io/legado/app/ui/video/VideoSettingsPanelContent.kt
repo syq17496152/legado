@@ -100,6 +100,10 @@ fun VideoSettingsPanelContent(
     var skipTime by remember { mutableStateOf(VideoPlay.videoSkipTime) }
     var cacheSize by remember { mutableStateOf(VideoPlay.videoCacheSize) }
     var cachePlay by remember { mutableStateOf(VideoPlay.videoCache) }
+    // AD-46：移动网络也预取（默认开，可在本面板关闭）
+    var prefetchOnMobile by remember { mutableStateOf(VideoPlay.prefetchOnMobile) }
+    // AD-49：播完立即续播（0=立即；关闭则先提示 3 秒可取消）
+    var advanceInstant by remember { mutableStateOf(VideoPlay.advanceCountdownSec <= 0) }
     var playerType by remember { mutableStateOf(VideoPlay.playerType) }
     var seekSensitivity by remember { mutableStateOf(VideoPlay.seekSensitivity) }
     // video-player-image-enhance A2.2: 画质增强状态（初值读自 VideoPlay，变更即写回+实时预览）
@@ -373,6 +377,30 @@ fun VideoSettingsPanelContent(
                 onCheckedChange = {
                     cachePlay = it
                     VideoPlay.videoCache = it
+                }
+            )
+            RowDivider(palette.divider)
+            // AD-46：移动网络也预取（默认开；关闭后移动网络下不再提前缓存）
+            SettingsToggleRow(
+                icon = null,
+                title = stringResource(R.string.video_prefetch_on_mobile),
+                subtitle = stringResource(R.string.video_prefetch_on_mobile_summary),
+                checked = prefetchOnMobile,
+                onCheckedChange = {
+                    prefetchOnMobile = it
+                    VideoPlay.prefetchOnMobile = it
+                }
+            )
+            RowDivider(palette.divider)
+            // AD-49：播完立即续播（默认关=3 秒可取消提示）
+            SettingsToggleRow(
+                icon = null,
+                title = stringResource(R.string.video_advance_instant),
+                subtitle = stringResource(R.string.video_advance_instant_summary),
+                checked = advanceInstant,
+                onCheckedChange = {
+                    advanceInstant = it
+                    VideoPlay.advanceCountdownSec = if (it) 0 else 3
                 }
             )
             RowDivider(palette.divider)

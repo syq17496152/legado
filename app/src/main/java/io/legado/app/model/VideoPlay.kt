@@ -188,8 +188,16 @@ object VideoPlay : CoroutineScope by MainScope(){
     // video-buffer-prefetch-v2：预取/回看默认值（单测锁定；改默认值必须同步测试）
     internal const val PREF_SEGMENT_PREFETCH_ENABLED = "segmentPrefetchEnabled"
     internal const val PREF_LONG_VIDEO_BACK_CACHE_SEC = "longVideoBackCacheSec"
+    internal const val PREF_PREFETCH_ON_MOBILE = "prefetchOnMobile"
     internal const val DEFAULT_SEGMENT_PREFETCH_ENABLED = true
     internal const val DEFAULT_LONG_VIDEO_BACK_CACHE_SEC = 120
+
+    /** 移动网络也预取（2026-11-13 用户裁定：默认开，可在播放设置关闭） */
+    internal const val DEFAULT_PREFETCH_ON_MOBILE = true
+
+    internal const val PREF_ADVANCE_COUNTDOWN_SEC = "advanceCountdownSec"
+    /** 播完续播倒计时默认 3 秒（0=立即续播） */
+    internal const val DEFAULT_ADVANCE_COUNTDOWN_SEC = 3
 
     private val videoPrefs: SharedPreferences by lazy { appCtx.getSharedPreferences(VIDEO_PREF_NAME, MODE_PRIVATE) }
     /**  是否自动播放  **/
@@ -523,11 +531,18 @@ object VideoPlay : CoroutineScope by MainScope(){
             videoPrefs.edit { putBoolean("playerFirstFramePreload", value) }
         }
 
-    /** 移动网络也预解析（design §1.6 / tasks 6.4，默认关：省流量优先） */
+    /** 移动网络也预取（默认开：用户明确要求移动网络下也要尽快缓冲；可在播放设置关闭） */
     var prefetchOnMobile: Boolean
-        get() = videoPrefs.getBoolean("prefetchOnMobile", false)
+        get() = videoPrefs.getBoolean(PREF_PREFETCH_ON_MOBILE, DEFAULT_PREFETCH_ON_MOBILE)
         set(value) {
-            videoPrefs.edit { putBoolean("prefetchOnMobile", value) }
+            videoPrefs.edit { putBoolean(PREF_PREFETCH_ON_MOBILE, value) }
+        }
+
+    /** 播完续播倒计时秒数（AD-49：0=立即续播；默认 3 秒可取消） */
+    var advanceCountdownSec: Int
+        get() = videoPrefs.getInt(PREF_ADVANCE_COUNTDOWN_SEC, DEFAULT_ADVANCE_COUNTDOWN_SEC)
+        set(value) {
+            videoPrefs.edit { putInt(PREF_ADVANCE_COUNTDOWN_SEC, value.coerceIn(0, 10)) }
         }
 
     // ==================== §12 播放模式（FEED / SERIES / SINGLE）====================
@@ -2042,7 +2057,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         // §7.1：有 UI 宿主时先给 3 秒可取消提示，避免误连播；
         // 无宿主（悬浮窗 / 后台 Service）保持原来的立即续播，避免「播完黑屏 3 秒」。
         if (target is AdvanceTarget.NextEpisode || target is AdvanceTarget.NextArticle) {
-            val plan = AdvanceCountdown.plan(advanceCountdownListeners.isNotEmpty())
+            val plan = AdvanceCountdown.plan(advanceCountdownListeners.isNotEmpty(), advanceCountdownSec)
             if (plan is AdvanceCountdown.Plan.Delay) {
                 scheduleAdvance(target, origin, targetPlayer, plan.seconds)
                 return true
@@ -2095,7 +2110,12 @@ object VideoPlay : CoroutineScope by MainScope(){
         val plan = AdvanceCountdown.warmupPlan(tier, isShort = false, remainingSegments = Int.MAX_VALUE)
         if (plan.count <= 0) return
         val limit = if (bandwidth > 0L) {
-            (bandwidth * tier.budgetRatio).toLong().coerceIn(
+            // IF-14（D）：高倍速时让位给即时播放，预算取档位比与倍速比的较小者
+            val ratio = io.legado.app.help.exoplayer.SpeedBufferPolicy.effectiveBudgetRatio(
+                tier.budgetRatio,
+                ExoPlayerHelper.playbackSpeedSnapshot,
+            )
+            (bandwidth * ratio).toLong().coerceIn(
                 SegmentPrefetchPolicy.MIN_BUDGET_BPS,
                 tier.maxBudgetBps,
             )
@@ -2731,7 +2751,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                     ruleData = book,
                     book = book,
                     chapter = chapter,
-                    onStarted = { triggerBookPreload() }
+                    onStarted = { armPreloadDwell { triggerBookPreload() } }
                 )
             )
             return
@@ -2764,7 +2784,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                     ruleData = book,
                     book = book,
                     chapter = chapter,
-                    onStarted = { triggerBookPreload() }
+                    onStarted = { armPreloadDwell { triggerBookPreload() } }
                 )
             )
             // AD-03 兜底：12s 内未起播（地址失效等）→ 清解析缓存自动回退全量采集链一次
@@ -3066,7 +3086,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                 ruleData = rssArticle,
                 article = rssArticle,
                 episode = episode,
-                onStarted = { triggerPreload() }
+                onStarted = { armPreloadDwell { triggerPreload() } }
             )
         )
     }
@@ -3090,6 +3110,24 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 预载收益体现为 finalUrl 键缓存命中 + CDN/DNS 预热 | 升级路径：Phase 4 引擎结果缓存化
      */
     private var preloadJob: Coroutine<*>? = null
+
+    /** 预载实播门控任务（AD-48 / T1-45 / V-11） */
+    private var preloadDwellJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * 起播后不立即预载，先等「实播累计 15s」（按播放位置增量，暂停/缓冲不计）。
+     *
+     * 根因（T1-45）：Pipeline 在 setUp 后即回调 onStarted，点开即退也会预嗅探下一集、抢主播放带宽。
+     */
+    private fun armPreloadDwell(onGo: () -> Unit) {
+        preloadDwellJob?.cancel()
+        preloadDwellJob = io.legado.app.help.video.PlaybackDwellGate.arm(
+            scope = loadScope,
+            token = { currentSwitchToken },
+            positionMs = { videoManager.currentPosition.toLong() },
+            onGo = onGo,
+        )
+    }
 
     private fun triggerPreload() {
         // 复用 AD-01 预加载总开关（关闭时不预嗅探/预填）

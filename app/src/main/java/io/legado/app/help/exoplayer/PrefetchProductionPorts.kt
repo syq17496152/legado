@@ -51,6 +51,16 @@ internal object DefaultPrefetchCache : PrefetchCache {
             .filter { it.length > 0 }
             .map { CachedSpan(position = it.position, length = it.length) }
     }.getOrDefault(emptyList())
+
+    /**
+     * AD-37：缓存真实已用字节。
+     *
+     * `ExoPlayerHelper.cache` 声明为 `Cache` 接口，已用空间只在 `SimpleCache` 上暴露，
+     * 故需强转；拿不到时返回 0（策略层按「未知」处理，退回仅扣本集配额的保守算法）。
+     */
+    override fun usedBytes(): Long = kotlin.runCatching {
+        (ExoPlayerHelper.cache as? androidx.media3.datasource.cache.SimpleCache)?.cacheSpace ?: 0L
+    }.getOrDefault(0L)
 }
 
 internal object DefaultSegmentWriter : SegmentWriter {

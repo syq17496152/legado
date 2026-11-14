@@ -177,6 +177,14 @@ internal fun positionSegments(position: PlaybackPosition): List<PositionSegment>
  */
 internal fun secondaryEntriesVisible(isFullscreen: Boolean): Boolean = !isFullscreen
 
+/**
+ * 灰条写值决策（AD-39，纯函数便于单测）。
+ *
+ * `-1`（播放器未就绪）或越界值不得写入：写 0 会让灰条倒退、造成「缓冲丢失」的错觉。
+ */
+internal fun readySecondaryProgress(percentage: Int): Int? =
+    percentage.takeIf { it in 0..100 }
+
 class VideoFragment : Fragment() {
 
     // ==================== 播放状态枚举 ====================
@@ -286,6 +294,8 @@ class VideoFragment : Fragment() {
     /** 缓冲进度更新 Handler（每 500ms 轮询 bufferedPercentage 更新 secondaryProgress） */
     private val bufferUpdateHandler = Handler(Looper.getMainLooper())
     private var bufferUpdateRunnable: Runnable? = null
+    /** IF-16 诊断：底部条灰条回退日志限流（防止刷屏） */
+    private var bufferJumpLogCount = 0
 
     // ==================== F2: 控件自动隐藏（3秒无操作后隐藏） ====================
     /** 自动隐藏 Handler：控件显示 3 秒后自动切换到 PURE 态 */
@@ -635,9 +645,21 @@ class VideoFragment : Fragment() {
                         return
                     }
                 }
-                val percentage = VideoPlay.videoManager.bufferedPercentage
-                if (percentage >= 0 && percentage <= 100) {
-                    bp.secondaryProgress = percentage
+                // AD-39：灰条展示「就绪进度」= max(内存桶, 磁盘预取游标)，让用户看到整集落盘进展
+                // （原 bufferedPercentage 只反映内存桶，约数十秒，看起来像「缓冲一会就停」）
+                val bar = bp ?: return
+                val prev = bar.secondaryProgress
+                readySecondaryProgress(VideoPlay.videoManager.readyPercentage())?.let { v ->
+                    if (v != prev) {
+                        // IF-16：正常应只进不退；出现倒退即记录一次（限流 20 条，供真机定位）
+                        if (v < prev && bufferJumpLogCount < 20) {
+                            bufferJumpLogCount++
+                            AppLog.put(
+                                "BufferJump: back prev=$prev new=$v max=${bar.max} prog=${bar.progress}"
+                            )
+                        }
+                        bar.secondaryProgress = v
+                    }
                 }
                 bufferUpdateHandler.postDelayed(this, 500)
             }
